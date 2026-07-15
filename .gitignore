@@ -3,6 +3,7 @@ node_modules/
 .next/
 out/
 npm-debug.log*
+*.tsbuildinfo
 
 # Python / Django
 .venv/
@@ -13,6 +14,10 @@ db.sqlite3
 # Environment
 .env
 .env.local
+
+# Secrets: SSH keys, DB credentials, Oracle wallet
+key/
+wallet/
 
 # OS / editor
 .DS_Store
