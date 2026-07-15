@@ -11,7 +11,7 @@ Redesign of the three public-facing pages of Picking Up on the new Tailwind v4 +
 - `/login` — sign in
 - `/signup` — account creation
 
-Out of scope: the `/app` task workspace (not yet designed), dark mode, any auth *behavior* change. All existing route handlers, middleware, cookie handling, and Django API calls stay exactly as they are — this is a presentation-layer rebuild only.
+Out of scope: the `/app` task workspace (not yet designed), any auth *behavior* change. All existing route handlers, middleware, cookie handling, and Django API calls stay exactly as they are — this is a presentation-layer rebuild only.
 
 ## Design decisions (as selected)
 
@@ -30,7 +30,7 @@ Out of scope: the `/app` task workspace (not yet designed), dark mode, any auth 
 - **Typography:** Geist (already wired in `layout.tsx` as `--font-sans`). Large headings at weight 200–300 with slightly tight letter-spacing. Wordmark: `PICKING UP` uppercase, small size, wide letter-spacing (~0.3em), weight 600.
 - **Buttons:** pill radius (9999px). Primary: solid `#171a1c`, white text. Secondary: white, `#d6dadd` hairline border, near-black text.
 - **Inputs:** Tesla-style — `#f2f3f4` fill, no visible border at rest, rounded (~8px), border + blue halo on focus.
-- **Light mode only** for v1. `color-scheme: light`. Dark mode is a deliberate later addition.
+- **Dark mode is in scope**, with a sun/moon toggle. Dark palette mirrors the light one: near-black background `#0f1214`, raised surfaces `#171b1e`, white text `#f3f5f6`, gray hierarchy inverted, input fill `#22272b`, hairlines `rgb(255 255 255 / 10%)`. Primary button inverts: white pill, near-black text. Steel blue lightens to `#6f9cc4` in dark so the whisper stays visible. Theme is applied via shadcn's `.dark` class using `next-themes`. **Dark is the default theme**; the toggle switches to light and the choice persists across visits (no flash on load). Toggle lives in the landing nav and the top-right corner of both auth pages.
 
 ## Pages
 
@@ -65,5 +65,4 @@ Both auth pages keep their existing submit handlers and redirect behavior.
 ## Follow-ups (not in this build)
 
 - Replace hero mock with real task-UI screenshot (after task workspace exists).
-- Dark mode.
 - Restyle `/app` placeholder onto the new system when the task UI is designed.
