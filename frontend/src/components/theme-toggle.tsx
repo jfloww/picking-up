@@ -13,7 +13,16 @@ export function ThemeToggle() {
   useEffect(() => setMounted(true), []);
 
   if (!mounted) {
-    return <Button variant="ghost" size="icon" className="rounded-full" aria-hidden />;
+    return (
+      <Button
+        variant="ghost"
+        size="icon"
+        className="rounded-full"
+        aria-hidden
+        tabIndex={-1}
+        disabled
+      />
+    );
   }
 
   const isDark = resolvedTheme === "dark";
