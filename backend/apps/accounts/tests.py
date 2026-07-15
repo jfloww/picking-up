@@ -41,3 +41,31 @@ class AuthApiTests(TestCase):
 
         self.assertEqual(me_response.status_code, 200)
         self.assertEqual(me_response.data["email"], "test@example.com")
+
+    def test_logout_blacklists_refresh_token(self):
+        User.objects.create_user(
+            username="test@example.com",
+            email="test@example.com",
+            password="StrongPass123!",
+        )
+
+        token_response = self.client.post(
+            "/api/auth/token/",
+            {"email": "test@example.com", "password": "StrongPass123!"},
+            format="json",
+        )
+        refresh_token = token_response.data["refresh"]
+
+        logout_response = self.client.post(
+            "/api/auth/logout/",
+            {"refresh": refresh_token},
+            format="json",
+        )
+        self.assertEqual(logout_response.status_code, 205)
+
+        retry_response = self.client.post(
+            "/api/auth/token/refresh/",
+            {"refresh": refresh_token},
+            format="json",
+        )
+        self.assertEqual(retry_response.status_code, 401)

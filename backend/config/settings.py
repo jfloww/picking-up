@@ -2,6 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -11,11 +12,18 @@ env = environ.Env(
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
-SECRET_KEY = env(
-    "DJANGO_SECRET_KEY",
-    default="dev-only-insecure-secret-key-change-before-production-64-bytes",
-)
+_INSECURE_DEFAULT_SECRET_KEY = "dev-only-insecure-secret-key-change-before-production-64-bytes"
+
+SECRET_KEY = env("DJANGO_SECRET_KEY", default=_INSECURE_DEFAULT_SECRET_KEY)
 DEBUG = env("DJANGO_DEBUG")
+
+if not DEBUG and SECRET_KEY == _INSECURE_DEFAULT_SECRET_KEY:
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY must be set to a real secret when DJANGO_DEBUG=False. "
+        "Generate one with: python -c \"from django.core.management.utils import "
+        "get_random_secret_key; print(get_random_secret_key())\""
+    )
+
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 INSTALLED_APPS = [
@@ -27,6 +35,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "apps.accounts",
 ]
 
@@ -62,7 +71,20 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASE_URL = env("DATABASE_URL", default=None)
 
-if DATABASE_URL:
+ORACLE_DB_USER = env("ORACLE_DB_USER", default=None)
+ORACLE_DB_PASSWORD = env("ORACLE_DB_PASSWORD", default=None)
+ORACLE_DB_DSN = env("ORACLE_DB_DSN", default=None)
+
+if ORACLE_DB_USER and ORACLE_DB_PASSWORD and ORACLE_DB_DSN:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.oracle",
+            "NAME": ORACLE_DB_DSN,
+            "USER": ORACLE_DB_USER,
+            "PASSWORD": ORACLE_DB_PASSWORD,
+        }
+    }
+elif DATABASE_URL:
     DATABASES = {
         "default": env.db("DATABASE_URL"),
     }
@@ -108,6 +130,6 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
     "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": False,
+    "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
 }
