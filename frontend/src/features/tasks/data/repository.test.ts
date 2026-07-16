@@ -51,7 +51,13 @@ describe("createLocalStorageRepository", () => {
   it("filters out malformed entries but keeps valid ones", async () => {
     const repo = createLocalStorageRepository(
       fakeStorage({
-        "picking-up.tasks.v1": JSON.stringify([task, { junk: true }, null]),
+        "picking-up.tasks.v1": JSON.stringify([
+          task,
+          { junk: true },
+          null,
+          { ...task, id: "bad1", scope: { kind: "day" } },
+          { ...task, id: "bad2", scope: { kind: "day", date: 123 } },
+        ]),
       }),
     );
     expect(await repo.list()).toEqual([task]);

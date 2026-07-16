@@ -2,7 +2,12 @@ import type { Task } from "../types";
 
 const STORAGE_KEY = "picking-up.tasks.v1";
 
-const SCOPE_KINDS = ["day", "week", "month", "year"] as const;
+const SCOPE_FIELDS = {
+  day: "date",
+  week: "weekStart",
+  month: "month",
+  year: "year",
+} as const;
 
 export type TaskStorage = Pick<Storage, "getItem" | "setItem">;
 
@@ -13,18 +18,22 @@ export interface TaskRepository {
   remove(id: string): Promise<void>;
 }
 
+function isScope(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const s = value as Record<string, unknown>;
+  const field = SCOPE_FIELDS[s.kind as keyof typeof SCOPE_FIELDS];
+  return field !== undefined && typeof s[field] === "string";
+}
+
 function isTask(value: unknown): value is Task {
   if (typeof value !== "object" || value === null) return false;
   const t = value as Record<string, unknown>;
-  const scope = t.scope as Record<string, unknown> | undefined;
   return (
     typeof t.id === "string" &&
     typeof t.title === "string" &&
     typeof t.done === "boolean" &&
     typeof t.createdAt === "string" &&
-    typeof scope === "object" &&
-    scope !== null &&
-    SCOPE_KINDS.includes(scope.kind as (typeof SCOPE_KINDS)[number])
+    isScope(t.scope)
   );
 }
 
