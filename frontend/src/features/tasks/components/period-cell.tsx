@@ -9,6 +9,7 @@ export function PeriodCell({
   className,
   contentClassName,
   children,
+  "aria-label": ariaLabel,
 }: {
   focused: boolean;
   onFocus?: () => void;
@@ -16,6 +17,7 @@ export function PeriodCell({
   className?: string;
   contentClassName?: string;
   children?: ReactNode;
+  "aria-label"?: string;
 }) {
   const content = (
     <>
@@ -28,7 +30,10 @@ export function PeriodCell({
 
   if (focused) {
     return (
-      <div className={cn("rounded-md bg-card ring-1 ring-ring/40", className)}>
+      <div
+        aria-label={ariaLabel}
+        className={cn("rounded-md bg-card ring-1 ring-ring/40", className)}
+      >
         {content}
       </div>
     );
@@ -36,6 +41,7 @@ export function PeriodCell({
 
   return (
     <div
+      aria-label={ariaLabel}
       role={onFocus ? "button" : undefined}
       tabIndex={onFocus ? 0 : undefined}
       onClick={onFocus}
