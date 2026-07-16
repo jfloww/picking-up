@@ -11,13 +11,17 @@ __pycache__/
 *.py[cod]
 db.sqlite3
 
-# Environment
+# Environment (all variants except the committed .env.example templates)
 .env
-.env.local
+.env.*
+!.env.example
 
 # Secrets: SSH keys, DB credentials, Oracle wallet
 key/
 wallet/
+
+# Brainstorming companion sessions
+.superpowers/
 
 # OS / editor
 .DS_Store

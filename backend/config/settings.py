@@ -10,7 +10,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env(
     DJANGO_DEBUG=(bool, False),
 )
+# .env wins over .env.development when both exist (read_env does not
+# overwrite values that are already set). Missing files are skipped.
 environ.Env.read_env(BASE_DIR / ".env")
+environ.Env.read_env(BASE_DIR / ".env.development")
 
 _INSECURE_DEFAULT_SECRET_KEY = "dev-only-insecure-secret-key-change-before-production-64-bytes"
 
