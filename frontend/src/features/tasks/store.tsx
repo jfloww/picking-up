@@ -6,6 +6,7 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   type ReactNode,
 } from "react";
 
@@ -71,18 +72,46 @@ export function TasksProvider({
     [repository],
   );
 
+  const tasksRef = useRef(state.tasks);
+  tasksRef.current = state.tasks;
+  const appliedDayRef = useRef<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     void repo.list().then((tasks) => {
       if (cancelled) return;
-      const rolled = rolloverTasks(tasks, todayKey());
+      const today = todayKey();
+      const rolled = rolloverTasks(tasks, today);
       dispatch({ type: "loaded", tasks: rolled });
+      appliedDayRef.current = today;
       rolled.forEach((task, i) => {
         if (task !== tasks[i]) void repo.update(task);
       });
     });
     return () => {
       cancelled = true;
+    };
+  }, [repo]);
+
+  useEffect(() => {
+    function rolloverIfDateChanged() {
+      if (appliedDayRef.current === null) return;
+      const today = todayKey();
+      if (today === appliedDayRef.current) return;
+      const tasks = tasksRef.current;
+      const rolled = rolloverTasks(tasks, today);
+      dispatch({ type: "loaded", tasks: rolled });
+      appliedDayRef.current = today;
+      rolled.forEach((task, i) => {
+        if (task !== tasks[i]) void repo.update(task);
+      });
+    }
+
+    window.addEventListener("focus", rolloverIfDateChanged);
+    document.addEventListener("visibilitychange", rolloverIfDateChanged);
+    return () => {
+      window.removeEventListener("focus", rolloverIfDateChanged);
+      document.removeEventListener("visibilitychange", rolloverIfDateChanged);
     };
   }, [repo]);
 

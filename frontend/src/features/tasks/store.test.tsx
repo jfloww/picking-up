@@ -1,10 +1,10 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider, tasksReducer, useTasks } from "./store";
 import { fakeRepository, makeTask } from "./test-utils";
-import { todayKey } from "./lib/dates";
+import { addDays, todayKey, weekStartOf } from "./lib/dates";
 
 describe("tasksReducer", () => {
   it("handles loaded/added/updated/removed", () => {
@@ -89,5 +89,45 @@ describe("TasksProvider", () => {
     act(() => result.current.removeTask("a"));
     expect(result.current.tasks).toHaveLength(0);
     await waitFor(() => expect(repo.tasks).toHaveLength(0));
+  });
+
+  describe("rollover on date change (not just mount)", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("re-rolls tasks when the date changes while the tab stays open, on focus/visibilitychange", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const dayD = todayKey(); // "today" pinned at test start
+
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: dayD },
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      expect(result.current.tasks[0].scope).toEqual({ kind: "day", date: dayD });
+
+      const dayLater = addDays(dayD, 8);
+      const [y, m, d] = dayLater.split("-").map(Number);
+      act(() => {
+        vi.setSystemTime(new Date(y, m - 1, d));
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      await waitFor(() =>
+        expect(result.current.tasks[0].scope).toEqual({
+          kind: "week",
+          weekStart: weekStartOf(dayLater),
+        }),
+      );
+      await waitFor(() =>
+        expect(repo.tasks[0].scope).toEqual({
+          kind: "week",
+          weekStart: weekStartOf(dayLater),
+        }),
+      );
+    });
   });
 });

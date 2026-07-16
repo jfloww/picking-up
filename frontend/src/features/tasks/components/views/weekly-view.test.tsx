@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider } from "../../store";
 import { fakeRepository, makeTask } from "../../test-utils";
@@ -17,6 +17,14 @@ function renderView(onAnchorChange = vi.fn(), tasks = [] as Parameters<typeof fa
 }
 
 describe("WeeklyView", () => {
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 6, 16)); // 2026-07-16, matches the fixtures
+  });
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   it("renders the month label, day headers, and Weekly column", async () => {
     renderView();
     await waitFor(() => expect(screen.getByText("July 2026")).toBeTruthy());
@@ -34,7 +42,7 @@ describe("WeeklyView", () => {
   it("shows tasks of the focused week and faded rows are clickable", async () => {
     const task = makeTask({
       title: "focused task",
-      scope: { kind: "day", date: "2026-07-14" },
+      scope: { kind: "day", date: "2026-07-16" },
     });
     const onAnchorChange = renderView(vi.fn(), [task]);
     await waitFor(() => expect(screen.getByText("focused task")).toBeTruthy());

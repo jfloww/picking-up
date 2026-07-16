@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider } from "../../store";
 import { fakeRepository, makeTask } from "../../test-utils";
@@ -7,6 +7,14 @@ import { MonthlyView } from "./monthly-view";
 import { YearlyView } from "./yearly-view";
 
 const ANCHOR = "2026-07-16";
+
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 6, 16)); // 2026-07-16, matches the fixtures
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 describe("MonthlyView", () => {
   it("renders 12 months, fades non-current, and edits the focused month in the side cell", async () => {

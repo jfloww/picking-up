@@ -4,4 +4,5 @@ import { afterEach } from "vitest";
 // Cleanup after each test to ensure proper test isolation
 afterEach(() => {
   cleanup();
+  if (typeof localStorage !== "undefined") localStorage.clear();
 });
