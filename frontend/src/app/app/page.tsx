@@ -1,48 +1,16 @@
-import Link from "next/link";
-
 import { LogoutButton } from "@/features/auth/components/logout-button";
+import { TaskCalendar } from "@/features/tasks/components/task-calendar";
+import { Wordmark } from "@/components/wordmark";
 
 export default function AppPage() {
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">Picking Up</p>
-          <h1>Task workspace</h1>
-        </div>
+    <div className="mx-auto min-h-screen w-full max-w-6xl px-6 py-6">
+      <header className="flex items-center justify-between gap-4">
+        <Wordmark />
         <LogoutButton />
       </header>
-
-      <main className="app-main">
-        <aside className="panel" aria-label="Task navigation">
-          <nav>
-            <ul className="nav-list">
-              <li>
-                <Link aria-current="page" href="/app">
-                  Today
-                </Link>
-              </li>
-              <li>
-                <Link href="/app">Inbox</Link>
-              </li>
-              <li>
-                <Link href="/app">Done</Link>
-              </li>
-              <li>
-                <Link href="/app">Settings</Link>
-              </li>
-            </ul>
-          </nav>
-        </aside>
-
-        <section className="panel">
-          <p className="eyebrow">Protected route</p>
-          <h2>Authorization shell is ready</h2>
-          <p>
-            This page is protected by an HTTP-only access token cookie. The task UI can be
-            built here after the Django auth endpoints are available.
-          </p>
-        </section>
+      <main className="mt-6">
+        <TaskCalendar />
       </main>
     </div>
   );
