@@ -13,6 +13,7 @@ export interface Task {
   rolledFrom?: Scope;
   createdAt: string;
   completedAt?: string;
+  time?: string;
 }
 
 export function scopeKey(scope: Scope): string {
