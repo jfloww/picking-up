@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { Task } from "../types";
-import { compareTasksForDay, isValidTime, nowTime, timeToMinutes } from "./times";
+import { compareTasksForDay, isValidTime, layoutTimedTasks, nowTime, timeToMinutes, yToSnappedTime } from "./times";
 
 function task(overrides: Partial<Task>): Task {
   return {
@@ -60,5 +60,69 @@ describe("compareTasksForDay", () => {
 
   it("returns 0 for two untimed tasks (stable sort keeps insertion order)", () => {
     expect(compareTasksForDay(task({}), task({}))).toBe(0);
+  });
+});
+
+describe("yToSnappedTime", () => {
+  it("converts a content-relative y offset to a snapped HH:MM", () => {
+    expect(yToSnappedTime(456, 48)).toBe("09:30"); // 570 minutes exactly
+    expect(yToSnappedTime(0, 48)).toBe("00:00");
+  });
+
+  it("rounds to the nearest 15-minute slot", () => {
+    expect(yToSnappedTime(457.6, 48)).toBe("09:30"); // 572 min -> rounds down to 570
+    expect(yToSnappedTime(462.4, 48)).toBe("09:45"); // 578 min -> rounds up to 585
+  });
+
+  it("clamps to 00:00..23:45", () => {
+    expect(yToSnappedTime(-50, 48)).toBe("00:00");
+    expect(yToSnappedTime(100000, 48)).toBe("23:45");
+  });
+
+  it("honors a custom snap grid", () => {
+    expect(yToSnappedTime(456, 48, 30)).toBe("09:30");
+    expect(yToSnappedTime(468, 48, 30)).toBe("09:30"); // 585 min -> nearest 30 is 570
+  });
+});
+
+describe("layoutTimedTasks", () => {
+  function task(overrides: Partial<Task>): Task {
+    return {
+      id: crypto.randomUUID(),
+      title: "t",
+      done: false,
+      scope: { kind: "day", date: "2026-07-16" },
+      createdAt: "2026-07-16T00:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  it("gives unique-time tasks a single full-width column", () => {
+    const a = task({ time: "09:00" });
+    const b = task({ time: "10:00" });
+    expect(layoutTimedTasks([a, b])).toEqual([
+      { task: a, column: 0, columns: 1 },
+      { task: b, column: 0, columns: 1 },
+    ]);
+  });
+
+  it("splits same-time tasks into indexed columns", () => {
+    const a = task({ time: "09:00" });
+    const b = task({ time: "09:00" });
+    expect(layoutTimedTasks([a, b])).toEqual([
+      { task: a, column: 0, columns: 2 },
+      { task: b, column: 1, columns: 2 },
+    ]);
+  });
+
+  it("groups independently by time when some tasks collide and others don't", () => {
+    const a = task({ time: "09:00" });
+    const b = task({ time: "09:00" });
+    const c = task({ time: "11:00" });
+    expect(layoutTimedTasks([a, b, c])).toEqual([
+      { task: a, column: 0, columns: 2 },
+      { task: b, column: 1, columns: 2 },
+      { task: c, column: 0, columns: 1 },
+    ]);
   });
 });
