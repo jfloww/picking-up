@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Task } from "../types";
-import { createLocalStorageRepository, type TaskStorage } from "./repository";
+import { createLocalStorageRepository, normalizeTask, type TaskStorage } from "./repository";
 
 function fakeStorage(initial: Record<string, string> = {}): TaskStorage {
   const map = new Map(Object.entries(initial));
@@ -110,5 +110,17 @@ describe("v2 field normalization", () => {
     );
     const [loaded] = await repo.list();
     expect(loaded.subtasks).toEqual([good]);
+  });
+
+  it("normalizeTask returns the same reference when nothing changed", () => {
+    const clean: Task = {
+      ...task,
+      id: "clean",
+      time: "09:30",
+      subtasks: [{ id: "s1", title: "ok", done: false }],
+    };
+    expect(normalizeTask(clean)).toBe(clean);
+    const bare: Task = { ...task, id: "bare" };
+    expect(normalizeTask(bare)).toBe(bare);
   });
 });

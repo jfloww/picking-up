@@ -38,7 +38,7 @@ function isSubtask(value: unknown): value is Subtask {
 
 // The read path normalizes v2 fields instead of rejecting the whole task:
 // only v1 structural validation (isTask/isScope) may drop a task.
-function normalizeTask(task: Task): Task {
+export function normalizeTask(task: Task): Task {
   let time = task.time;
   if (time !== undefined && (typeof time !== "string" || !isValidTime(time))) {
     time = undefined;
@@ -46,7 +46,12 @@ function normalizeTask(task: Task): Task {
 
   let subtasks = task.subtasks;
   if (subtasks !== undefined) {
-    subtasks = Array.isArray(subtasks) ? subtasks.filter(isSubtask) : undefined;
+    if (Array.isArray(subtasks)) {
+      const filtered = subtasks.filter(isSubtask);
+      subtasks = filtered.length === subtasks.length ? subtasks : filtered;
+    } else {
+      subtasks = undefined;
+    }
   }
 
   if (time === task.time && subtasks === task.subtasks) return task;
