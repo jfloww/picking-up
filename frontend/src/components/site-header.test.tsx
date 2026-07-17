@@ -49,6 +49,9 @@ describe("SiteHeader", () => {
     const signInLink = screen.getByRole("link", { name: "Sign in" });
     expect(signInLink.getAttribute("href")).toBe("/login");
     expect(screen.queryByText("Sign out")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /switch to (light|dark) mode/i }),
+    ).toBeTruthy();
   });
 
   it("shows the display name and a Sign out button when logged in", () => {
@@ -56,14 +59,14 @@ describe("SiteHeader", () => {
     expect(screen.getByText("Jane")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /switch to (light|dark) mode/i }),
+    ).toBeTruthy();
   });
 
   it("always renders the wordmark linking to /", () => {
     renderHeader(null);
-    // The wordmark is a link with text nodes "PICKING" and "UP" (in a span)
-    const wordmarkLink = screen.getAllByRole("link")[0];
+    const wordmarkLink = screen.getByRole("link", { name: /picking\s+up/i });
     expect(wordmarkLink.getAttribute("href")).toBe("/");
-    expect(wordmarkLink.textContent?.toUpperCase()).toContain("PICKING");
-    expect(wordmarkLink.textContent?.toUpperCase()).toContain("UP");
   });
 });
