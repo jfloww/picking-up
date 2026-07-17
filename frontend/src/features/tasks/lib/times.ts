@@ -33,7 +33,7 @@ export function yToSnappedTime(
   snapMinutes = 15,
 ): string {
   const totalMinutes = (y / hourHeight) * 60;
-  const snapped = Math.ceil(totalMinutes / snapMinutes - 0.5) * snapMinutes;
+  const snapped = Math.round(totalMinutes / snapMinutes) * snapMinutes;
   const clamped = Math.min(Math.max(snapped, 0), 23 * 60 + 45);
   const h = Math.floor(clamped / 60);
   const m = clamped % 60;
