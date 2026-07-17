@@ -21,3 +21,13 @@ export function requestCurrentUser() {
     authenticated: true,
   });
 }
+
+export async function getCurrentUserOrNull(
+  fetchUser: () => Promise<CurrentUser> = requestCurrentUser,
+): Promise<CurrentUser | null> {
+  try {
+    return await fetchUser();
+  } catch {
+    return null;
+  }
+}

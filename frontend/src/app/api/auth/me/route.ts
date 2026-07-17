@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
 
-import { requestCurrentUser } from "@/features/auth/api/auth";
+import { getCurrentUserOrNull } from "@/features/auth/api/auth";
 
 export async function GET() {
-  try {
-    const user = await requestCurrentUser();
+  const user = await getCurrentUserOrNull();
 
-    return NextResponse.json({ user });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unauthorized." },
-      { status: 401 },
-    );
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
+
+  return NextResponse.json({ user });
 }
