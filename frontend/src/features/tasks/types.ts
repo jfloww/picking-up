@@ -4,6 +4,12 @@ export type Scope =
   | { kind: "month"; month: string }
   | { kind: "year"; year: string };
 
+export interface Subtask {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -13,7 +19,8 @@ export interface Task {
   rolledFrom?: Scope;
   createdAt: string;
   completedAt?: string;
-  time?: string;
+  time?: string; // "HH:MM", 24h zero-padded; meaningful on day-scoped tasks
+  subtasks?: Subtask[]; // one level deep; no scope/memo/time of their own
 }
 
 export function scopeKey(scope: Scope): string {
