@@ -12,6 +12,7 @@ import {
 
 import { createLocalStorageRepository, type TaskRepository } from "./data/repository";
 import { todayKey } from "./lib/dates";
+import { isValidTime } from "./lib/times";
 import { rolloverTasks } from "./lib/rollover";
 import type { Scope, Task } from "./types";
 
@@ -51,7 +52,11 @@ interface TasksContextValue extends TasksState {
   addTask: (title: string, scope: Scope) => void;
   toggleTask: (id: string) => void;
   setMemo: (id: string, memo: string) => void;
+  setTime: (id: string, time: string | undefined) => void;
   removeTask: (id: string) => void;
+  addSubtask: (id: string, title: string) => void;
+  toggleSubtask: (id: string, subtaskId: string) => void;
+  removeSubtask: (id: string, subtaskId: string) => void;
 }
 
 const TasksContext = createContext<TasksContextValue | null>(null);
@@ -146,6 +151,51 @@ export function TasksProvider({
         const current = state.tasks.find((t) => t.id === id);
         if (!current) return;
         const task: Task = { ...current, memo: memo.trim() || undefined };
+        dispatch({ type: "updated", task });
+        void repo.update(task);
+      },
+      setTime(id, time) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current) return;
+        if (time !== undefined && !isValidTime(time)) return;
+        const task: Task = { ...current, time };
+        dispatch({ type: "updated", task });
+        void repo.update(task);
+      },
+      addSubtask(id, title) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current) return;
+        const trimmed = title.trim();
+        if (!trimmed) return;
+        const task: Task = {
+          ...current,
+          subtasks: [
+            ...(current.subtasks ?? []),
+            { id: crypto.randomUUID(), title: trimmed, done: false },
+          ],
+        };
+        dispatch({ type: "updated", task });
+        void repo.update(task);
+      },
+      toggleSubtask(id, subtaskId) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current?.subtasks) return;
+        const task: Task = {
+          ...current,
+          subtasks: current.subtasks.map((s) =>
+            s.id === subtaskId ? { ...s, done: !s.done } : s,
+          ),
+        };
+        dispatch({ type: "updated", task });
+        void repo.update(task);
+      },
+      removeSubtask(id, subtaskId) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current?.subtasks) return;
+        const task: Task = {
+          ...current,
+          subtasks: current.subtasks.filter((s) => s.id !== subtaskId),
+        };
         dispatch({ type: "updated", task });
         void repo.update(task);
       },

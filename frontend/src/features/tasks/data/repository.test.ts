@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Task } from "../types";
-import { createLocalStorageRepository, type TaskStorage } from "./repository";
+import { createLocalStorageRepository, normalizeTask, type TaskStorage } from "./repository";
 
 function fakeStorage(initial: Record<string, string> = {}): TaskStorage {
   const map = new Map(Object.entries(initial));
@@ -61,5 +61,66 @@ describe("createLocalStorageRepository", () => {
       }),
     );
     expect(await repo.list()).toEqual([task]);
+  });
+});
+
+describe("v2 field normalization", () => {
+  it("round-trips time and subtasks", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const timed: Task = {
+      ...task,
+      id: "timed",
+      time: "09:30",
+      subtasks: [{ id: "s1", title: "detail", done: false }],
+    };
+    await repo.create(timed);
+    expect(await repo.list()).toEqual([timed]);
+  });
+
+  it("clears an invalid time but keeps the task", async () => {
+    const repo = createLocalStorageRepository(
+      fakeStorage({
+        "picking-up.tasks.v1": JSON.stringify([{ ...task, time: "25:99" }]),
+      }),
+    );
+    const [loaded] = await repo.list();
+    expect(loaded.id).toBe(task.id);
+    expect(loaded.time).toBeUndefined();
+  });
+
+  it("drops a non-array subtasks field but keeps the task", async () => {
+    const repo = createLocalStorageRepository(
+      fakeStorage({
+        "picking-up.tasks.v1": JSON.stringify([{ ...task, subtasks: "junk" }]),
+      }),
+    );
+    const [loaded] = await repo.list();
+    expect(loaded.id).toBe(task.id);
+    expect(loaded.subtasks).toBeUndefined();
+  });
+
+  it("filters malformed subtask entries, keeping valid ones", async () => {
+    const good = { id: "s1", title: "ok", done: true };
+    const repo = createLocalStorageRepository(
+      fakeStorage({
+        "picking-up.tasks.v1": JSON.stringify([
+          { ...task, subtasks: [good, { id: "s2" }, null, { id: 3, title: "x", done: false }] },
+        ]),
+      }),
+    );
+    const [loaded] = await repo.list();
+    expect(loaded.subtasks).toEqual([good]);
+  });
+
+  it("normalizeTask returns the same reference when nothing changed", () => {
+    const clean: Task = {
+      ...task,
+      id: "clean",
+      time: "09:30",
+      subtasks: [{ id: "s1", title: "ok", done: false }],
+    };
+    expect(normalizeTask(clean)).toBe(clean);
+    const bare: Task = { ...task, id: "bare" };
+    expect(normalizeTask(bare)).toBe(bare);
   });
 });

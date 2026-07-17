@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addDays,
+  dayLabel,
   dayOfMonth,
   monthGrid,
   monthKeyOf,
@@ -11,8 +12,10 @@ import {
   nextMonthKey,
   prevMonthKey,
   todayKey,
+  weekdayOf,
   weekDates,
   weekStartOf,
+  windowAround,
   yearOf,
 } from "./dates";
 
@@ -98,5 +101,32 @@ describe("dates", () => {
   it("monthLabel and monthName format for display", () => {
     expect(monthLabel("2026-07")).toBe("July 2026");
     expect(monthName("2026-01")).toBe("January");
+  });
+});
+
+describe("window and day labels", () => {
+  it("windowAround centers the anchor and crosses month boundaries", () => {
+    const window = windowAround("2026-08-01");
+    expect(window).toHaveLength(7);
+    expect(window[3]).toBe("2026-08-01");
+    expect(window[0]).toBe("2026-07-29");
+    expect(window[6]).toBe("2026-08-04");
+  });
+
+  it("windowAround honors a custom radius", () => {
+    expect(windowAround("2026-07-16", 1)).toEqual([
+      "2026-07-15",
+      "2026-07-16",
+      "2026-07-17",
+    ]);
+  });
+
+  it("weekdayOf returns 0=Sunday..6=Saturday", () => {
+    expect(weekdayOf("2026-07-12")).toBe(0); // Sunday
+    expect(weekdayOf("2026-07-16")).toBe(4); // Thursday
+  });
+
+  it("dayLabel formats a full day heading", () => {
+    expect(dayLabel("2026-07-16")).toBe("Thursday, July 16");
   });
 });

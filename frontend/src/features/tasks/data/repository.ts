@@ -1,4 +1,5 @@
-import type { Task } from "../types";
+import { isValidTime } from "../lib/times";
+import type { Subtask, Task } from "../types";
 
 const STORAGE_KEY = "picking-up.tasks.v1";
 
@@ -25,6 +26,38 @@ function isScope(value: unknown): boolean {
   return field !== undefined && typeof s[field] === "string";
 }
 
+function isSubtask(value: unknown): value is Subtask {
+  if (typeof value !== "object" || value === null) return false;
+  const s = value as Record<string, unknown>;
+  return (
+    typeof s.id === "string" &&
+    typeof s.title === "string" &&
+    typeof s.done === "boolean"
+  );
+}
+
+// The read path normalizes v2 fields instead of rejecting the whole task:
+// only v1 structural validation (isTask/isScope) may drop a task.
+export function normalizeTask(task: Task): Task {
+  let time = task.time;
+  if (time !== undefined && (typeof time !== "string" || !isValidTime(time))) {
+    time = undefined;
+  }
+
+  let subtasks = task.subtasks;
+  if (subtasks !== undefined) {
+    if (Array.isArray(subtasks)) {
+      const filtered = subtasks.filter(isSubtask);
+      subtasks = filtered.length === subtasks.length ? subtasks : filtered;
+    } else {
+      subtasks = undefined;
+    }
+  }
+
+  if (time === task.time && subtasks === task.subtasks) return task;
+  return { ...task, time, subtasks };
+}
+
 function isTask(value: unknown): value is Task {
   if (typeof value !== "object" || value === null) return false;
   const t = value as Record<string, unknown>;
@@ -49,7 +82,7 @@ export function createLocalStorageRepository(
       if (!raw) return [];
       const parsed: unknown = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
-      return parsed.filter(isTask);
+      return parsed.filter(isTask).map(normalizeTask);
     } catch {
       return [];
     }

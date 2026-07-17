@@ -7,7 +7,18 @@ import { fakeRepository, makeTask } from "../test-utils";
 import { PeriodCell } from "./period-cell";
 import { QuickAdd } from "./quick-add";
 import { ScopeTasks } from "./scope-tasks";
+import { SubtaskList } from "./subtask-list";
 import { TaskItem } from "./task-item";
+
+const noopHandlers = {
+  onToggle: () => {},
+  onMemoChange: (_memo: string) => {},
+  onTimeChange: (_time?: string) => {},
+  onDelete: () => {},
+  onAddSubtask: (_title: string) => {},
+  onToggleSubtask: (_id: string) => {},
+  onRemoveSubtask: (_id: string) => {},
+};
 
 describe("QuickAdd", () => {
   it("submits trimmed value on Enter and clears", () => {
@@ -29,9 +40,8 @@ describe("TaskItem", () => {
     render(
       <TaskItem
         task={{ ...task, rolledFrom: { kind: "day", date: "2026-07-01" } }}
+        {...noopHandlers}
         onToggle={onToggle}
-        onMemoChange={() => {}}
-        onDelete={() => {}}
       />,
     );
     fireEvent.click(screen.getByRole("checkbox"));
@@ -45,7 +55,7 @@ describe("TaskItem", () => {
     render(
       <TaskItem
         task={task}
-        onToggle={() => {}}
+        {...noopHandlers}
         onMemoChange={onMemoChange}
         onDelete={onDelete}
       />,
@@ -57,6 +67,107 @@ describe("TaskItem", () => {
     expect(onMemoChange).toHaveBeenCalledWith("updated");
     fireEvent.click(screen.getByText("Delete"));
     expect(onDelete).toHaveBeenCalled();
+  });
+});
+
+describe("TaskItem v2", () => {
+  it("shows time prefix and subtask progress badge on the collapsed row", () => {
+    render(
+      <TaskItem
+        task={makeTask({
+          title: "dentist",
+          time: "14:00",
+          subtasks: [
+            { id: "s1", title: "a", done: true },
+            { id: "s2", title: "b", done: false },
+          ],
+        })}
+        {...noopHandlers}
+      />,
+    );
+    expect(screen.getByText("14:00")).toBeTruthy();
+    expect(screen.getByLabelText("Subtasks: 1/2").textContent).toBe("1/2");
+  });
+
+  it("edits and clears the time from the expansion", () => {
+    const onTimeChange = vi.fn();
+    render(
+      <TaskItem
+        task={makeTask({ title: "dentist", time: "14:00" })}
+        {...noopHandlers}
+        onTimeChange={onTimeChange}
+      />,
+    );
+    fireEvent.click(screen.getByText("dentist"));
+    fireEvent.change(screen.getByLabelText("Task time"), {
+      target: { value: "15:30" },
+    });
+    expect(onTimeChange).toHaveBeenCalledWith("15:30");
+    fireEvent.click(screen.getByText("Clear"));
+    expect(onTimeChange).toHaveBeenCalledWith(undefined);
+  });
+
+  it("renders the subtask list in the expansion", () => {
+    render(
+      <TaskItem
+        task={makeTask({
+          title: "build shelf",
+          subtasks: [{ id: "s1", title: "buy wood", done: false }],
+        })}
+        {...noopHandlers}
+      />,
+    );
+    fireEvent.click(screen.getByText("build shelf"));
+    expect(screen.getByText("buy wood")).toBeTruthy();
+    expect(screen.getByLabelText("Add subtask")).toBeTruthy();
+  });
+});
+
+describe("SubtaskList", () => {
+  it("wires toggle, remove, and add", () => {
+    const onToggle = vi.fn();
+    const onRemove = vi.fn();
+    const onAdd = vi.fn();
+    render(
+      <SubtaskList
+        subtasks={[{ id: "s1", title: "buy wood", done: false }]}
+        onAdd={onAdd}
+        onToggle={onToggle}
+        onRemove={onRemove}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("Toggle buy wood"));
+    expect(onToggle).toHaveBeenCalledWith("s1");
+    fireEvent.click(screen.getByLabelText("Delete buy wood"));
+    expect(onRemove).toHaveBeenCalledWith("s1");
+    const input = screen.getByLabelText("Add subtask");
+    fireEvent.change(input, { target: { value: "sand it" } });
+    fireEvent.submit(input.closest("form")!);
+    expect(onAdd).toHaveBeenCalledWith("sand it");
+  });
+});
+
+describe("ScopeTasks v2", () => {
+  it("sorts day lists timed-first and shows prefix + badge in compact mode", async () => {
+    const day = todayKey();
+    const untimed = makeTask({ id: "u", title: "untimed", scope: { kind: "day", date: day } });
+    const timed = makeTask({
+      id: "t",
+      title: "timed",
+      time: "08:00",
+      scope: { kind: "day", date: day },
+      subtasks: [{ id: "s1", title: "x", done: true }],
+    });
+    render(
+      <TasksProvider repository={fakeRepository([untimed, timed])}>
+        <ScopeTasks scope={{ kind: "day", date: day }} compact />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByText(/08:00/)).toBeTruthy());
+    const items = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(items[0]).toContain("08:00");
+    expect(items[0]).toContain("1/1");
+    expect(items[1]).toContain("untimed");
   });
 });
 

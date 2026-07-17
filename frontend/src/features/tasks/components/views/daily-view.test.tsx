@@ -1,37 +1,63 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider } from "../../store";
 import { fakeRepository } from "../../test-utils";
 import { DailyView } from "./daily-view";
 
-const ANCHOR = "2026-07-16"; // Thursday; week 2026-07-12 .. 2026-07-18
+const ANCHOR = "2026-07-16"; // Thursday
 
-describe("DailyView", () => {
-  it("focuses the anchor day: quick-add only there and in the weekly cell", async () => {
-    render(
-      <TasksProvider repository={fakeRepository()}>
-        <DailyView anchor={ANCHOR} onAnchorChange={vi.fn()} />
-      </TasksProvider>,
-    );
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 6, 16, 14, 5));
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
+
+function renderView(onAnchorChange = vi.fn()) {
+  render(
+    <TasksProvider repository={fakeRepository()}>
+      <DailyView anchor={ANCHOR} onAnchorChange={onAnchorChange} />
+    </TasksProvider>,
+  );
+  return onAnchorChange;
+}
+
+describe("DailyView v2", () => {
+  it("renders the day heading and a centered rolling window Mo 13 .. Su 19", async () => {
+    renderView();
     await waitFor(() =>
-      expect(screen.getAllByLabelText("Add task")).toHaveLength(2),
+      expect(screen.getByText("Thursday, July 16")).toBeTruthy(),
     );
-    expect(screen.getByText("Weekly")).toBeTruthy();
+    // neighbors are faded buttons; the focused day is not a button
+    const neighbors = screen.getAllByRole("button", { name: /^(Mo|Tu|We|Th|Fr|Sa|Su) \d+$/ });
+    expect(neighbors.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Mo 13",
+      "Tu 14",
+      "We 15",
+      "Fr 17",
+      "Sa 18",
+      "Su 19",
+    ]);
     expect(screen.getByText("Th 16")).toBeTruthy();
   });
 
-  it("clicking a faded day refocuses it", async () => {
-    const onAnchorChange = vi.fn();
-    render(
-      <TasksProvider repository={fakeRepository()}>
-        <DailyView anchor={ANCHOR} onAnchorChange={onAnchorChange} />
-      </TasksProvider>,
-    );
+  it("the focused center holds the timeline; the Weekly cell is editable", async () => {
+    renderView();
+    await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
+    expect(screen.getByTestId("now-line")).toBeTruthy(); // anchor is today
+    expect(screen.getByText("Weekly")).toBeTruthy();
+    // two quick-adds: the timeline's all-day section + the weekly cell
+    expect(screen.getAllByLabelText("Add task")).toHaveLength(2);
+  });
+
+  it("clicking a neighbor refocuses it, crossing the window", async () => {
+    const onAnchorChange = renderView();
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Su 12" })).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Mo 13" })).toBeTruthy(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Su 12" }));
-    expect(onAnchorChange).toHaveBeenCalledWith("2026-07-12");
+    fireEvent.click(screen.getByRole("button", { name: "Mo 13" }));
+    expect(onAnchorChange).toHaveBeenCalledWith("2026-07-13");
   });
 });
