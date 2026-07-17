@@ -130,4 +130,64 @@ describe("TasksProvider", () => {
       );
     });
   });
+
+  describe("time and subtask actions", () => {
+    it("setTime sets, rejects invalid, and clears", async () => {
+      const task = makeTask({ id: "a", scope: { kind: "day", date: todayKey() } });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setTime("a", "09:30"));
+      expect(result.current.tasks[0].time).toBe("09:30");
+      await waitFor(() => expect(repo.tasks[0].time).toBe("09:30"));
+
+      act(() => result.current.setTime("a", "25:00"));
+      expect(result.current.tasks[0].time).toBe("09:30"); // invalid ignored
+
+      act(() => result.current.setTime("a", undefined));
+      expect(result.current.tasks[0].time).toBeUndefined();
+    });
+
+    it("addSubtask trims and ignores blank titles", async () => {
+      const task = makeTask({ id: "a", scope: { kind: "day", date: todayKey() } });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => {
+        result.current.addSubtask("a", "   ");
+        result.current.addSubtask("a", "  buy nails  ");
+      });
+      expect(result.current.tasks[0].subtasks).toHaveLength(1);
+      expect(result.current.tasks[0].subtasks![0]).toMatchObject({
+        title: "buy nails",
+        done: false,
+      });
+      await waitFor(() => expect(repo.tasks[0].subtasks).toHaveLength(1));
+    });
+
+    it("toggleSubtask flips one subtask; removeSubtask deletes it", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+        ],
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.toggleSubtask("a", "s1"));
+      expect(result.current.tasks[0].subtasks).toEqual([
+        { id: "s1", title: "one", done: true },
+        { id: "s2", title: "two", done: false },
+      ]);
+
+      act(() => result.current.removeSubtask("a", "s2"));
+      expect(result.current.tasks[0].subtasks).toEqual([
+        { id: "s1", title: "one", done: true },
+      ]);
+      await waitFor(() => expect(repo.tasks[0].subtasks).toHaveLength(1));
+    });
+  });
 });
