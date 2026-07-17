@@ -11,27 +11,6 @@ The frontend uses Django as the backend authority.
 - JWT tokens are stored in HTTP-only cookies.
 - Protected frontend routes are guarded by Next middleware.
 
-## Required Environment
+## Setup
 
-Copy `.env.example` to `.env.local` and set:
-
-```text
-DJANGO_API_BASE_URL=http://localhost:8000
-NEXT_PUBLIC_APP_NAME=Picking Up
-```
-
-## Expected Django Auth Endpoints
-
-```text
-POST /api/auth/register/
-POST /api/auth/token/
-POST /api/auth/token/refresh/
-GET  /api/auth/me/
-```
-
-## Development
-
-```text
-npm install
-npm run dev
-```
+See [`../setup/`](../setup/) for full local development setup (env vars, running the dev server, tests) — this frontend expects the Django backend described there to be running on `http://localhost:8000`.
