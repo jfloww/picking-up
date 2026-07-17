@@ -76,7 +76,7 @@ export function DayTimeline({ date }: { date: string }) {
             <div
               key={t.id}
               data-testid={`chip-${t.id}`}
-              className="absolute inset-x-1 z-20 rounded-md bg-brand/10 px-1 ring-1 ring-brand/30"
+              className="absolute inset-x-1 z-20 rounded-md bg-brand/10 px-1 ring-1 ring-brand/30 focus-within:z-30"
               style={{ top: toOffset(t.time!) }}
             >
               <ul>

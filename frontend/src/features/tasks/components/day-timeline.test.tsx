@@ -39,6 +39,8 @@ describe("DayTimeline", () => {
 
     const chip = screen.getByTestId("chip-t");
     expect(chip.style.top).toBe(`${(570 * HOUR_HEIGHT) / 60}px`); // 09:30 = 570min
+    // focused chips must paint above later siblings so an expanded editor stays usable
+    expect(chip.className).toContain("focus-within:z-30");
     expect(screen.getByText("dentist")).toBeTruthy();
   });
 
