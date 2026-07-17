@@ -1,17 +1,20 @@
-import { LogoutButton } from "@/features/auth/components/logout-button";
+import { SiteFooter } from "@/components/site-footer";
+import { SiteHeader } from "@/components/site-header";
+import { getCurrentUserOrNull } from "@/features/auth/api/auth";
 import { TaskCalendar } from "@/features/tasks/components/task-calendar";
-import { Wordmark } from "@/components/wordmark";
 
-export default function AppPage() {
+export default async function AppPage() {
+  const user = await getCurrentUserOrNull();
+
   return (
-    <div className="mx-auto min-h-screen w-full max-w-6xl px-6 py-6">
-      <header className="flex items-center justify-between gap-4">
-        <Wordmark />
-        <LogoutButton />
-      </header>
-      <main className="mt-6">
+    <div className="flex min-h-svh flex-col bg-background">
+      <SiteHeader user={user} />
+
+      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-6">
         <TaskCalendar />
       </main>
+
+      <SiteFooter />
     </div>
   );
 }
