@@ -61,7 +61,7 @@ describe("yToSnappedTime", () => {
 
   it("honors a custom snap grid", () => {
     expect(yToSnappedTime(456, 48, 30)).toBe("09:30");
-    expect(yToSnappedTime(468, 48, 30)).toBe("09:30"); // 585 min -> nearest 30 is 570
+    expect(yToSnappedTime(464, 48, 30)).toBe("09:30"); // 580 min -> nearest 30 is 570, not a tie
   });
 });
 
