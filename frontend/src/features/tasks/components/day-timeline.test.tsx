@@ -132,6 +132,50 @@ describe("DayTimeline drag-to-schedule", () => {
     expect(screen.getByTestId("chip-b").style.left).toBe("calc(50% + 2px)");
   });
 
+  it("dragging inside the expanded editor's memo textarea does not reschedule the task", async () => {
+    const day = todayKey();
+    const timed = makeTask({ id: "t", title: "dentist", time: "09:30", scope: { kind: "day", date: day } });
+    renderTimeline(day, [timed]);
+    await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
+
+    const rail = screen.getByTestId("hour-rail");
+    mockRect(rail, { top: 100, bottom: 1300, left: 0, right: 300 });
+    Object.defineProperty(rail, "scrollTop", { value: 0, writable: true });
+    mockRect(screen.getByTestId("all-day-zone"), { top: 0, bottom: 90, left: 0, right: 300 });
+
+    const originalTop = screen.getByTestId("chip-t").style.top;
+
+    fireEvent.click(screen.getByRole("button", { name: "dentist" }));
+    const memo = await screen.findByPlaceholderText("Memo");
+
+    fireEvent.pointerDown(memo, { pointerId: 1, clientX: 10, clientY: 200 });
+    fireEvent.pointerMove(memo, { pointerId: 1, clientX: 10, clientY: 50 });
+    fireEvent.pointerUp(memo, { pointerId: 1, clientX: 10, clientY: 50 });
+
+    expect(screen.getByTestId("chip-t").style.top).toBe(originalTop);
+  });
+
+  it("dragging a rail chip to a new rail position reschedules it (rail-to-rail)", async () => {
+    const day = todayKey();
+    const timed = makeTask({ id: "t", title: "dentist", time: "09:00", scope: { kind: "day", date: day } });
+    renderTimeline(day, [timed]);
+    await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
+
+    const rail = screen.getByTestId("hour-rail");
+    mockRect(rail, { top: 100, bottom: 1300, left: 0, right: 300 });
+    Object.defineProperty(rail, "scrollTop", { value: 0, writable: true });
+    mockRect(screen.getByTestId("all-day-zone"), { top: 0, bottom: 90, left: 0, right: 300 });
+
+    const chip = screen.getByTestId("chip-t");
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 148 }); // rail-relative y=48 -> 09:00
+    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 10, clientY: 772 }); // rail-relative y=672 -> 14:00
+    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 10, clientY: 772 });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("chip-t").style.top).toBe(`${(14 * 60 * HOUR_HEIGHT) / 60}px`),
+    );
+  });
+
   it("shows a ghost and preview line while dragging, and hides both after drop", async () => {
     const day = todayKey();
     const untimed = makeTask({ id: "u", title: "untimed", scope: { kind: "day", date: day } });

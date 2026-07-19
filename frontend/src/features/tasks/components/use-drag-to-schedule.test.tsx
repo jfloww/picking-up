@@ -38,6 +38,15 @@ function Harness({ onSchedule }: { onSchedule: (id: string, time?: string) => vo
           </button>
         </div>
       </div>
+      {/* A second, unrelated draggable item that shares the same hook instance
+          (and therefore the same suppressClickRef) as chip-a, but is never
+          itself dragged in these tests — used to prove the suppression flag
+          doesn't leak across wrappers. */}
+      <div data-testid="chip-b" {...getDragHandlers("b", "Task B")}>
+        <button type="button" onClick={() => onSchedule("clicked-title-b", undefined)}>
+          Task B
+        </button>
+      </div>
       <div ref={railRef} data-testid="rail" />
       <div data-testid="preview">{dragState ? (dragState.previewTime ?? "clear") : "none"}</div>
     </div>
@@ -108,6 +117,31 @@ describe("useDragToSchedule", () => {
     fireEvent.click(screen.getByRole("button", { name: "Task A" }));
     expect(onSchedule).toHaveBeenCalledTimes(1); // only the schedule call
     expect(onSchedule).toHaveBeenCalledWith("a", "09:30");
+  });
+
+  it("self-expires the click-suppression flag even if no click ever reaches onClickCapture (cross-zone drop unmount)", () => {
+    vi.useFakeTimers();
+    try {
+      const { onSchedule, chip } = setup();
+      fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 10 });
+      fireEvent.pointerMove(chip, { pointerId: 1, clientX: 10, clientY: 556 });
+      fireEvent.pointerUp(chip, { pointerId: 1, clientX: 10, clientY: 556 });
+      expect(onSchedule).toHaveBeenCalledWith("a", "09:30");
+
+      // Simulate a cross-zone drop where the source wrapper (chip-a) unmounts
+      // before the browser's post-pointerup click ever reaches its
+      // onClickCapture — no click is fired on chip-a at all. Without the
+      // safety-net timeout, suppressClickRef would stay stuck true forever.
+      vi.advanceTimersByTime(1);
+
+      // A click on a completely different, still-mounted wrapper (chip-b)
+      // that shares the same suppressClickRef must NOT be suppressed.
+      fireEvent.click(screen.getByRole("button", { name: "Task B" }));
+      expect(onSchedule).toHaveBeenCalledWith("clicked-title-b", undefined);
+      expect(onSchedule).toHaveBeenCalledTimes(2); // the drag schedule + this click
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("cancels cleanly on pointercancel without scheduling", () => {

@@ -50,7 +50,12 @@ export function DayTimeline({ date }: { date: string }) {
         </div>
         <div className="space-y-1">
           {allDay.map((t) => (
-            <div key={t.id} data-testid={`all-day-${t.id}`} {...getDragHandlers(t.id, t.title)}>
+            <div
+              key={t.id}
+              data-testid={`all-day-${t.id}`}
+              className="touch-none"
+              {...getDragHandlers(t.id, t.title)}
+            >
               <ul>
                 <TaskItem task={t} {...taskItemHandlers(t.id, actions)} />
               </ul>
@@ -90,7 +95,7 @@ export function DayTimeline({ date }: { date: string }) {
             <div
               key={t.id}
               data-testid={`chip-${t.id}`}
-              className="absolute z-20 rounded-md bg-brand/10 px-1 ring-1 ring-brand/30 focus-within:z-30"
+              className="absolute z-20 touch-none rounded-md bg-brand/10 px-1 ring-1 ring-brand/30 focus-within:z-30"
               style={{
                 top: toOffset(t.time!),
                 left: `calc(${(column / columns) * 100}% + 2px)`,
@@ -124,7 +129,7 @@ export function DayTimeline({ date }: { date: string }) {
           className="pointer-events-none fixed z-50 rounded-md bg-card px-2 py-1 text-xs shadow-lg ring-1 ring-brand/40"
           style={{
             top: dragState.pointerY + 12,
-            left: (railRef.current?.getBoundingClientRect().left ?? 0) + 8,
+            left: dragState.pointerX + 12,
           }}
         >
           {dragState.title}

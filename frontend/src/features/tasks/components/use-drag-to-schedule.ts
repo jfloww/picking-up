@@ -11,6 +11,7 @@ const AUTO_SCROLL_STEP_PX = 12;
 export interface DragState {
   id: string;
   title: string;
+  pointerX: number;
   pointerY: number;
   previewTime: string | null;
 }
@@ -67,6 +68,8 @@ export function useDragToSchedule(options: {
       const railEl = railRef.current;
       if (!railEl) return;
       const r = railEl.getBoundingClientRect();
+      const nearRail = clientY >= r.top - EDGE_ZONE_PX && clientY <= r.bottom + EDGE_ZONE_PX;
+      if (!nearRail) return;
       if (clientY - r.top < EDGE_ZONE_PX) {
         railEl.scrollTop = Math.max(0, railEl.scrollTop - AUTO_SCROLL_STEP_PX);
       } else if (r.bottom - clientY < EDGE_ZONE_PX) {
@@ -79,6 +82,8 @@ export function useDragToSchedule(options: {
   const getDragHandlers = useCallback(
     (id: string, title: string) => ({
       onPointerDown: (e: React.PointerEvent) => {
+        if (e.button !== 0) return;
+        if ((e.target as HTMLElement).closest("input, textarea")) return;
         gestureRef.current = {
           id,
           title,
@@ -103,9 +108,15 @@ export function useDragToSchedule(options: {
           gesture.moved = true;
         }
 
-        const { time } = resolve(e.clientX, e.clientY);
-        setDragState({ id: gesture.id, title: gesture.title, pointerY: e.clientY, previewTime: time });
         autoScroll(e.clientY);
+        const { time } = resolve(e.clientX, e.clientY);
+        setDragState({
+          id: gesture.id,
+          title: gesture.title,
+          pointerX: e.clientX,
+          pointerY: e.clientY,
+          previewTime: time,
+        });
       },
       onPointerUp: (e: React.PointerEvent) => {
         const gesture = gestureRef.current;
@@ -119,6 +130,13 @@ export function useDragToSchedule(options: {
 
         if (gesture.moved) {
           suppressClickRef.current = true;
+          // Safety net: if the source element unmounts before the browser's
+          // post-pointerup click reaches onClickCapture (e.g. a cross-zone drop
+          // that removes this wrapper from the DOM), the flag would otherwise
+          // stay stuck true and swallow the next unrelated click.
+          setTimeout(() => {
+            suppressClickRef.current = false;
+          }, 0);
           const { overAllDay, time } = resolve(e.clientX, e.clientY);
           if (overAllDay) {
             onSchedule(gesture.id, undefined);
