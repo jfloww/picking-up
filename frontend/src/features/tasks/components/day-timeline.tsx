@@ -48,13 +48,15 @@ export function DayTimeline({ date }: { date: string }) {
         <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-subtle">
           All-day
         </div>
-        <ul className="space-y-1">
+        <div className="space-y-1">
           {allDay.map((t) => (
             <div key={t.id} data-testid={`all-day-${t.id}`} {...getDragHandlers(t.id, t.title)}>
-              <TaskItem task={t} {...taskItemHandlers(t.id, actions)} />
+              <ul>
+                <TaskItem task={t} {...taskItemHandlers(t.id, actions)} />
+              </ul>
             </div>
           ))}
-        </ul>
+        </div>
         <QuickAdd onAdd={(title) => addTask(title, scope)} />
       </div>
 
