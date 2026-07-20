@@ -56,8 +56,16 @@ describe("DayTimeline", () => {
     expect(screen.queryByTestId("now-line")).toBeNull();
   });
 
-  it("defaults the rail scroll to 07:00", async () => {
+  it("on today, centers the rail scroll on the current time within a 12h viewport", async () => {
     renderTimeline(todayKey());
+    await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
+    // system time is 14:05 -> now offset = 845min * (48/60) = 676px
+    // viewport is 12h = 576px, so centered scrollTop = 676 - 288 = 388
+    expect(screen.getByTestId("hour-rail").scrollTop).toBe(388);
+  });
+
+  it("on a non-today date, falls back to a 07:00 scroll start", async () => {
+    renderTimeline("2026-07-15");
     await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
     expect(screen.getByTestId("hour-rail").scrollTop).toBe(7 * HOUR_HEIGHT);
   });

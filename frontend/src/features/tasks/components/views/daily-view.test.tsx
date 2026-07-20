@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider } from "../../store";
@@ -24,40 +24,31 @@ function renderView(onAnchorChange = vi.fn()) {
   return onAnchorChange;
 }
 
-describe("DailyView v2", () => {
-  it("renders the day heading and a centered rolling window Mo 13 .. Su 19", async () => {
+describe("DailyView v3 (single-day layout)", () => {
+  it("renders the day heading and no neighboring-day cells", async () => {
     renderView();
     await waitFor(() =>
       expect(screen.getByText("Thursday, July 16")).toBeTruthy(),
     );
-    // neighbors are faded buttons; the focused day is not a button
-    const neighbors = screen.getAllByRole("button", { name: /^(Mo|Tu|We|Th|Fr|Sa|Su) \d+$/ });
-    expect(neighbors.map((b) => b.getAttribute("aria-label"))).toEqual([
-      "Mo 13",
-      "Tu 14",
-      "We 15",
-      "Fr 17",
-      "Sa 18",
-      "Su 19",
-    ]);
-    expect(screen.getByText("Th 16")).toBeTruthy();
+    // v2's peek columns rendered neighbor days as "Mo 13" / "Tu 14" / etc.
+    // buttons; the redesign drops them entirely.
+    expect(
+      screen.queryAllByRole("button", { name: /^(Mo|Tu|We|Th|Fr|Sa|Su) \d+$/ }),
+    ).toHaveLength(0);
   });
 
-  it("the focused center holds the timeline; the Weekly cell is editable", async () => {
+  it("shows the day's timeline and the week's task list side by side", async () => {
     renderView();
     await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
     expect(screen.getByTestId("now-line")).toBeTruthy(); // anchor is today
     expect(screen.getByText("Weekly")).toBeTruthy();
-    // two quick-adds: the timeline's all-day section + the weekly cell
+    // one quick-add for the timeline's all-day section, one for the weekly cell
     expect(screen.getAllByLabelText("Add task")).toHaveLength(2);
   });
 
-  it("clicking a neighbor refocuses it, crossing the window", async () => {
+  it("never calls onAnchorChange itself (only the toolbar changes the focused day)", async () => {
     const onAnchorChange = renderView();
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Mo 13" })).toBeTruthy(),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Mo 13" }));
-    expect(onAnchorChange).toHaveBeenCalledWith("2026-07-13");
+    await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
+    expect(onAnchorChange).not.toHaveBeenCalled();
   });
 });

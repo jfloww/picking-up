@@ -24,7 +24,7 @@ export function shiftAnchor(
 ): string {
   switch (view) {
     case "daily":
-      return addDays(anchor, 7 * dir);
+      return addDays(anchor, dir);
     case "weekly": {
       const month =
         dir === 1
