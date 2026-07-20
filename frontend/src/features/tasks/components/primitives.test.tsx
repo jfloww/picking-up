@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { todayKey, weekStartOf } from "../lib/dates";
+import { addDays, shortDateLabel, todayKey, weekStartOf } from "../lib/dates";
 import { TasksProvider } from "../store";
 import { fakeRepository, makeTask } from "../test-utils";
 import { PeriodCell } from "./period-cell";
@@ -107,6 +107,17 @@ describe("TaskItem v2", () => {
     expect(onTimeChange).toHaveBeenCalledWith(undefined);
   });
 
+  it("shows an optional date label before the time badge", () => {
+    render(
+      <TaskItem
+        task={makeTask({ title: "dentist", time: "14:00" })}
+        {...noopHandlers}
+        dateLabel="Mon Jul 20"
+      />,
+    );
+    expect(screen.getByText("Mon Jul 20")).toBeTruthy();
+  });
+
   it("renders the subtask list in the expansion", () => {
     render(
       <TaskItem
@@ -194,27 +205,74 @@ describe("PeriodCell", () => {
 });
 
 describe("ScopeTasks", () => {
-  it("renders only tasks matching the scope", async () => {
-    // Anchored to the current date so rolloverTasks (applied on load) never
-    // moves these tasks out of the scopes under test.
+  it("renders week-level tasks; a day task from a different week is excluded", async () => {
     const week = weekStartOf(todayKey());
     const inScope = makeTask({
       id: "in",
       title: "in scope",
       scope: { kind: "week", weekStart: week },
     });
-    const outScope = makeTask({
+    const outOfWeek = makeTask({
       id: "out",
       title: "out of scope",
-      scope: { kind: "day", date: todayKey() },
+      // A future date in next week: genuinely outside the target week, and
+      // not in the past, so rolloverTasks (which runs on load) leaves it
+      // alone instead of folding it into the current week's scope.
+      scope: { kind: "day", date: addDays(week, 7) },
     });
     render(
-      <TasksProvider repository={fakeRepository([inScope, outScope])}>
+      <TasksProvider repository={fakeRepository([inScope, outOfWeek])}>
         <ScopeTasks scope={{ kind: "week", weekStart: week }} quickAdd />
       </TasksProvider>,
     );
     await waitFor(() => expect(screen.getByText("in scope")).toBeTruthy());
     expect(screen.queryByText("out of scope")).toBeNull();
     expect(screen.getByLabelText("Add task")).toBeTruthy();
+  });
+});
+
+describe("ScopeTasks weekly rollup", () => {
+  it("includes an unfinished day task from the week, with a date label", async () => {
+    const week = weekStartOf(todayKey());
+    const future = addDays(week, 2);
+    const dayTask = makeTask({ id: "d", title: "day task", scope: { kind: "day", date: future } });
+    render(
+      <TasksProvider repository={fakeRepository([dayTask])}>
+        <ScopeTasks scope={{ kind: "week", weekStart: week }} />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("day task")).toBeTruthy());
+    expect(screen.getByText(shortDateLabel(future, todayKey()))).toBeTruthy();
+  });
+
+  it("excludes a done day task from the week", async () => {
+    const week = weekStartOf(todayKey());
+    const future = addDays(week, 2);
+    const doneTask = makeTask({
+      id: "d",
+      title: "done task",
+      done: true,
+      scope: { kind: "day", date: future },
+    });
+    render(
+      <TasksProvider repository={fakeRepository([doneTask])}>
+        <ScopeTasks scope={{ kind: "week", weekStart: week }} quickAdd />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByLabelText("Add task")).toBeTruthy());
+    expect(screen.queryByText("done task")).toBeNull();
+  });
+
+  it("includes the day task in compact mode without a date label", async () => {
+    const week = weekStartOf(todayKey());
+    const future = addDays(week, 2);
+    const dayTask = makeTask({ id: "d", title: "day task", scope: { kind: "day", date: future } });
+    render(
+      <TasksProvider repository={fakeRepository([dayTask])}>
+        <ScopeTasks scope={{ kind: "week", weekStart: week }} compact />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByText(/day task/)).toBeTruthy());
+    expect(screen.queryByText(shortDateLabel(future, todayKey()))).toBeNull();
   });
 });

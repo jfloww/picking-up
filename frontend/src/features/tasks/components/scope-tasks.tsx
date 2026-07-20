@@ -2,9 +2,10 @@
 
 import { cn } from "@/lib/utils";
 
-import { compareTasksForDay } from "../lib/times";
+import { shortDateLabel, todayKey } from "../lib/dates";
+import { compareTasksForDay, weeklyRollupTasks } from "../lib/times";
 import { useTasks } from "../store";
-import { scopeKey, type Scope } from "../types";
+import { scopeKey, type Scope, type Task } from "../types";
 import { QuickAdd } from "./quick-add";
 import { TaskItem, taskItemHandlers } from "./task-item";
 
@@ -19,15 +20,22 @@ export function ScopeTasks({
 }) {
   const actions = useTasks();
   const { tasks, addTask } = actions;
-  const key = scopeKey(scope);
-  const scoped = tasks.filter((t) => scopeKey(t.scope) === key);
-  const ordered =
-    scope.kind === "day" ? [...scoped].sort(compareTasksForDay) : scoped;
+
+  let items: { task: Task; date: string | null }[];
+  if (scope.kind === "week") {
+    items = weeklyRollupTasks(tasks, scope.weekStart);
+  } else {
+    const key = scopeKey(scope);
+    const scoped = tasks.filter((t) => scopeKey(t.scope) === key);
+    const ordered =
+      scope.kind === "day" ? [...scoped].sort(compareTasksForDay) : scoped;
+    items = ordered.map((task) => ({ task, date: null }));
+  }
 
   if (compact) {
     return (
       <ul className="space-y-0.5">
-        {ordered.map((t) => {
+        {items.map(({ task: t }) => {
           const subtasks = t.subtasks ?? [];
           const doneCount = subtasks.filter((s) => s.done).length;
           return (
@@ -50,11 +58,18 @@ export function ScopeTasks({
     );
   }
 
+  const today = todayKey();
+
   return (
     <div className="space-y-1">
       <ul className="space-y-1">
-        {ordered.map((t) => (
-          <TaskItem key={t.id} task={t} {...taskItemHandlers(t.id, actions)} />
+        {items.map(({ task: t, date }) => (
+          <TaskItem
+            key={t.id}
+            task={t}
+            dateLabel={date ? shortDateLabel(date, today) : undefined}
+            {...taskItemHandlers(t.id, actions)}
+          />
         ))}
       </ul>
       {quickAdd && <QuickAdd onAdd={(title) => addTask(title, scope)} />}

@@ -95,3 +95,11 @@ export function dayLabel(dateKey: string): string {
     day: "numeric",
   });
 }
+
+export function shortDateLabel(dateKey: string, today: string): string {
+  if (dateKey === today) return "Today";
+  const d = parse(dateKey);
+  const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
+  const month = d.toLocaleDateString("en-US", { month: "short" });
+  return `${weekday} ${month} ${d.getDate()}`;
+}

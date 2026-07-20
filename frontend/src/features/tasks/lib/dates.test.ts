@@ -11,6 +11,7 @@ import {
   monthName,
   nextMonthKey,
   prevMonthKey,
+  shortDateLabel,
   todayKey,
   weekDates,
   weekStartOf,
@@ -105,5 +106,15 @@ describe("dates", () => {
 describe("dayLabel", () => {
   it("formats a full day heading", () => {
     expect(dayLabel("2026-07-16")).toBe("Thursday, July 16");
+  });
+});
+
+describe("shortDateLabel", () => {
+  it("returns Today when the date matches today", () => {
+    expect(shortDateLabel("2026-07-16", "2026-07-16")).toBe("Today");
+  });
+
+  it("returns a short weekday/month/day form otherwise", () => {
+    expect(shortDateLabel("2026-07-20", "2026-07-16")).toBe("Mon Jul 20");
   });
 });
