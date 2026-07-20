@@ -12,7 +12,9 @@ import { useDragToSchedule } from "./use-drag-to-schedule";
 
 export const HOUR_HEIGHT = 48; // px per hour on the rail
 const RAIL_HEIGHT = 24 * HOUR_HEIGHT;
-const DEFAULT_SCROLL_HOUR = 7; // mornings visible by default
+const VIEWPORT_HOURS = 12; // hours visible in the rail's scroll viewport at once
+const VIEWPORT_HEIGHT = VIEWPORT_HOURS * HOUR_HEIGHT;
+const DEFAULT_SCROLL_HOUR = 7; // fallback start for non-today dates
 
 const toOffset = (time: string) => (timeToMinutes(time) * HOUR_HEIGHT) / 60;
 
@@ -30,10 +32,15 @@ export function DayTimeline({ date }: { date: string }) {
   const allDayZoneRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (railRef.current) {
-      railRef.current.scrollTop = DEFAULT_SCROLL_HOUR * HOUR_HEIGHT;
+    const railEl = railRef.current;
+    if (!railEl) return;
+    if (isToday) {
+      const target = toOffset(nowTime()) - VIEWPORT_HEIGHT / 2;
+      railEl.scrollTop = Math.min(Math.max(target, 0), RAIL_HEIGHT - VIEWPORT_HEIGHT);
+    } else {
+      railEl.scrollTop = DEFAULT_SCROLL_HOUR * HOUR_HEIGHT;
     }
-  }, [date]);
+  }, [date, isToday]);
 
   const { dragState, getDragHandlers } = useDragToSchedule({
     railRef,
@@ -68,7 +75,8 @@ export function DayTimeline({ date }: { date: string }) {
       <div
         ref={railRef}
         data-testid="hour-rail"
-        className="relative max-h-96 min-h-48 overflow-y-auto rounded-md border border-border/60"
+        className="relative overflow-y-auto rounded-md border border-border/60"
+        style={{ height: VIEWPORT_HEIGHT }}
       >
         <div className="relative" style={{ height: RAIL_HEIGHT }}>
           {Array.from({ length: 24 }, (_, hour) => (
