@@ -7,10 +7,10 @@ export default async function AppPage() {
   const user = await getCurrentUserOrNull();
 
   return (
-    <div className="flex min-h-svh flex-col bg-background">
+    <div className="flex h-svh flex-col overflow-hidden bg-background">
       <SiteHeader user={user} />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-6">
+      <main className="mx-auto w-full max-w-6xl min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <TaskCalendar />
       </main>
 
