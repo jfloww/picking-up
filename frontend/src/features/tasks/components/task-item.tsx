@@ -35,6 +35,7 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
 
 export function TaskItem({
   task,
+  dateLabel,
   onToggle,
   onMemoChange,
   onTimeChange,
@@ -44,6 +45,7 @@ export function TaskItem({
   onRemoveSubtask,
 }: {
   task: Task;
+  dateLabel?: string;
   onToggle: () => void;
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
@@ -64,6 +66,9 @@ export function TaskItem({
           onCheckedChange={onToggle}
           aria-label={`Toggle ${task.title}`}
         />
+        {dateLabel && (
+          <span className="shrink-0 text-xs text-subtle">{dateLabel}</span>
+        )}
         {task.time && (
           <span className="shrink-0 text-xs tabular-nums text-subtle">
             {task.time}

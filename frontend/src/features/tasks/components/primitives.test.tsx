@@ -107,6 +107,17 @@ describe("TaskItem v2", () => {
     expect(onTimeChange).toHaveBeenCalledWith(undefined);
   });
 
+  it("shows an optional date label before the time badge", () => {
+    render(
+      <TaskItem
+        task={makeTask({ title: "dentist", time: "14:00" })}
+        {...noopHandlers}
+        dateLabel="Mon Jul 20"
+      />,
+    );
+    expect(screen.getByText("Mon Jul 20")).toBeTruthy();
+  });
+
   it("renders the subtask list in the expansion", () => {
     render(
       <TaskItem
