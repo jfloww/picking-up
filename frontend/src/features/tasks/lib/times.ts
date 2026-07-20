@@ -1,4 +1,5 @@
 import type { Task } from "../types";
+import { weekStartOf } from "./dates";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -58,5 +59,37 @@ export function layoutTimedTasks(timed: Task[]): TimedTaskLayout[] {
   return timed.map((task) => {
     const group = groups.get(task.time!)!;
     return { task, column: group.indexOf(task), columns: group.length };
+  });
+}
+
+export interface WeeklyRollupItem {
+  task: Task;
+  date: string | null;
+}
+
+export function weeklyRollupTasks(tasks: Task[], weekStart: string): WeeklyRollupItem[] {
+  const items: WeeklyRollupItem[] = [];
+
+  for (const task of tasks) {
+    if (task.scope.kind === "week" && task.scope.weekStart === weekStart) {
+      const date = task.rolledFrom?.kind === "day" ? task.rolledFrom.date : null;
+      items.push({ task, date });
+    } else if (
+      task.scope.kind === "day" &&
+      !task.done &&
+      weekStartOf(task.scope.date) === weekStart
+    ) {
+      items.push({ task, date: task.scope.date });
+    }
+  }
+
+  return items.sort((a, b) => {
+    if (a.date && b.date) {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return compareTasksForDay(a.task, b.task);
+    }
+    if (a.date) return -1;
+    if (b.date) return 1;
+    return 0;
   });
 }

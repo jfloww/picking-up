@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { Task } from "../types";
-import { compareTasksForDay, isValidTime, layoutTimedTasks, nowTime, timeToMinutes, yToSnappedTime } from "./times";
+import { compareTasksForDay, isValidTime, layoutTimedTasks, nowTime, timeToMinutes, weeklyRollupTasks, yToSnappedTime } from "./times";
 
 function task(overrides: Partial<Task>): Task {
   return {
@@ -123,6 +123,57 @@ describe("layoutTimedTasks", () => {
       { task: a, column: 0, columns: 2 },
       { task: b, column: 1, columns: 2 },
       { task: c, column: 0, columns: 1 },
+    ]);
+  });
+});
+
+describe("weeklyRollupTasks", () => {
+  const weekStart = "2026-07-12"; // Sunday
+
+  it("includes week-level tasks in the week, excludes tasks from other weeks", () => {
+    const inWeek = task({ scope: { kind: "week", weekStart } });
+    const otherWeek = task({ scope: { kind: "week", weekStart: "2026-07-19" } });
+    const result = weeklyRollupTasks([inWeek, otherWeek], weekStart);
+    expect(result.map((r) => r.task.id)).toEqual([inWeek.id]);
+  });
+
+  it("includes unfinished day tasks in the week, excludes done ones and tasks outside the week", () => {
+    const undone = task({ scope: { kind: "day", date: "2026-07-14" }, done: false });
+    const done = task({ scope: { kind: "day", date: "2026-07-15" }, done: true });
+    const outside = task({ scope: { kind: "day", date: "2026-07-20" }, done: false }); // next week
+    const result = weeklyRollupTasks([undone, done, outside], weekStart);
+    expect(result.map((r) => r.task.id)).toEqual([undone.id]);
+  });
+
+  it("dates a rolled-over week task from rolledFrom.date, and a genuine week task as null", () => {
+    const rolled = task({
+      scope: { kind: "week", weekStart },
+      rolledFrom: { kind: "day", date: "2026-07-13" },
+    });
+    const genuine = task({ scope: { kind: "week", weekStart } });
+    const result = weeklyRollupTasks([genuine, rolled], weekStart);
+    expect(result.find((r) => r.task.id === rolled.id)?.date).toBe("2026-07-13");
+    expect(result.find((r) => r.task.id === genuine.id)?.date).toBeNull();
+  });
+
+  it("sorts by date then time, dateless tasks last", () => {
+    const later = task({ scope: { kind: "day", date: "2026-07-15" }, done: false });
+    const earlierTimed = task({
+      scope: { kind: "day", date: "2026-07-14" },
+      time: "09:00",
+      done: false,
+    });
+    const earlierUntimed = task({ scope: { kind: "day", date: "2026-07-14" }, done: false });
+    const dateless = task({ scope: { kind: "week", weekStart } });
+    const result = weeklyRollupTasks(
+      [later, earlierUntimed, earlierTimed, dateless],
+      weekStart,
+    );
+    expect(result.map((r) => r.task.id)).toEqual([
+      earlierTimed.id,
+      earlierUntimed.id,
+      later.id,
+      dateless.id,
     ]);
   });
 });
