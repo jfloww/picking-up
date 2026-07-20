@@ -88,15 +88,6 @@ export function monthName(monthKey: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long" });
 }
 
-export function windowAround(anchor: string, radius = 3): string[] {
-  return Array.from({ length: radius * 2 + 1 }, (_, i) =>
-    addDays(anchor, i - radius),
-  );
-}
-
-export function weekdayOf(dateKey: string): number {
-  return parse(dateKey).getDay();
-}
 
 export function dayLabel(dateKey: string): string {
   return parse(dateKey).toLocaleDateString("en-US", {
