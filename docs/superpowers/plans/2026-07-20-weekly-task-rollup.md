@@ -355,6 +355,15 @@ whose `outScope` task currently asserts a day-scoped task is excluded from
 a week-scope render — that assertion is exactly the old behavior this task
 changes, so it must be replaced, not left as-is) with:
 
+(Note: the "out of scope" fixture below uses a date in the *following*
+week, not the prior week. `rolloverTasks` (`lib/rollover.ts`) doesn't just
+move a past day-task to its own week — it then escalates any week-scoped
+task whose `weekStart` is still behind `currentWeek` forward to
+`currentWeek`, in the same pass. A date in the prior week would get
+rolled twice — once day→its-own-week, then immediately week→current-week —
+landing right back in `week`, defeating the "excluded" assertion. A future
+date sidesteps rollover entirely.)
+
 ```ts
 describe("ScopeTasks", () => {
   it("renders week-level tasks; a day task from a different week is excluded", async () => {
@@ -367,7 +376,7 @@ describe("ScopeTasks", () => {
     const outOfWeek = makeTask({
       id: "out",
       title: "out of scope",
-      scope: { kind: "day", date: addDays(week, -1) }, // last day of the prior week
+      scope: { kind: "day", date: addDays(week, 7) }, // a day in the following week
     });
     render(
       <TasksProvider repository={fakeRepository([inScope, outOfWeek])}>
@@ -605,24 +614,52 @@ unique to the rollup-rendered copy: the task's own July-17 day cell in the
 grid also renders "weekly-rollup task", but never with a date label, so
 `getByText("Fri Jul 17")` unambiguously proves the Weekly column includes it.)
 
+**Fix a pre-existing test that Task 3 correctly broke.** Task 3's change
+means a day-scoped task within the focused week now renders twice in
+`WeeklyView` — once in its own day cell, once in the new Weekly-column
+rollup. The existing test `"shows tasks of the focused week and faded rows
+are clickable"` asserts a single match
+(`screen.getByText("focused task")`), which now throws
+("Found multiple elements") because that title legitimately appears twice.
+This is the correct, intended consequence of the feature, not a
+regression — fix the assertion, don't revert the feature. Change:
+
+```ts
+    await waitFor(() => expect(screen.getByText("focused task")).toBeTruthy());
+```
+
+to:
+
+```ts
+    await waitFor(() =>
+      expect(screen.getAllByText("focused task")).toHaveLength(2),
+    );
+```
+
+(Leave the rest of that test — the `fadedRows`/`onAnchorChange` assertions
+below it — unchanged.)
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run src/features/tasks/components/views/daily-view.test.tsx src/features/tasks/components/views/weekly-view.test.tsx`
-Expected: FAIL for both new tests — before Tasks 1-3, no `"Fri Jul 17"` text
-exists anywhere in either render.
-
-Since this task makes no production code changes, this red state should
-already be resolved by the time you run it (Tasks 1-3 are complete
-first) — if it's still red after confirming Tasks 1-3 landed, STOP and
-report BLOCKED rather than guessing.
+Expected: FAIL — the two new tests fail because no `"Fri Jul 17"` text
+exists anywhere yet in either render, AND (already, before you change
+anything) the pre-existing `"shows tasks of the focused week..."` test in
+`weekly-view.test.tsx` fails with "Found multiple elements" — that failure
+is Task 3's doing, confirmed already reproducible on this branch, and is
+exactly what the fix above addresses. If either of the two *new* tests
+somehow already passes before you've written it, or the multiple-elements
+failure looks different than described, STOP and report BLOCKED rather
+than guessing.
 
 - [ ] **Step 3: Run the tests to verify they pass**
 
 Run: `npx vitest run src/features/tasks/components/views/daily-view.test.tsx src/features/tasks/components/views/weekly-view.test.tsx`
-Expected: PASS (all tests in both files, including the pre-existing ones —
-in particular, `daily-view.test.tsx`'s other three tests, which call
-`renderView()` with no arguments, must still pass unchanged with the new
-default-`tasks` parameter).
+Expected: PASS (all tests in both files — the two new tests, the
+now-fixed `"shows tasks of the focused week..."` test, and
+`daily-view.test.tsx`'s other three pre-existing tests, which call
+`renderView()` with no arguments and must still pass unchanged with the
+new default-`tasks` parameter).
 
 - [ ] **Step 4: Commit**
 
