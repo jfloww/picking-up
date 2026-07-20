@@ -88,7 +88,6 @@ export function monthName(monthKey: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long" });
 }
 
-
 export function dayLabel(dateKey: string): string {
   return parse(dateKey).toLocaleDateString("en-US", {
     weekday: "long",
