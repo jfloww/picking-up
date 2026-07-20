@@ -45,11 +45,23 @@ describe("WeeklyView", () => {
       scope: { kind: "day", date: "2026-07-16" },
     });
     const onAnchorChange = renderView(vi.fn(), [task]);
-    await waitFor(() => expect(screen.getByText("focused task")).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getAllByText("focused task")).toHaveLength(2),
+    );
 
     const fadedRows = screen.getAllByRole("button", { name: /Week of/ });
     expect(fadedRows).toHaveLength(4); // July 2026 has 5 rows, 1 focused
     fireEvent.click(fadedRows[0]);
     expect(onAnchorChange).toHaveBeenCalledWith("2026-07-01");
+  });
+
+  it("shows an unfinished day task from the week in the Weekly column, dated", async () => {
+    const dayTask = makeTask({
+      id: "d",
+      title: "weekly-rollup task",
+      scope: { kind: "day", date: "2026-07-17" },
+    });
+    renderView(vi.fn(), [dayTask]);
+    await waitFor(() => expect(screen.getByText("Fri Jul 17")).toBeTruthy());
   });
 });

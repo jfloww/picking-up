@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider } from "../../store";
-import { fakeRepository } from "../../test-utils";
+import { fakeRepository, makeTask } from "../../test-utils";
 import { DailyView } from "./daily-view";
 
 const ANCHOR = "2026-07-16"; // Thursday
@@ -15,9 +15,9 @@ afterAll(() => {
   vi.useRealTimers();
 });
 
-function renderView(onAnchorChange = vi.fn()) {
+function renderView(onAnchorChange = vi.fn(), tasks = [] as Parameters<typeof fakeRepository>[0]) {
   render(
-    <TasksProvider repository={fakeRepository()}>
+    <TasksProvider repository={fakeRepository(tasks)}>
       <DailyView anchor={ANCHOR} onAnchorChange={onAnchorChange} />
     </TasksProvider>,
   );
@@ -50,5 +50,16 @@ describe("DailyView v3 (single-day layout)", () => {
     const onAnchorChange = renderView();
     await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
     expect(onAnchorChange).not.toHaveBeenCalled();
+  });
+
+  it("shows an unfinished future-day task from the week in the Weekly Task column, dated", async () => {
+    const dayTask = makeTask({
+      id: "d",
+      title: "day task",
+      scope: { kind: "day", date: "2026-07-17" },
+    });
+    renderView(vi.fn(), [dayTask]);
+    await waitFor(() => expect(screen.getByText("day task")).toBeTruthy());
+    expect(screen.getByText("Fri Jul 17")).toBeTruthy();
   });
 });
