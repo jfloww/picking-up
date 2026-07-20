@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api/server";
+import { getAccessToken } from "@/lib/auth/cookies";
 
 import type { CurrentUser, TokenPair } from "../types";
 
@@ -20,4 +21,18 @@ export function requestCurrentUser() {
   return apiRequest<CurrentUser>("/api/auth/me/", {
     authenticated: true,
   });
+}
+
+export async function getCurrentUserOrNull(
+  fetchUser: () => Promise<CurrentUser> = requestCurrentUser,
+): Promise<CurrentUser | null> {
+  if (fetchUser === requestCurrentUser && !(await getAccessToken())) {
+    return null;
+  }
+
+  try {
+    return await fetchUser();
+  } catch {
+    return null;
+  }
 }

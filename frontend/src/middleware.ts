@@ -9,6 +9,9 @@ import {
 
 const protectedRoutes = ["/app"];
 const authRoutes = ["/login", "/signup"];
+// Not protected and not an auth form — but still needs a fresh access
+// token so the header can show the correct signed-in state. Never redirects.
+const refreshOnlyRoutes = ["/"];
 const API_BASE_URL = process.env.DJANGO_API_BASE_URL ?? "http://localhost:8000";
 
 // Decode-only: the edge does not verify the signature, it just avoids
@@ -46,8 +49,9 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
   const isAuthRoute = authRoutes.includes(pathname);
+  const isRefreshOnlyRoute = refreshOnlyRoutes.includes(pathname);
 
-  if (!isProtectedRoute && !isAuthRoute) {
+  if (!isProtectedRoute && !isAuthRoute && !isRefreshOnlyRoute) {
     return NextResponse.next();
   }
 

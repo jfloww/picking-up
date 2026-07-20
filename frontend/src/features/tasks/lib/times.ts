@@ -26,3 +26,37 @@ export function compareTasksForDay(a: Task, b: Task): number {
   if (b.time) return 1;
   return 0;
 }
+
+export function yToSnappedTime(
+  y: number,
+  hourHeight: number,
+  snapMinutes = 15,
+): string {
+  const totalMinutes = (y / hourHeight) * 60;
+  const snapped = Math.round(totalMinutes / snapMinutes) * snapMinutes;
+  const clamped = Math.min(Math.max(snapped, 0), 23 * 60 + 45);
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+export interface TimedTaskLayout {
+  task: Task;
+  column: number;
+  columns: number;
+}
+
+export function layoutTimedTasks(timed: Task[]): TimedTaskLayout[] {
+  const groups = new Map<string, Task[]>();
+  for (const task of timed) {
+    const key = task.time!;
+    const group = groups.get(key) ?? [];
+    group.push(task);
+    groups.set(key, group);
+  }
+
+  return timed.map((task) => {
+    const group = groups.get(task.time!)!;
+    return { task, column: group.indexOf(task), columns: group.length };
+  });
+}
