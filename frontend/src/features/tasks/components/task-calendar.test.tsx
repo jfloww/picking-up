@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 import { shiftAnchor, TaskCalendar } from "./task-calendar";
 
 describe("shiftAnchor", () => {
-  it("daily pages by week", () => {
-    expect(shiftAnchor("daily", "2026-07-16", 1)).toBe("2026-07-23");
-    expect(shiftAnchor("daily", "2026-07-16", -1)).toBe("2026-07-09");
+  it("daily pages by one day", () => {
+    expect(shiftAnchor("daily", "2026-07-16", 1)).toBe("2026-07-17");
+    expect(shiftAnchor("daily", "2026-07-16", -1)).toBe("2026-07-15");
   });
 
   it("weekly pages by month to the 1st", () => {
