@@ -60,7 +60,7 @@ export function TaskItem({
 
   return (
     <li>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 py-1.5">
         <Checkbox
           checked={task.done}
           onCheckedChange={onToggle}
@@ -78,7 +78,7 @@ export function TaskItem({
           type="button"
           onClick={() => setOpen((o) => !o)}
           className={cn(
-            "min-w-0 flex-1 truncate text-left text-sm",
+            "min-w-0 flex-1 truncate text-left text-base font-medium",
             task.done && "text-muted-foreground line-through",
           )}
         >

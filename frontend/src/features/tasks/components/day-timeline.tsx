@@ -51,27 +51,6 @@ export function DayTimeline({ date }: { date: string }) {
 
   return (
     <div className="flex h-full flex-col gap-1.5">
-      <div ref={allDayZoneRef} data-testid="all-day-zone">
-        <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-subtle">
-          All-day
-        </div>
-        <div className="space-y-1">
-          {allDay.map((t) => (
-            <div
-              key={t.id}
-              data-testid={`all-day-${t.id}`}
-              className="touch-none"
-              {...getDragHandlers(t.id, t.title)}
-            >
-              <ul>
-                <TaskItem task={t} {...taskItemHandlers(t.id, actions)} />
-              </ul>
-            </div>
-          ))}
-        </div>
-        <QuickAdd onAdd={(title) => addTask(title, scope)} />
-      </div>
-
       <div
         ref={railRef}
         data-testid="hour-rail"
@@ -82,7 +61,7 @@ export function DayTimeline({ date }: { date: string }) {
           {Array.from({ length: 24 }, (_, hour) => (
             <div
               key={hour}
-              className="absolute inset-x-0 border-t border-border/40"
+              className="absolute inset-x-0 border-t border-border/15"
               style={{ top: hour * HOUR_HEIGHT }}
             >
               <span className="pl-1 text-[10px] tabular-nums text-subtle">
@@ -129,6 +108,27 @@ export function DayTimeline({ date }: { date: string }) {
             </div>
           )}
         </div>
+      </div>
+
+      <div ref={allDayZoneRef} data-testid="all-day-zone">
+        <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-subtle">
+          All-day
+        </div>
+        <div className="space-y-1">
+          {allDay.map((t) => (
+            <div
+              key={t.id}
+              data-testid={`all-day-${t.id}`}
+              className="touch-none"
+              {...getDragHandlers(t.id, t.title)}
+            >
+              <ul>
+                <TaskItem task={t} {...taskItemHandlers(t.id, actions)} />
+              </ul>
+            </div>
+          ))}
+        </div>
+        <QuickAdd onAdd={(title) => addTask(title, scope)} />
       </div>
 
       {dragState && (

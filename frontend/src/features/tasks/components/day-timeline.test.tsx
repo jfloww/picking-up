@@ -69,6 +69,16 @@ describe("DayTimeline", () => {
     await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
     expect(screen.getByTestId("hour-rail").scrollTop).toBe(7 * HOUR_HEIGHT);
   });
+
+  it("renders the hour rail before the All-day section", async () => {
+    renderTimeline(todayKey());
+    await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
+    const rail = screen.getByTestId("hour-rail");
+    const allDay = screen.getByTestId("all-day-zone");
+    expect(
+      rail.compareDocumentPosition(allDay) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });
 
 function mockRect(el: HTMLElement, rect: Partial<DOMRect>) {
