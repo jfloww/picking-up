@@ -36,6 +36,13 @@ function isSubtask(value: unknown): value is Subtask {
   );
 }
 
+function isValidWeekdays(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+  );
+}
+
 // The read path normalizes v2 fields instead of rejecting the whole task:
 // only v1 structural validation (isTask/isScope) may drop a task.
 export function normalizeTask(task: Task): Task {
@@ -54,8 +61,25 @@ export function normalizeTask(task: Task): Task {
     }
   }
 
-  if (time === task.time && subtasks === task.subtasks) return task;
-  return { ...task, time, subtasks };
+  let repeatWeekdays = task.repeatWeekdays;
+  if (repeatWeekdays !== undefined && !isValidWeekdays(repeatWeekdays)) {
+    repeatWeekdays = undefined;
+  }
+
+  let repeatSourceId = task.repeatSourceId;
+  if (repeatSourceId !== undefined && typeof repeatSourceId !== "string") {
+    repeatSourceId = undefined;
+  }
+
+  if (
+    time === task.time &&
+    subtasks === task.subtasks &&
+    repeatWeekdays === task.repeatWeekdays &&
+    repeatSourceId === task.repeatSourceId
+  ) {
+    return task;
+  }
+  return { ...task, time, subtasks, repeatWeekdays, repeatSourceId };
 }
 
 function isTask(value: unknown): value is Task {

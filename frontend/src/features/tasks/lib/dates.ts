@@ -28,6 +28,10 @@ export function weekStartOf(dateKey: string): string {
   return addDays(dateKey, -parse(dateKey).getDay());
 }
 
+export function weekdayOf(dateKey: string): number {
+  return parse(dateKey).getDay();
+}
+
 export function weekDates(weekStart: string): string[] {
   return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 }
