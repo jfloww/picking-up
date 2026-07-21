@@ -2,6 +2,7 @@
 
 import type { Task } from "../types";
 import { SubtaskList } from "./subtask-list";
+import { TaskTimeEditor } from "./task-time-editor";
 
 export function TaskDetailFields({
   task,
@@ -11,6 +12,7 @@ export function TaskDetailFields({
   onAddSubtask,
   onToggleSubtask,
   onRemoveSubtask,
+  showTime = true,
 }: {
   task: Task;
   onMemoChange: (memo: string) => void;
@@ -19,28 +21,12 @@ export function TaskDetailFields({
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
+  showTime?: boolean;
 }) {
   const subtasks = task.subtasks ?? [];
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center gap-2">
-        <input
-          type="time"
-          value={task.time ?? ""}
-          onChange={(e) => onTimeChange(e.target.value || undefined)}
-          aria-label="Task time"
-          className="rounded-md border border-input bg-transparent px-1.5 py-0.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        />
-        {task.time && (
-          <button
-            type="button"
-            onClick={() => onTimeChange(undefined)}
-            className="text-xs text-subtle hover:text-foreground"
-          >
-            Clear
-          </button>
-        )}
-      </div>
+      {showTime && <TaskTimeEditor time={task.time} onTimeChange={onTimeChange} />}
       <textarea
         defaultValue={task.memo ?? ""}
         onBlur={(e) => onMemoChange(e.target.value)}
