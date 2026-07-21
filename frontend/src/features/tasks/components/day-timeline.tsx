@@ -34,9 +34,10 @@ export function DayTimeline({ date }: { date: string }) {
   useEffect(() => {
     const railEl = railRef.current;
     if (!railEl) return;
+    const viewportHeight = railEl.clientHeight || VIEWPORT_HEIGHT;
     if (isToday) {
-      const target = toOffset(nowTime()) - VIEWPORT_HEIGHT / 2;
-      railEl.scrollTop = Math.min(Math.max(target, 0), RAIL_HEIGHT - VIEWPORT_HEIGHT);
+      const target = toOffset(nowTime()) - viewportHeight / 2;
+      railEl.scrollTop = Math.min(Math.max(target, 0), RAIL_HEIGHT - viewportHeight);
     } else {
       railEl.scrollTop = DEFAULT_SCROLL_HOUR * HOUR_HEIGHT;
     }
@@ -50,12 +51,12 @@ export function DayTimeline({ date }: { date: string }) {
   });
 
   return (
-    <div className="flex h-full flex-col gap-1.5">
+    <div className="flex h-full min-h-0 flex-col gap-1.5">
       <div
         ref={railRef}
         data-testid="hour-rail"
-        className="relative overflow-y-auto rounded-md border border-border/60"
-        style={{ height: VIEWPORT_HEIGHT }}
+        className="relative min-h-0 flex-1 overflow-y-auto rounded-md border border-border/60"
+        style={{ maxHeight: VIEWPORT_HEIGHT }}
       >
         <div className="relative" style={{ height: RAIL_HEIGHT }}>
           {Array.from({ length: 24 }, (_, hour) => (
@@ -110,11 +111,15 @@ export function DayTimeline({ date }: { date: string }) {
         </div>
       </div>
 
-      <div ref={allDayZoneRef} data-testid="all-day-zone">
-        <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-subtle">
+      <div
+        ref={allDayZoneRef}
+        data-testid="all-day-zone"
+        className="flex max-h-32 shrink-0 flex-col"
+      >
+        <div className="mb-0.5 shrink-0 text-[10px] font-medium uppercase tracking-wide text-subtle">
           All-day
         </div>
-        <div className="space-y-1">
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
           {allDay.map((t) => (
             <div
               key={t.id}

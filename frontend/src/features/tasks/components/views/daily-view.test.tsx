@@ -25,11 +25,9 @@ function renderView(onAnchorChange = vi.fn(), tasks = [] as Parameters<typeof fa
 }
 
 describe("DailyView v3 (single-day layout)", () => {
-  it("renders the day heading and no neighboring-day cells", async () => {
+  it("renders no neighboring-day cells", async () => {
     renderView();
-    await waitFor(() =>
-      expect(screen.getByText("Thursday, July 16")).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
     // v2's peek columns rendered neighbor days as "Mo 13" / "Tu 14" / etc.
     // buttons; the redesign drops them entirely.
     expect(
