@@ -13,6 +13,7 @@ interface TaskItemActions {
   toggleTask: (id: string) => void;
   setMemo: (id: string, memo: string) => void;
   setTime: (id: string, time: string | undefined) => void;
+  setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
   removeTask: (id: string) => void;
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
@@ -26,6 +27,7 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onToggle: () => actions.toggleTask(id),
     onMemoChange: (memo: string) => actions.setMemo(id, memo),
     onTimeChange: (time?: string) => actions.setTime(id, time),
+    onRepeatWeekdaysChange: (weekdays: number[]) => actions.setRepeatWeekdays(id, weekdays),
     onDelete: () => actions.removeTask(id),
     onAddSubtask: (title: string) => actions.addSubtask(id, title),
     onToggleSubtask: (subtaskId: string) => actions.toggleSubtask(id, subtaskId),
@@ -39,6 +41,7 @@ export function TaskItem({
   onToggle,
   onMemoChange,
   onTimeChange,
+  onRepeatWeekdaysChange,
   onDelete,
   onAddSubtask,
   onToggleSubtask,
@@ -50,6 +53,7 @@ export function TaskItem({
   onToggle: () => void;
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
+  onRepeatWeekdaysChange: (weekdays: number[]) => void;
   onDelete: () => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
@@ -104,6 +108,7 @@ export function TaskItem({
             task={task}
             onMemoChange={onMemoChange}
             onTimeChange={onTimeChange}
+            onRepeatWeekdaysChange={onRepeatWeekdaysChange}
             onDelete={onDelete}
             onAddSubtask={onAddSubtask}
             onToggleSubtask={onToggleSubtask}
