@@ -63,30 +63,29 @@ describe("DailyView v3 (single-day layout)", () => {
 });
 
 describe("DailyView task detail panel", () => {
-  // A Daily-tab all-day task is undone and scoped to a day inside the
-  // rendered week, so per weeklyRollupTasks (frontend/src/features/tasks/lib/times.ts)
-  // it also rolls up into the Weekly list alongside the Daily-tab's own
-  // all-day-zone row — that's existing, deliberately-tested behavior, not
-  // something DailyView filters out. So each task's title is expected twice
-  // pre-selection (all-day zone + Weekly row) and three times once its panel
-  // is open (+ panel header). Clicks are scoped to the all-day zone via
-  // `within` since a bare `getByText` would otherwise be ambiguous.
+  // The anchor day's own day-scoped tasks are excluded from the Weekly
+  // rollup unconditionally (ScopeTasks' excludeDate), so a task only ever
+  // shows in the all-day zone plus (once selected) the panel header — never
+  // in the Weekly list too. Clicks are scoped to the all-day zone via
+  // `within` since a bare `getByText` would otherwise be ambiguous once a
+  // panel is open.
   it("opens the detail panel for a Daily-tab task, closes on re-click, and swaps on a different task", async () => {
     const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
     const b = makeTask({ id: "b", title: "task b", scope: { kind: "day", date: ANCHOR } });
     renderView(vi.fn(), [a, b]);
     await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
     expect(screen.queryByLabelText("Close details")).toBeNull();
+    expect(screen.getAllByText("task a")).toHaveLength(1); // all-day zone only
 
     const allDayZone = screen.getByTestId("all-day-zone");
     fireEvent.click(within(allDayZone).getByText("task a"));
     await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
-    // Daily-tab row + Weekly rollup row + panel header
-    expect(screen.getAllByText("task a")).toHaveLength(3);
+    // Daily-tab row + panel header (never the Weekly list)
+    expect(screen.getAllByText("task a")).toHaveLength(2);
 
     fireEvent.click(within(allDayZone).getByText("task b"));
-    expect(screen.getAllByText("task a")).toHaveLength(2); // panel swapped away
-    expect(screen.getAllByText("task b")).toHaveLength(3);
+    expect(screen.getAllByText("task a")).toHaveLength(1); // panel swapped away
+    expect(screen.getAllByText("task b")).toHaveLength(2);
 
     fireEvent.click(screen.getByLabelText("Close details"));
     expect(screen.queryByLabelText("Close details")).toBeNull();
@@ -115,5 +114,20 @@ describe("DailyView task detail panel", () => {
 
     fireEvent.click(screen.getByText("Delete"));
     expect(screen.queryByLabelText("Close details")).toBeNull();
+  });
+
+  it("renders the detail panel before the weekly list in document order", async () => {
+    const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
+
+    fireEvent.click(within(screen.getByTestId("all-day-zone")).getByText("task a"));
+    await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
+
+    const panelPane = screen.getAllByTestId("shrink-stack-secondary")[1];
+    const listPane = screen.getAllByTestId("shrink-stack-primary")[1];
+    expect(
+      panelPane.compareDocumentPosition(listPane) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

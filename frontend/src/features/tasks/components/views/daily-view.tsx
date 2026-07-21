@@ -26,7 +26,7 @@ export function DailyView({ anchor }: CalendarViewProps) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-1 shrink-0 text-xs font-semibold">Weekly</div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <ScopeTasks scope={{ kind: "week", weekStart }} quickAdd />
+        <ScopeTasks scope={{ kind: "week", weekStart }} quickAdd excludeDate={anchor} />
       </div>
     </div>
   );
@@ -41,6 +41,7 @@ export function DailyView({ anchor }: CalendarViewProps) {
           <ShrinkStack
             primary={weeklyList}
             primaryMinHeight={200}
+            secondaryFirst
             secondary={
               <TaskDetailPanel
                 task={selectedTask}
