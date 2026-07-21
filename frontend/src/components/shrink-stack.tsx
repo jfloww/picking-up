@@ -12,6 +12,7 @@ type ShrinkStackProps = {
   primaryMaxHeight: number;
   secondary: ReactNode;
   gap?: number;
+  /** Swaps visual position only — `primary` stays the floored/shrinking pane regardless. */
   secondaryFirst?: boolean;
 };
 
@@ -23,6 +24,9 @@ export function ShrinkStack({
   gap = 6,
   secondaryFirst = false,
 }: ShrinkStackProps) {
+  // The explicit minHeight is what creates the floor. overflow-hidden clips
+  // primary content that doesn't self-scroll (the Daily rail happens to,
+  // but a future caller's content might not).
   const primaryPane = (
     <div
       data-testid="shrink-stack-primary"
@@ -44,9 +48,6 @@ export function ShrinkStack({
 
   return (
     <div className="flex h-full min-h-0 flex-col" style={{ gap }}>
-      {/* The explicit minHeight is what creates the floor. overflow-hidden
-          clips primary content that doesn't self-scroll (the Daily rail
-          happens to, but a future caller's content might not). */}
       {secondaryFirst ? (
         <>
           {secondaryPane}
