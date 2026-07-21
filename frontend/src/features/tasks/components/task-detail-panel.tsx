@@ -32,7 +32,7 @@ export function TaskDetailPanel({
 }) {
   return (
     <div className="flex h-full flex-col gap-1.5 overflow-y-auto rounded-md border border-border/60 p-1.5">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2" data-testid="task-detail-header">
         <Checkbox
           checked={task.done}
           onCheckedChange={onToggle}
