@@ -58,4 +58,37 @@ describe("ShrinkStack", () => {
     expect(screen.getByText("Primary content")).toBeTruthy();
     expect(screen.getByText("Secondary content")).toBeTruthy();
   });
+
+  it("renders secondary before primary when secondaryFirst is set", () => {
+    render(
+      <ShrinkStack
+        primary={<div>Primary content</div>}
+        primaryMinHeight={100}
+        primaryMaxHeight={200}
+        secondary={<div>Secondary content</div>}
+        secondaryFirst
+      />,
+    );
+    const primary = screen.getByTestId("shrink-stack-primary");
+    const secondary = screen.getByTestId("shrink-stack-secondary");
+    expect(
+      secondary.compareDocumentPosition(primary) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps primary before secondary when secondaryFirst is not set", () => {
+    render(
+      <ShrinkStack
+        primary={<div>Primary content</div>}
+        primaryMinHeight={100}
+        primaryMaxHeight={200}
+        secondary={<div>Secondary content</div>}
+      />,
+    );
+    const primary = screen.getByTestId("shrink-stack-primary");
+    const secondary = screen.getByTestId("shrink-stack-secondary");
+    expect(
+      primary.compareDocumentPosition(secondary) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });
