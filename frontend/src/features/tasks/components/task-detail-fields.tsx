@@ -32,7 +32,7 @@ export function TaskDetailFields({
   return (
     <div className="space-y-1.5">
       {showTime && <TaskTimeEditor time={task.time} onTimeChange={onTimeChange} />}
-      {task.scope.kind === "day" &&
+      {(task.repeatWeekdays !== undefined || task.scope.kind === "day") &&
         (task.repeatSourceId !== undefined ? (
           <span className="flex items-center gap-1 text-xs text-subtle">
             <RotateCw aria-label="Part of a routine" className="size-3" />

@@ -79,4 +79,21 @@ describe("TaskDetailFields repeat", () => {
     fireEvent.click(screen.getByLabelText("Repeat on Wednesday"));
     expect(onRepeatWeekdaysChange).toHaveBeenCalledWith([1, 3]);
   });
+
+  it("keeps the repeat picker editable after the anchor rolls out of day scope", () => {
+    const onRepeatWeekdaysChange = vi.fn();
+    render(
+      <TaskDetailFields
+        task={makeTask({
+          scope: { kind: "week", weekStart: "2026-07-12" },
+          repeatWeekdays: [1, 3],
+        })}
+        {...noopHandlers}
+        onRepeatWeekdaysChange={onRepeatWeekdaysChange}
+      />,
+    );
+    expect(screen.getByLabelText("Repeat on Monday")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Repeat on Friday"));
+    expect(onRepeatWeekdaysChange).toHaveBeenCalledWith([1, 3, 5]);
+  });
 });

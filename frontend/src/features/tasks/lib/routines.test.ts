@@ -68,4 +68,17 @@ describe("materializeRoutines", () => {
     const plain = makeTask({});
     expect(materializeRoutines([plain], TODAY)).toEqual([]);
   });
+
+  it("materializes from a week-scoped anchor (rolled out of day scope)", () => {
+    const anchor = makeTask({
+      scope: { kind: "week", weekStart: "2026-07-12" },
+      repeatWeekdays: [4],
+    });
+    const [spawned] = materializeRoutines([anchor], TODAY);
+    expect(spawned).toMatchObject({
+      title: "task",
+      scope: { kind: "day", date: TODAY },
+      repeatSourceId: "anchor",
+    });
+  });
 });
