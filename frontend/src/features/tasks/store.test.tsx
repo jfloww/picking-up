@@ -131,6 +131,71 @@ describe("TasksProvider", () => {
     });
   });
 
+  describe("routines", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("materializes today's occurrence for a matching anchor on load", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 6, 16)); // Thursday, weekday 4
+      const anchor = makeTask({
+        id: "anchor",
+        scope: { kind: "day", date: "2026-07-01" },
+        repeatWeekdays: [4],
+      });
+      const { repo, result } = setup(fakeRepository([anchor]));
+
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const spawned = result.current.tasks.find((t) => t.repeatSourceId === "anchor");
+      expect(spawned).toMatchObject({
+        title: "task",
+        scope: { kind: "day", date: "2026-07-16" },
+      });
+      await waitFor(() =>
+        expect(repo.tasks.some((t) => t.repeatSourceId === "anchor")).toBe(true),
+      );
+    });
+
+    it("materializes a new occurrence when the date changes while the tab stays open", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 6, 15)); // Wednesday, weekday 3 — not matching yet
+      const anchor = makeTask({
+        id: "anchor",
+        scope: { kind: "day", date: "2026-07-01" },
+        repeatWeekdays: [4], // Thursday
+      });
+      const { repo, result } = setup(fakeRepository([anchor]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      expect(result.current.tasks.some((t) => t.repeatSourceId === "anchor")).toBe(false);
+
+      act(() => {
+        vi.setSystemTime(new Date(2026, 6, 16)); // Thursday
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      await waitFor(() =>
+        expect(result.current.tasks.some((t) => t.repeatSourceId === "anchor")).toBe(true),
+      );
+      await waitFor(() =>
+        expect(repo.tasks.some((t) => t.repeatSourceId === "anchor")).toBe(true),
+      );
+    });
+
+    it("setRepeatWeekdays sets, then clears to undefined when weekdays is empty", async () => {
+      const task = makeTask({ id: "a", scope: { kind: "day", date: todayKey() } });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setRepeatWeekdays("a", [1, 3, 5]));
+      expect(result.current.tasks[0].repeatWeekdays).toEqual([1, 3, 5]);
+      await waitFor(() => expect(repo.tasks[0].repeatWeekdays).toEqual([1, 3, 5]));
+
+      act(() => result.current.setRepeatWeekdays("a", []));
+      expect(result.current.tasks[0].repeatWeekdays).toBeUndefined();
+    });
+  });
+
   describe("time and subtask actions", () => {
     it("setTime sets, rejects invalid, and clears", async () => {
       const task = makeTask({ id: "a", scope: { kind: "day", date: todayKey() } });

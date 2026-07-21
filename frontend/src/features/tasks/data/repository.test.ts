@@ -112,12 +112,44 @@ describe("v2 field normalization", () => {
     expect(loaded.subtasks).toEqual([good]);
   });
 
+  it("round-trips valid repeatWeekdays and repeatSourceId", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const routine: Task = { ...task, id: "anchor", repeatWeekdays: [1, 3, 5] };
+    const occurrence: Task = { ...task, id: "occ", repeatSourceId: "anchor" };
+    await repo.create(routine);
+    await repo.create(occurrence);
+    expect(await repo.list()).toEqual([routine, occurrence]);
+  });
+
+  it("clears an invalid repeatWeekdays but keeps the task", async () => {
+    const repo = createLocalStorageRepository(
+      fakeStorage({
+        "picking-up.tasks.v1": JSON.stringify([{ ...task, repeatWeekdays: [3, 9] }]),
+      }),
+    );
+    const [loaded] = await repo.list();
+    expect(loaded.id).toBe(task.id);
+    expect(loaded.repeatWeekdays).toBeUndefined();
+  });
+
+  it("clears a non-string repeatSourceId but keeps the task", async () => {
+    const repo = createLocalStorageRepository(
+      fakeStorage({
+        "picking-up.tasks.v1": JSON.stringify([{ ...task, repeatSourceId: 42 }]),
+      }),
+    );
+    const [loaded] = await repo.list();
+    expect(loaded.id).toBe(task.id);
+    expect(loaded.repeatSourceId).toBeUndefined();
+  });
+
   it("normalizeTask returns the same reference when nothing changed", () => {
     const clean: Task = {
       ...task,
       id: "clean",
       time: "09:30",
       subtasks: [{ id: "s1", title: "ok", done: false }],
+      repeatWeekdays: [0, 6],
     };
     expect(normalizeTask(clean)).toBe(clean);
     const bare: Task = { ...task, id: "bare" };

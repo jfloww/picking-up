@@ -14,6 +14,7 @@ import { createLocalStorageRepository, type TaskRepository } from "./data/reposi
 import { todayKey } from "./lib/dates";
 import { isValidTime } from "./lib/times";
 import { rolloverTasks } from "./lib/rollover";
+import { materializeRoutines } from "./lib/routines";
 import type { Scope, Task } from "./types";
 
 export interface TasksState {
@@ -53,6 +54,7 @@ interface TasksContextValue extends TasksState {
   toggleTask: (id: string) => void;
   setMemo: (id: string, memo: string) => void;
   setTime: (id: string, time: string | undefined) => void;
+  setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
   removeTask: (id: string) => void;
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
@@ -87,11 +89,14 @@ export function TasksProvider({
       if (cancelled) return;
       const today = todayKey();
       const rolled = rolloverTasks(tasks, today);
-      dispatch({ type: "loaded", tasks: rolled });
+      const spawned = materializeRoutines(rolled, today);
+      const finalTasks = [...rolled, ...spawned];
+      dispatch({ type: "loaded", tasks: finalTasks });
       appliedDayRef.current = today;
       rolled.forEach((task, i) => {
         if (task !== tasks[i]) void repo.update(task);
       });
+      spawned.forEach((task) => void repo.create(task));
     });
     return () => {
       cancelled = true;
@@ -105,11 +110,14 @@ export function TasksProvider({
       if (today === appliedDayRef.current) return;
       const tasks = tasksRef.current;
       const rolled = rolloverTasks(tasks, today);
-      dispatch({ type: "loaded", tasks: rolled });
+      const spawned = materializeRoutines(rolled, today);
+      const finalTasks = [...rolled, ...spawned];
+      dispatch({ type: "loaded", tasks: finalTasks });
       appliedDayRef.current = today;
       rolled.forEach((task, i) => {
         if (task !== tasks[i]) void repo.update(task);
       });
+      spawned.forEach((task) => void repo.create(task));
     }
 
     window.addEventListener("focus", rolloverIfDateChanged);
@@ -159,6 +167,14 @@ export function TasksProvider({
         if (!current) return;
         if (time !== undefined && !isValidTime(time)) return;
         const task: Task = { ...current, time };
+        dispatch({ type: "updated", task });
+        void repo.update(task);
+      },
+      setRepeatWeekdays(id, weekdays) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current) return;
+        const normalized = weekdays && weekdays.length > 0 ? weekdays : undefined;
+        const task: Task = { ...current, repeatWeekdays: normalized };
         dispatch({ type: "updated", task });
         void repo.update(task);
       },

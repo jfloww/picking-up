@@ -14,6 +14,7 @@ const noopHandlers = {
   onToggle: () => {},
   onMemoChange: (_memo: string) => {},
   onTimeChange: (_time?: string) => {},
+  onRepeatWeekdaysChange: (_weekdays: number[]) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -139,6 +140,20 @@ describe("TaskItem v2", () => {
     fireEvent.click(screen.getByText("build shelf"));
     expect(screen.getByText("buy wood")).toBeTruthy();
     expect(screen.getByLabelText("Add subtask")).toBeTruthy();
+  });
+
+  it("toggles repeat weekdays from the expansion", () => {
+    const onRepeatWeekdaysChange = vi.fn();
+    render(
+      <TaskItem
+        task={makeTask({ title: "dentist" })}
+        {...noopHandlers}
+        onRepeatWeekdaysChange={onRepeatWeekdaysChange}
+      />,
+    );
+    fireEvent.click(screen.getByText("dentist"));
+    fireEvent.click(screen.getByLabelText("Repeat on Wednesday"));
+    expect(onRepeatWeekdaysChange).toHaveBeenCalledWith([3]);
   });
 });
 

@@ -69,4 +69,13 @@ describe("rolloverTasks", () => {
     // same references — nothing moved
     for (let i = 0; i < input.length; i++) expect(result[i]).toBe(input[i]);
   });
+
+  it("never rolls a routine occurrence, even once its day has passed", () => {
+    const task = makeTask({
+      scope: { kind: "day", date: "2026-07-01" },
+      repeatSourceId: "anchor-1",
+    });
+    const [result] = rolloverTasks([task], TODAY);
+    expect(result).toBe(task); // untouched, same reference
+  });
 });

@@ -9,6 +9,7 @@ const noopHandlers = {
   onClose: () => {},
   onMemoChange: (_memo: string) => {},
   onTimeChange: (_time?: string) => {},
+  onRepeatWeekdaysChange: (_weekdays: number[]) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -66,5 +67,10 @@ describe("TaskDetailPanel", () => {
     const header = within(screen.getByTestId("task-detail-header"));
     fireEvent.change(header.getByLabelText("Task time"), { target: { value: "15:30" } });
     expect(onTimeChange).toHaveBeenCalledWith("15:30");
+  });
+
+  it("shows the repeat picker for a day-scoped task with no routine yet", () => {
+    render(<TaskDetailPanel task={task} {...noopHandlers} />);
+    expect(screen.getByLabelText("Repeat on Monday")).toBeTruthy();
   });
 });

@@ -14,6 +14,7 @@ import {
   shortDateLabel,
   todayKey,
   weekDates,
+  weekdayOf,
   weekStartOf,
   yearOf,
 } from "./dates";
@@ -39,6 +40,11 @@ describe("dates", () => {
     expect(weekStartOf("2026-07-16")).toBe("2026-07-12"); // Thursday -> Sunday
     expect(weekStartOf("2026-07-12")).toBe("2026-07-12"); // Sunday is its own start
     expect(weekStartOf("2026-07-01")).toBe("2026-06-28"); // week spans two months
+  });
+
+  it("weekdayOf returns a getDay()-style index", () => {
+    expect(weekdayOf("2026-07-16")).toBe(4); // Thursday
+    expect(weekdayOf("2026-07-12")).toBe(0); // Sunday
   });
 
   it("weekDates returns 7 consecutive days", () => {
