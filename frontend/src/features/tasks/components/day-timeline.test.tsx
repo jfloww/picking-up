@@ -79,6 +79,14 @@ describe("DayTimeline", () => {
       rail.compareDocumentPosition(allDay) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
+
+  it("bounds the rail between a 6h floor and its 12h viewport via ShrinkStack", async () => {
+    renderTimeline(todayKey());
+    await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
+    const primaryPane = screen.getByTestId("shrink-stack-primary");
+    expect(primaryPane.style.minHeight).toBe(`${6 * HOUR_HEIGHT}px`);
+    expect(primaryPane.style.maxHeight).toBe(`${12 * HOUR_HEIGHT}px`);
+  });
 });
 
 function mockRect(el: HTMLElement, rect: Partial<DOMRect>) {
