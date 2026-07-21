@@ -92,6 +92,19 @@ describe("DailyView task detail panel", () => {
     expect(screen.queryByLabelText("Close details")).toBeNull();
   });
 
+  it("closes the panel when the same task's title is clicked again", async () => {
+    const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
+
+    const allDayZone = screen.getByTestId("all-day-zone");
+    fireEvent.click(within(allDayZone).getByText("task a"));
+    await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
+
+    fireEvent.click(within(allDayZone).getByText("task a"));
+    expect(screen.queryByLabelText("Close details")).toBeNull();
+  });
+
   it("clears the selection when the selected task is deleted from the panel", async () => {
     const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
     renderView(vi.fn(), [a]);
