@@ -92,10 +92,6 @@ export function useDragToSchedule(options: {
           startY: e.clientY,
           moved: false,
         };
-        const target = e.currentTarget as HTMLElement;
-        if (typeof target.setPointerCapture === "function") {
-          target.setPointerCapture(e.pointerId);
-        }
       },
       onPointerMove: (e: React.PointerEvent) => {
         const gesture = gestureRef.current;
@@ -106,6 +102,15 @@ export function useDragToSchedule(options: {
           const dy = e.clientY - gesture.startY;
           if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
           gesture.moved = true;
+          // Capture only once a real drag starts, not on every pointerdown:
+          // capturing unconditionally would redirect a plain click's event
+          // target away from nested interactive elements (a checkbox, the
+          // title button), since browsers retarget the click to whichever
+          // element holds pointer capture.
+          const target = e.currentTarget as HTMLElement;
+          if (typeof target.setPointerCapture === "function") {
+            target.setPointerCapture(e.pointerId);
+          }
         }
 
         autoScroll(e.clientY);
