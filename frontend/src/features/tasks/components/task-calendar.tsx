@@ -4,7 +4,9 @@ import { useState } from "react";
 
 import {
   addDays,
+  dayLabel,
   monthKeyOf,
+  monthLabel,
   nextMonthKey,
   prevMonthKey,
   todayKey,
@@ -45,6 +47,18 @@ const VIEW_COMPONENTS = {
   yearly: YearlyView,
 } as const;
 
+function dateLabelFor(view: ViewKind, anchor: string): string {
+  switch (view) {
+    case "daily":
+      return dayLabel(anchor);
+    case "weekly":
+      return monthLabel(monthKeyOf(anchor));
+    case "monthly":
+    case "yearly":
+      return yearOf(anchor);
+  }
+}
+
 function CalendarInner() {
   const { loaded } = useTasks();
   const [view, setView] = useState<ViewKind>("weekly");
@@ -56,15 +70,20 @@ function CalendarInner() {
 
   const View = VIEW_COMPONENTS[view];
   return (
-    <div className="space-y-4">
-      <ViewSwitcher
-        view={view}
-        onViewChange={setView}
-        onToday={() => setAnchor(todayKey())}
-        onPrev={() => setAnchor((a) => shiftAnchor(view, a, -1))}
-        onNext={() => setAnchor((a) => shiftAnchor(view, a, 1))}
-      />
-      <View anchor={anchor} onAnchorChange={setAnchor} />
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="shrink-0 space-y-3">
+        <h2 className="text-lg font-semibold">{dateLabelFor(view, anchor)}</h2>
+        <ViewSwitcher
+          view={view}
+          onViewChange={setView}
+          onToday={() => setAnchor(todayKey())}
+          onPrev={() => setAnchor((a) => shiftAnchor(view, a, -1))}
+          onNext={() => setAnchor((a) => shiftAnchor(view, a, 1))}
+        />
+      </div>
+      <div className="min-h-0 flex-1">
+        <View anchor={anchor} onAnchorChange={setAnchor} />
+      </div>
     </div>
   );
 }

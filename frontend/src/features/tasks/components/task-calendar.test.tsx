@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { shiftAnchor, TaskCalendar } from "./task-calendar";
 
@@ -34,5 +34,35 @@ describe("TaskCalendar", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Yearly" }));
     await waitFor(() => expect(screen.getByText("January")).toBeTruthy());
+  });
+
+  describe("fixed sub-header", () => {
+    beforeAll(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 6, 16)); // 2026-07-16, Thursday
+    });
+    afterAll(() => {
+      vi.useRealTimers();
+    });
+
+    it("shows a date label matching the current view, and keeps tabs/nav/label together as one non-shrinking block", async () => {
+      render(<TaskCalendar />);
+      await waitFor(() => expect(screen.getByText("July 2026")).toBeTruthy());
+
+      const header = screen.getByText("July 2026").parentElement;
+      expect(
+        header?.contains(screen.getByRole("tablist", { name: "Calendar scale" })),
+      ).toBe(true);
+      expect(header?.contains(screen.getByText("Today"))).toBe(true);
+      expect(header?.className).toContain("shrink-0");
+
+      fireEvent.click(screen.getByRole("tab", { name: "Daily" }));
+      await waitFor(() =>
+        expect(screen.getByText("Thursday, July 16")).toBeTruthy(),
+      );
+
+      fireEvent.click(screen.getByRole("tab", { name: "Monthly" }));
+      await waitFor(() => expect(screen.getByText("2026")).toBeTruthy());
+    });
   });
 });

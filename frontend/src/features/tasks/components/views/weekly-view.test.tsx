@@ -25,10 +25,9 @@ describe("WeeklyView", () => {
     vi.useRealTimers();
   });
 
-  it("renders the month label, day headers, and Weekly column", async () => {
+  it("renders day headers and the Weekly column", async () => {
     renderView();
-    await waitFor(() => expect(screen.getByText("July 2026")).toBeTruthy());
-    expect(screen.getByText("Su")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("Su")).toBeTruthy());
     expect(screen.getByText("Weekly")).toBeTruthy();
   });
 

@@ -27,8 +27,7 @@ describe("MonthlyView", () => {
         <MonthlyView anchor={ANCHOR} onAnchorChange={vi.fn()} />
       </TasksProvider>,
     );
-    await waitFor(() => expect(screen.getByText("2026")).toBeTruthy());
-    expect(screen.getByText("January")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("January")).toBeTruthy());
     expect(screen.getByText("December")).toBeTruthy();
     expect(screen.getByText("Monthly")).toBeTruthy();
     // task appears twice: compact preview in the July cell + editable side cell
