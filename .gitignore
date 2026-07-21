@@ -10,6 +10,7 @@ npm-debug.log*
 __pycache__/
 *.py[cod]
 db.sqlite3
+logs/
 
 # Environment (all variants except the committed .env.example templates)
 .env
