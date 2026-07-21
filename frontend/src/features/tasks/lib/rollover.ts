@@ -7,6 +7,7 @@ export function rolloverTasks(tasks: Task[], today: string): Task[] {
 
   return tasks.map((task) => {
     if (task.done) return task;
+    if (task.repeatSourceId !== undefined) return task;
 
     let scope = task.scope;
     if (scope.kind === "day" && scope.date < today) {
