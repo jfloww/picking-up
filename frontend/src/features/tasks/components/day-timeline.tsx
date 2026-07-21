@@ -20,7 +20,13 @@ const DEFAULT_SCROLL_HOUR = 7; // fallback start for non-today dates
 
 const toOffset = (time: string) => (timeToMinutes(time) * HOUR_HEIGHT) / 60;
 
-export function DayTimeline({ date }: { date: string }) {
+export function DayTimeline({
+  date,
+  onSelectTask,
+}: {
+  date: string;
+  onSelectTask?: (id: string) => void;
+}) {
   const actions = useTasks();
   const { tasks, addTask, setTime } = actions;
   const scope: Scope = { kind: "day", date };
@@ -95,7 +101,11 @@ export function DayTimeline({ date }: { date: string }) {
                   {...getDragHandlers(t.id, t.title)}
                 >
                   <ul>
-                    <TaskItem task={t} {...taskItemHandlers(t.id, actions)} />
+                    <TaskItem
+                      task={t}
+                      {...taskItemHandlers(t.id, actions)}
+                      onSelect={onSelectTask && (() => onSelectTask(t.id))}
+                    />
                   </ul>
                 </div>
               ))}
@@ -135,7 +145,11 @@ export function DayTimeline({ date }: { date: string }) {
                   {...getDragHandlers(t.id, t.title)}
                 >
                   <ul>
-                    <TaskItem task={t} {...taskItemHandlers(t.id, actions)} />
+                    <TaskItem
+                      task={t}
+                      {...taskItemHandlers(t.id, actions)}
+                      onSelect={onSelectTask && (() => onSelectTask(t.id))}
+                    />
                   </ul>
                 </div>
               ))}

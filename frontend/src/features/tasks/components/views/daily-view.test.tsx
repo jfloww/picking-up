@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider } from "../../store";
@@ -59,5 +59,61 @@ describe("DailyView v3 (single-day layout)", () => {
     renderView(vi.fn(), [dayTask]);
     await waitFor(() => expect(screen.getByText("day task")).toBeTruthy());
     expect(screen.getByText("Fri Jul 17")).toBeTruthy();
+  });
+});
+
+describe("DailyView task detail panel", () => {
+  // A Daily-tab all-day task is undone and scoped to a day inside the
+  // rendered week, so per weeklyRollupTasks (frontend/src/features/tasks/lib/times.ts)
+  // it also rolls up into the Weekly list alongside the Daily-tab's own
+  // all-day-zone row — that's existing, deliberately-tested behavior, not
+  // something DailyView filters out. So each task's title is expected twice
+  // pre-selection (all-day zone + Weekly row) and three times once its panel
+  // is open (+ panel header). Clicks are scoped to the all-day zone via
+  // `within` since a bare `getByText` would otherwise be ambiguous.
+  it("opens the detail panel for a Daily-tab task, closes on re-click, and swaps on a different task", async () => {
+    const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
+    const b = makeTask({ id: "b", title: "task b", scope: { kind: "day", date: ANCHOR } });
+    renderView(vi.fn(), [a, b]);
+    await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
+    expect(screen.queryByLabelText("Close details")).toBeNull();
+
+    const allDayZone = screen.getByTestId("all-day-zone");
+    fireEvent.click(within(allDayZone).getByText("task a"));
+    await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
+    // Daily-tab row + Weekly rollup row + panel header
+    expect(screen.getAllByText("task a")).toHaveLength(3);
+
+    fireEvent.click(within(allDayZone).getByText("task b"));
+    expect(screen.getAllByText("task a")).toHaveLength(2); // panel swapped away
+    expect(screen.getAllByText("task b")).toHaveLength(3);
+
+    fireEvent.click(screen.getByLabelText("Close details"));
+    expect(screen.queryByLabelText("Close details")).toBeNull();
+  });
+
+  it("closes the panel when the same task's title is clicked again", async () => {
+    const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
+
+    const allDayZone = screen.getByTestId("all-day-zone");
+    fireEvent.click(within(allDayZone).getByText("task a"));
+    await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
+
+    fireEvent.click(within(allDayZone).getByText("task a"));
+    expect(screen.queryByLabelText("Close details")).toBeNull();
+  });
+
+  it("clears the selection when the selected task is deleted from the panel", async () => {
+    const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
+
+    fireEvent.click(within(screen.getByTestId("all-day-zone")).getByText("task a"));
+    await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Delete"));
+    expect(screen.queryByLabelText("Close details")).toBeNull();
   });
 });

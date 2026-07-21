@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
 import type { Task } from "../types";
-import { SubtaskList } from "./subtask-list";
+import { TaskDetailFields } from "./task-detail-fields";
 
 interface TaskItemActions {
   toggleTask: (id: string) => void;
@@ -43,6 +43,7 @@ export function TaskItem({
   onAddSubtask,
   onToggleSubtask,
   onRemoveSubtask,
+  onSelect,
 }: {
   task: Task;
   dateLabel?: string;
@@ -53,6 +54,7 @@ export function TaskItem({
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
+  onSelect?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const subtasks = task.subtasks ?? [];
@@ -76,7 +78,7 @@ export function TaskItem({
         )}
         <button
           type="button"
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => (onSelect ? onSelect() : setOpen((o) => !o))}
           className={cn(
             "min-w-0 flex-1 truncate text-left text-base font-medium",
             task.done && "text-muted-foreground line-through",
@@ -97,45 +99,16 @@ export function TaskItem({
         )}
       </div>
       {open && (
-        <div className="mt-1 space-y-1.5 pl-6">
-          <div className="flex items-center gap-2">
-            <input
-              type="time"
-              value={task.time ?? ""}
-              onChange={(e) => onTimeChange(e.target.value || undefined)}
-              aria-label="Task time"
-              className="rounded-md border border-input bg-transparent px-1.5 py-0.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            />
-            {task.time && (
-              <button
-                type="button"
-                onClick={() => onTimeChange(undefined)}
-                className="text-xs text-subtle hover:text-foreground"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <textarea
-            defaultValue={task.memo ?? ""}
-            onBlur={(e) => onMemoChange(e.target.value)}
-            placeholder="Memo"
-            rows={2}
-            className="w-full resize-none rounded-md border border-input bg-transparent p-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        <div className="mt-1 pl-6">
+          <TaskDetailFields
+            task={task}
+            onMemoChange={onMemoChange}
+            onTimeChange={onTimeChange}
+            onDelete={onDelete}
+            onAddSubtask={onAddSubtask}
+            onToggleSubtask={onToggleSubtask}
+            onRemoveSubtask={onRemoveSubtask}
           />
-          <SubtaskList
-            subtasks={subtasks}
-            onAdd={onAddSubtask}
-            onToggle={onToggleSubtask}
-            onRemove={onRemoveSubtask}
-          />
-          <button
-            type="button"
-            onClick={onDelete}
-            className="text-xs text-destructive hover:underline"
-          >
-            Delete
-          </button>
         </div>
       )}
     </li>
