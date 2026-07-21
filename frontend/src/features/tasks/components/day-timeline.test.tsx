@@ -14,10 +14,14 @@ afterAll(() => {
   vi.useRealTimers();
 });
 
-function renderTimeline(date: string, tasks = [] as Parameters<typeof fakeRepository>[0]) {
+function renderTimeline(
+  date: string,
+  tasks = [] as Parameters<typeof fakeRepository>[0],
+  onSelectTask?: (id: string) => void,
+) {
   return render(
     <TasksProvider repository={fakeRepository(tasks)}>
-      <DayTimeline date={date} />
+      <DayTimeline date={date} onSelectTask={onSelectTask} />
     </TasksProvider>,
   );
 }
@@ -86,6 +90,28 @@ describe("DayTimeline", () => {
     const primaryPane = screen.getByTestId("shrink-stack-primary");
     expect(primaryPane.style.minHeight).toBe(`${6 * HOUR_HEIGHT}px`);
     expect(primaryPane.style.maxHeight).toBe(`${12 * HOUR_HEIGHT}px`);
+  });
+
+  it("calls onSelectTask instead of expanding inline, for both rail chips and All-day rows", async () => {
+    const day = todayKey();
+    const untimed = makeTask({ id: "u", title: "untimed", scope: { kind: "day", date: day } });
+    const timed = makeTask({
+      id: "t",
+      title: "dentist",
+      time: "09:30",
+      scope: { kind: "day", date: day },
+    });
+    const onSelectTask = vi.fn();
+    renderTimeline(day, [untimed, timed], onSelectTask);
+    await waitFor(() => expect(screen.getByText("untimed")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("untimed"));
+    expect(onSelectTask).toHaveBeenCalledWith("u");
+
+    fireEvent.click(screen.getByText("dentist"));
+    expect(onSelectTask).toHaveBeenCalledWith("t");
+
+    expect(screen.queryByPlaceholderText("Memo")).toBeNull();
   });
 });
 
