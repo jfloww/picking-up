@@ -29,8 +29,4 @@ python manage.py runserver
 
 No platform difference — see [frontend.md](frontend.md) directly.
 
-## Known gotcha: iCloud Drive folder sync
 
-This is the macOS equivalent of a real issue we hit on Windows: if **iCloud Drive's "Desktop & Documents" sync** is enabled and this repo lives under `~/Desktop/...`, iCloud actively syncs the project and can transiently lock newly-written files — the same failure mode as a Windows OneDrive lock (build tools writing to `node_modules/`, `.next/`, or `.venv/` mid-sync). Dropbox or Google Drive set to sync your Desktop would cause the identical problem.
-
-**Avoid it:** clone the repo somewhere not under iCloud/Dropbox/Google Drive sync — e.g. `~/Projects/picking-up` or `~/dev/picking-up` — rather than `~/Desktop/picking-up`.
