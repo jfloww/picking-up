@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 type ShrinkStackProps = {
   primary: ReactNode;
   primaryMinHeight: number;
-  primaryMaxHeight: number;
+  primaryMaxHeight?: number;
   secondary: ReactNode;
   gap?: number;
   /** Swaps visual position only — `primary` stays the floored/shrinking pane regardless. */
