@@ -116,6 +116,7 @@ export function DayTimeline({ date }: { date: string }) {
         }
         primaryMinHeight={VIEWPORT_HEIGHT / 2}
         primaryMaxHeight={VIEWPORT_HEIGHT}
+        secondaryFirst
         secondary={
           <div
             ref={allDayZoneRef}

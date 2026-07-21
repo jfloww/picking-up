@@ -70,13 +70,13 @@ describe("DayTimeline", () => {
     expect(screen.getByTestId("hour-rail").scrollTop).toBe(7 * HOUR_HEIGHT);
   });
 
-  it("renders the hour rail before the All-day section", async () => {
+  it("renders the All-day section before the hour rail", async () => {
     renderTimeline(todayKey());
     await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
     const rail = screen.getByTestId("hour-rail");
     const allDay = screen.getByTestId("all-day-zone");
     expect(
-      rail.compareDocumentPosition(allDay) & Node.DOCUMENT_POSITION_FOLLOWING,
+      allDay.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
