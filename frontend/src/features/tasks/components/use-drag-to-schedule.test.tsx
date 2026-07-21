@@ -144,6 +144,32 @@ describe("useDragToSchedule", () => {
     }
   });
 
+  it("does not capture the pointer on a plain click (would break nested click handlers like a checkbox's)", () => {
+    const { chip } = setup();
+    const captureSpy = vi.fn();
+    // jsdom doesn't implement setPointerCapture at all, so exercising the
+    // real bug (capture retargeting a click's event.target away from a
+    // nested descendant) isn't possible here — this stubs the API just to
+    // assert *when* the hook calls it, which is the actual root cause: an
+    // unconditional call on pointerdown captures on every click, not just
+    // drags, and real browsers redirect the resulting click's target to
+    // the capturing element, so it never reaches a nested checkbox/button.
+    chip.setPointerCapture = captureSpy;
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 10, clientY: 10 });
+    expect(captureSpy).not.toHaveBeenCalled();
+  });
+
+  it("captures the pointer once a real drag starts (movement past the threshold)", () => {
+    const { chip } = setup();
+    const captureSpy = vi.fn();
+    chip.setPointerCapture = captureSpy;
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 10 });
+    expect(captureSpy).not.toHaveBeenCalled();
+    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 10, clientY: 556 });
+    expect(captureSpy).toHaveBeenCalledWith(1);
+  });
+
   it("cancels cleanly on pointercancel without scheduling", () => {
     const { onSchedule, chip } = setup();
     fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 10 });

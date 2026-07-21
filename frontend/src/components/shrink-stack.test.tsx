@@ -91,4 +91,17 @@ describe("ShrinkStack", () => {
       primary.compareDocumentPosition(secondary) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
+
+  it("omits maxHeight on the primary pane when primaryMaxHeight is not provided", () => {
+    render(
+      <ShrinkStack
+        primary={<div>Primary content</div>}
+        primaryMinHeight={200}
+        secondary={<div>Secondary content</div>}
+      />,
+    );
+    const primary = screen.getByTestId("shrink-stack-primary");
+    expect(primary.style.minHeight).toBe("200px");
+    expect(primary.style.maxHeight).toBe("");
+  });
 });

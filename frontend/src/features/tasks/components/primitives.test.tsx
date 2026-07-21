@@ -68,6 +68,14 @@ describe("TaskItem", () => {
     fireEvent.click(screen.getByText("Delete"));
     expect(onDelete).toHaveBeenCalled();
   });
+
+  it("calls onSelect instead of expanding inline when provided", () => {
+    const onSelect = vi.fn();
+    render(<TaskItem task={task} {...noopHandlers} onSelect={onSelect} />);
+    fireEvent.click(screen.getByText("write tests"));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(screen.queryByPlaceholderText("Memo")).toBeNull();
+  });
 });
 
 describe("TaskItem v2", () => {
