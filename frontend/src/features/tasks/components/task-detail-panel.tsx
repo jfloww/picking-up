@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 import type { Task } from "../types";
 import { TaskDetailFields } from "./task-detail-fields";
+import { TaskTimeEditor } from "./task-time-editor";
 
 export function TaskDetailPanel({
   task,
@@ -45,6 +46,7 @@ export function TaskDetailPanel({
         >
           {task.title}
         </span>
+        <TaskTimeEditor time={task.time} onTimeChange={onTimeChange} />
         <button
           type="button"
           onClick={onClose}
@@ -62,6 +64,7 @@ export function TaskDetailPanel({
         onAddSubtask={onAddSubtask}
         onToggleSubtask={onToggleSubtask}
         onRemoveSubtask={onRemoveSubtask}
+        showTime={false}
       />
     </div>
   );

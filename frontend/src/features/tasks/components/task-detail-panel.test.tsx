@@ -47,4 +47,19 @@ describe("TaskDetailPanel", () => {
     fireEvent.click(screen.getByText("Delete"));
     expect(onDelete).toHaveBeenCalled();
   });
+
+  it("shows a time input in the header and doesn't duplicate it below", () => {
+    const timedTask = makeTask({ id: "a", title: "write tests", time: "14:00" });
+    render(<TaskDetailPanel task={timedTask} {...noopHandlers} />);
+    expect(screen.getByLabelText("Task time")).toBeTruthy();
+    expect(screen.getAllByText("Clear")).toHaveLength(1);
+  });
+
+  it("calls onTimeChange from the header time input", () => {
+    const onTimeChange = vi.fn();
+    const timedTask = makeTask({ id: "a", title: "write tests", time: "14:00" });
+    render(<TaskDetailPanel task={timedTask} {...noopHandlers} onTimeChange={onTimeChange} />);
+    fireEvent.change(screen.getByLabelText("Task time"), { target: { value: "15:30" } });
+    expect(onTimeChange).toHaveBeenCalledWith("15:30");
+  });
 });
