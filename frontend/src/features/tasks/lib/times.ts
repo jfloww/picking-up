@@ -147,3 +147,12 @@ export function dayTasksForWeek(
         t.rolledFrom.date === date),
   );
 }
+
+export function isPastToday(
+  time: string,
+  date: string,
+  today: string,
+  nowTime: string,
+): boolean {
+  return date === today && time < nowTime;
+}
