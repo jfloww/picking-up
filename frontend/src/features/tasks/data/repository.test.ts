@@ -150,9 +150,28 @@ describe("v2 field normalization", () => {
       time: "09:30",
       subtasks: [{ id: "s1", title: "ok", done: false }],
       repeatWeekdays: [0, 6],
+      priority: true,
     };
     expect(normalizeTask(clean)).toBe(clean);
     const bare: Task = { ...task, id: "bare" };
     expect(normalizeTask(bare)).toBe(bare);
+  });
+
+  it("round-trips a valid priority flag", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const prioritized: Task = { ...task, id: "prioritized", priority: true };
+    await repo.create(prioritized);
+    expect(await repo.list()).toEqual([prioritized]);
+  });
+
+  it("clears a non-boolean priority but keeps the task", async () => {
+    const repo = createLocalStorageRepository(
+      fakeStorage({
+        "picking-up.tasks.v1": JSON.stringify([{ ...task, priority: "yes" }]),
+      }),
+    );
+    const [loaded] = await repo.list();
+    expect(loaded.id).toBe(task.id);
+    expect(loaded.priority).toBeUndefined();
   });
 });
