@@ -2,8 +2,8 @@
 
 import { cn } from "@/lib/utils";
 
-import { shortDateLabel, todayKey } from "../lib/dates";
-import { compareTasksForDay, weeklyRollupTasks } from "../lib/times";
+import { shortDateLabel, todayKey, weekStartOf } from "../lib/dates";
+import { compareTasksForDay, dayTasksForWeek, repeatLabelForTask, weeklyRollupTasks } from "../lib/times";
 import { useTasks } from "../store";
 import { scopeKey, type Scope, type Task } from "../types";
 import { QuickAdd } from "./quick-add";
@@ -14,11 +14,17 @@ export function ScopeTasks({
   quickAdd = false,
   compact = false,
   excludeDate,
+  onSelectTask,
+  highlightOverdue = false,
+  showRepeatLabel = false,
 }: {
   scope: Scope;
   quickAdd?: boolean;
   compact?: boolean;
   excludeDate?: string;
+  onSelectTask?: (id: string) => void;
+  highlightOverdue?: boolean;
+  showRepeatLabel?: boolean;
 }) {
   const actions = useTasks();
   const { tasks, addTask } = actions;
@@ -26,6 +32,9 @@ export function ScopeTasks({
   let items: { task: Task; date: string | null }[];
   if (scope.kind === "week") {
     items = weeklyRollupTasks(tasks, scope.weekStart);
+  } else if (scope.kind === "day" && highlightOverdue) {
+    const scoped = dayTasksForWeek(tasks, scope.date, weekStartOf(scope.date));
+    items = [...scoped].sort(compareTasksForDay).map((task) => ({ task, date: null }));
   } else {
     const key = scopeKey(scope);
     const scoped = tasks.filter((t) => scopeKey(t.scope) === key);
@@ -67,18 +76,29 @@ export function ScopeTasks({
   }
 
   const today = todayKey();
+  const dayDate = scope.kind === "day" ? scope.date : null;
 
   return (
     <div className="space-y-1">
       <ul className="space-y-1">
-        {items.map(({ task: t, date }) => (
-          <TaskItem
-            key={t.id}
-            task={t}
-            dateLabel={date ? shortDateLabel(date, today) : undefined}
-            {...taskItemHandlers(t.id, actions)}
-          />
-        ))}
+        {items.map(({ task: t, date }) => {
+          let highlight: "overdue" | "pending" | undefined;
+          if (highlightOverdue && dayDate && !t.done) {
+            if (dayDate < today) highlight = "overdue";
+            else if (dayDate === today) highlight = "pending";
+          }
+          return (
+            <TaskItem
+              key={t.id}
+              task={t}
+              dateLabel={date ? shortDateLabel(date, today) : undefined}
+              highlight={highlight}
+              repeatLabel={showRepeatLabel ? repeatLabelForTask(t, tasks) : undefined}
+              onSelect={onSelectTask ? () => onSelectTask(t.id) : undefined}
+              {...taskItemHandlers(t.id, actions)}
+            />
+          );
+        })}
       </ul>
       {quickAdd && <QuickAdd onAdd={(title) => addTask(title, scope)} />}
     </div>
