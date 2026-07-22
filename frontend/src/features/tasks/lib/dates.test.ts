@@ -15,6 +15,7 @@ import {
   todayKey,
   weekDates,
   weekdayOf,
+  weekRangeLabel,
   weekStartOf,
   yearOf,
 } from "./dates";
@@ -122,5 +123,15 @@ describe("shortDateLabel", () => {
 
   it("returns a short weekday/month/day form otherwise", () => {
     expect(shortDateLabel("2026-07-20", "2026-07-16")).toBe("Mon Jul 20");
+  });
+});
+
+describe("weekRangeLabel", () => {
+  it("formats a week within a single month", () => {
+    expect(weekRangeLabel("2026-07-12")).toBe("Jul 12 – Jul 18");
+  });
+
+  it("formats a week spanning two months", () => {
+    expect(weekRangeLabel("2026-06-28")).toBe("Jun 28 – Jul 4");
   });
 });
