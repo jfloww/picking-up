@@ -4,6 +4,7 @@ import type { Task } from "../types";
 import {
   compareTasksForDay,
   dayTasksForWeek,
+  isPastToday,
   isValidTime,
   layoutTimedTasks,
   nowTime,
@@ -303,5 +304,24 @@ describe("dayTasksForWeek", () => {
   it("excludes a genuine week-level task with no rolledFrom", () => {
     const t = task({ scope: { kind: "week", weekStart } });
     expect(dayTasksForWeek([t], date, weekStart)).toEqual([]);
+  });
+});
+
+describe("isPastToday", () => {
+  it("is true when the date is today and the time has already passed", () => {
+    expect(isPastToday("09:00", "2026-07-16", "2026-07-16", "14:05")).toBe(true);
+  });
+
+  it("is false when the date is today but the time hasn't arrived yet", () => {
+    expect(isPastToday("15:00", "2026-07-16", "2026-07-16", "14:05")).toBe(false);
+  });
+
+  it("is false when the date isn't today, regardless of time", () => {
+    expect(isPastToday("09:00", "2026-07-15", "2026-07-16", "14:05")).toBe(false);
+    expect(isPastToday("09:00", "2026-07-17", "2026-07-16", "14:05")).toBe(false);
+  });
+
+  it("is false at the exact current minute (not past yet)", () => {
+    expect(isPastToday("14:05", "2026-07-16", "2026-07-16", "14:05")).toBe(false);
   });
 });

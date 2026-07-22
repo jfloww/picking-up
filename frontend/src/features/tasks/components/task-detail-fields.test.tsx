@@ -8,6 +8,7 @@ const noopHandlers = {
   onMemoChange: (_memo: string) => {},
   onTimeChange: (_time?: string) => {},
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
+  onPriorityChange: (_priority: boolean) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -95,5 +96,47 @@ describe("TaskDetailFields repeat", () => {
     expect(screen.getByLabelText("Repeat on Monday")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Repeat on Friday"));
     expect(onRepeatWeekdaysChange).toHaveBeenCalledWith([1, 3, 5]);
+  });
+});
+
+describe("TaskDetailFields priority", () => {
+  it("shows the priority toggle unpressed for a non-priority task", () => {
+    render(<TaskDetailFields task={makeTask({})} {...noopHandlers} />);
+    expect(
+      screen.getByRole("button", { name: "Priority" }).getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("shows the priority toggle pressed for a priority task", () => {
+    render(<TaskDetailFields task={makeTask({ priority: true })} {...noopHandlers} />);
+    expect(
+      screen.getByRole("button", { name: "Priority" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("calls onPriorityChange with the toggled value", () => {
+    const onPriorityChange = vi.fn();
+    render(
+      <TaskDetailFields
+        task={makeTask({ priority: false })}
+        {...noopHandlers}
+        onPriorityChange={onPriorityChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+    expect(onPriorityChange).toHaveBeenCalledWith(true);
+  });
+
+  it("toggles off when already priority", () => {
+    const onPriorityChange = vi.fn();
+    render(
+      <TaskDetailFields
+        task={makeTask({ priority: true })}
+        {...noopHandlers}
+        onPriorityChange={onPriorityChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+    expect(onPriorityChange).toHaveBeenCalledWith(false);
   });
 });

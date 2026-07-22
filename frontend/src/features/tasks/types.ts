@@ -23,6 +23,7 @@ export interface Task {
   subtasks?: Subtask[]; // one level deep; no scope/memo/time of their own
   repeatWeekdays?: number[]; // 0=Sun..6=Sat; set only on the anchor task
   repeatSourceId?: string;   // set only on a task generated from an anchor
+  priority?: boolean;
 }
 
 export function scopeKey(scope: Scope): string {

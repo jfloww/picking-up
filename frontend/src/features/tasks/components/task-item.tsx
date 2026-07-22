@@ -14,6 +14,7 @@ interface TaskItemActions {
   setMemo: (id: string, memo: string) => void;
   setTime: (id: string, time: string | undefined) => void;
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
+  setPriority: (id: string, priority: boolean) => void;
   removeTask: (id: string) => void;
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
@@ -28,6 +29,7 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onMemoChange: (memo: string) => actions.setMemo(id, memo),
     onTimeChange: (time?: string) => actions.setTime(id, time),
     onRepeatWeekdaysChange: (weekdays: number[]) => actions.setRepeatWeekdays(id, weekdays),
+    onPriorityChange: (priority: boolean) => actions.setPriority(id, priority),
     onDelete: () => actions.removeTask(id),
     onAddSubtask: (title: string) => actions.addSubtask(id, title),
     onToggleSubtask: (subtaskId: string) => actions.toggleSubtask(id, subtaskId),
@@ -45,6 +47,7 @@ export function TaskItem({
   onMemoChange,
   onTimeChange,
   onRepeatWeekdaysChange,
+  onPriorityChange,
   onDelete,
   onAddSubtask,
   onToggleSubtask,
@@ -60,6 +63,7 @@ export function TaskItem({
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
   onRepeatWeekdaysChange: (weekdays: number[]) => void;
+  onPriorityChange: (priority: boolean) => void;
   onDelete: () => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
@@ -132,6 +136,16 @@ export function TaskItem({
             {repeatLabel}
           </span>
         )}
+        {task.priority && (
+          <span
+            className={cn(
+              "shrink-0 rounded bg-muted font-medium text-muted-foreground",
+              large ? "px-1.5 text-xs" : "px-1 text-[10px]",
+            )}
+          >
+            Priority
+          </span>
+        )}
         {task.rolledFrom && (
           <RotateCw
             aria-label="Rolled over"
@@ -146,6 +160,7 @@ export function TaskItem({
             onMemoChange={onMemoChange}
             onTimeChange={onTimeChange}
             onRepeatWeekdaysChange={onRepeatWeekdaysChange}
+            onPriorityChange={onPriorityChange}
             onDelete={onDelete}
             onAddSubtask={onAddSubtask}
             onToggleSubtask={onToggleSubtask}

@@ -1,6 +1,8 @@
 "use client";
 
-import { RotateCw } from "lucide-react";
+import { RotateCw, Star } from "lucide-react";
+
+import { cn } from "@/lib/utils";
 
 import type { Task } from "../types";
 import { SubtaskList } from "./subtask-list";
@@ -12,6 +14,7 @@ export function TaskDetailFields({
   onMemoChange,
   onTimeChange,
   onRepeatWeekdaysChange,
+  onPriorityChange,
   onDelete,
   onAddSubtask,
   onToggleSubtask,
@@ -22,6 +25,7 @@ export function TaskDetailFields({
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
   onRepeatWeekdaysChange: (weekdays: number[]) => void;
+  onPriorityChange: (priority: boolean) => void;
   onDelete: () => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
@@ -44,6 +48,20 @@ export function TaskDetailFields({
             onChange={onRepeatWeekdaysChange}
           />
         ))}
+      <button
+        type="button"
+        onClick={() => onPriorityChange(!task.priority)}
+        aria-pressed={!!task.priority}
+        className={cn(
+          "flex w-fit items-center gap-1 rounded-md px-2 py-1 text-xs font-medium",
+          task.priority
+            ? "bg-muted text-foreground"
+            : "bg-transparent text-subtle hover:bg-muted/50",
+        )}
+      >
+        <Star className={cn("size-3", task.priority && "fill-current")} />
+        Priority
+      </button>
       <textarea
         defaultValue={task.memo ?? ""}
         onBlur={(e) => onMemoChange(e.target.value)}

@@ -255,4 +255,19 @@ describe("TasksProvider", () => {
       await waitFor(() => expect(repo.tasks[0].subtasks).toHaveLength(1));
     });
   });
+
+  describe("priority action", () => {
+    it("setPriority sets and clears the flag", async () => {
+      const task = makeTask({ id: "a", scope: { kind: "day", date: todayKey() } });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setPriority("a", true));
+      expect(result.current.tasks[0].priority).toBe(true);
+      await waitFor(() => expect(repo.tasks[0].priority).toBe(true));
+
+      act(() => result.current.setPriority("a", false));
+      expect(result.current.tasks[0].priority).toBe(false);
+    });
+  });
 });

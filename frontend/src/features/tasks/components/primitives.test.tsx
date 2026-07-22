@@ -15,6 +15,7 @@ const noopHandlers = {
   onMemoChange: (_memo: string) => {},
   onTimeChange: (_time?: string) => {},
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
+  onPriorityChange: (_priority: boolean) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -159,6 +160,32 @@ describe("TaskItem v2", () => {
       />,
     );
     expect(screen.getByText("Weekdays")).toBeTruthy();
+  });
+
+  it("renders a Priority badge when task.priority is true", () => {
+    render(
+      <TaskItem task={makeTask({ title: "gym", priority: true })} {...noopHandlers} />,
+    );
+    expect(screen.getByText("Priority")).toBeTruthy();
+  });
+
+  it("renders no Priority badge when task.priority is false or unset", () => {
+    render(<TaskItem task={makeTask({ title: "gym" })} {...noopHandlers} />);
+    expect(screen.queryByText("Priority")).toBeNull();
+  });
+
+  it("threads onPriorityChange to the inline TaskDetailFields expansion", () => {
+    const onPriorityChange = vi.fn();
+    render(
+      <TaskItem
+        task={makeTask({ title: "dentist" })}
+        {...noopHandlers}
+        onPriorityChange={onPriorityChange}
+      />,
+    );
+    fireEvent.click(screen.getByText("dentist"));
+    fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+    expect(onPriorityChange).toHaveBeenCalledWith(true);
   });
 
   it("renders the subtask list in the expansion", () => {

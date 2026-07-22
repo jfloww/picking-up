@@ -55,6 +55,7 @@ interface TasksContextValue extends TasksState {
   setMemo: (id: string, memo: string) => void;
   setTime: (id: string, time: string | undefined) => void;
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
+  setPriority: (id: string, priority: boolean) => void;
   removeTask: (id: string) => void;
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
@@ -175,6 +176,13 @@ export function TasksProvider({
         if (!current) return;
         const normalized = weekdays && weekdays.length > 0 ? weekdays : undefined;
         const task: Task = { ...current, repeatWeekdays: normalized };
+        dispatch({ type: "updated", task });
+        void repo.update(task);
+      },
+      setPriority(id, priority) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current) return;
+        const task: Task = { ...current, priority };
         dispatch({ type: "updated", task });
         void repo.update(task);
       },

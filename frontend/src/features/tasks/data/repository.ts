@@ -71,15 +71,21 @@ export function normalizeTask(task: Task): Task {
     repeatSourceId = undefined;
   }
 
+  let priority = task.priority;
+  if (priority !== undefined && typeof priority !== "boolean") {
+    priority = undefined;
+  }
+
   if (
     time === task.time &&
     subtasks === task.subtasks &&
     repeatWeekdays === task.repeatWeekdays &&
-    repeatSourceId === task.repeatSourceId
+    repeatSourceId === task.repeatSourceId &&
+    priority === task.priority
   ) {
     return task;
   }
-  return { ...task, time, subtasks, repeatWeekdays, repeatSourceId };
+  return { ...task, time, subtasks, repeatWeekdays, repeatSourceId, priority };
 }
 
 function isTask(value: unknown): value is Task {
