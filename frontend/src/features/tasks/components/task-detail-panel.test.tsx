@@ -10,6 +10,7 @@ const noopHandlers = {
   onMemoChange: (_memo: string) => {},
   onTimeChange: (_time?: string) => {},
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
+  onPriorityChange: (_priority: boolean) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -72,5 +73,14 @@ describe("TaskDetailPanel", () => {
   it("shows the repeat picker for a day-scoped task with no routine yet", () => {
     render(<TaskDetailPanel task={task} {...noopHandlers} />);
     expect(screen.getByLabelText("Repeat on Monday")).toBeTruthy();
+  });
+
+  it("threads onPriorityChange through to TaskDetailFields", () => {
+    const onPriorityChange = vi.fn();
+    render(
+      <TaskDetailPanel task={task} {...noopHandlers} onPriorityChange={onPriorityChange} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+    expect(onPriorityChange).toHaveBeenCalledWith(true);
   });
 });

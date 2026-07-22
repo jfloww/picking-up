@@ -16,6 +16,7 @@ export function TaskDetailPanel({
   onMemoChange,
   onTimeChange,
   onRepeatWeekdaysChange,
+  onPriorityChange,
   onDelete,
   onAddSubtask,
   onToggleSubtask,
@@ -27,6 +28,7 @@ export function TaskDetailPanel({
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
   onRepeatWeekdaysChange: (weekdays: number[]) => void;
+  onPriorityChange: (priority: boolean) => void;
   onDelete: () => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
@@ -63,6 +65,7 @@ export function TaskDetailPanel({
         onMemoChange={onMemoChange}
         onTimeChange={onTimeChange}
         onRepeatWeekdaysChange={onRepeatWeekdaysChange}
+        onPriorityChange={onPriorityChange}
         onDelete={onDelete}
         onAddSubtask={onAddSubtask}
         onToggleSubtask={onToggleSubtask}
