@@ -24,10 +24,10 @@ content.
 
 Redesign the Weekly tab to show a single week — 7 day boxes plus one big
 weekly summary box — with Prev/Next stepping by week instead of month.
-Along the way, extend the app's existing month→week drill-down intent to
-actually work at both levels: double-clicking a date in the Monthly view
-jumps to that week in the Weekly view, and double-clicking a date in the
-new Weekly view jumps to that day in the Daily view.
+Along the way, extend the app's existing drill-down intent to actually
+work at both levels: double-clicking a month cell in the Monthly view
+jumps to that month's week in the Weekly view, and double-clicking a
+day's date in the new Weekly view jumps to that day in the Daily view.
 
 ## Layout
 
@@ -100,6 +100,20 @@ already exist independently in `task-item.tsx` / `types.ts`.
 Future-dated tasks (later in the week, not yet due) get no special
 treatment — they render as normal task rows in their day box.
 
+**Interaction with rollover:** `lib/rollover.ts` already converts any
+unfinished day-scoped task into a week-scoped task as soon as its date is
+in the past (`scope.date < today`), tagging it with `rolledFrom: { kind:
+"day", date }` to remember where it came from. Left unhandled, this would
+make overdue tasks disappear from their day box entirely (they'd become
+invisible, since the hero box carries no task list). So a day box's task
+query is not a plain `scope.kind === "day"` match — it also includes
+same-week tasks whose `rolledFrom.date` equals that day. This is what
+actually makes a task "overdue" from this box's point of view (a rolled
+task is by definition from a past, unfinished day); a task still on
+`scope.kind === "day"` for a past date without having rolled yet doesn't
+arise in practice, since rollover runs on every load and on every
+day-change while the app is open.
+
 For a generated repeat instance, the anchor's `repeatWeekdays` isn't
 copied onto it (`lib/routines.ts` only sets `repeatSourceId`), so deriving
 its pill text requires resolving the anchor task by `repeatSourceId`. Left
@@ -127,20 +141,33 @@ selector/helper vs. a store change).
   it's new: `CalendarViewProps` (shared by all four views) needs a new
   callback (e.g. `onDrillDown: (dateKey: string) => void`) that changes
   *both* `view` and `anchor` together, plumbed from `CalendarInner`. The
-  Weekly view wires this to each day box's date; the Monthly view
-  (`monthly-view.tsx` → `YearGrid`) wires it the same way on its day
-  cells, jumping to `weekly` view anchored at that date's week start.
-  Single-click in the Monthly/Yearly grids keeps its current
-  focus-within-view behavior (`onFocusMonth` etc.) — only double-click
-  drills down a level.
+  Weekly view wires this to each day box's date.
+
+  **Correction from the original brainstorm:** the "Monthly" tab
+  (`monthly-view.tsx` → `YearGrid`) does not show individual days — it
+  shows a grid of the year's 12 *months*, with the focused month expanded
+  and a side panel of that month's month-scoped tasks (`YearlyView` reuses
+  the same `YearGrid` for a 12-month overview with no focus interaction).
+  There is no per-date cell to double-click in Monthly. So the
+  month→week drill-down instead applies to `YearGrid`'s month cells: when
+  `onFocusMonth` is set (i.e. only in `MonthlyView`, not `YearlyView`),
+  double-clicking a month cell jumps to `weekly` view anchored at
+  `` `${month}-01` `` (the same date `onFocusMonth` already uses for its
+  single-click focus). Single-click keeps today's exact behavior
+  (`onFocusMonth` — focus that month within the Monthly tab); double-click
+  is additive, drilling a level down instead.
 
 ## Out of scope (this iteration)
 
 - Streak / consecutive-completion tracking in the hero box — no such
   concept exists in the data model yet.
-- Any change to the Daily tab's own layout, or to Monthly/Yearly view's
-  day-cell content — this touches Monthly only for the double-click
-  drill-down wiring described above, nothing else about how it renders.
+- Any change to the Daily tab's own layout, or to how Monthly/Yearly
+  render their month cells — this touches Monthly only for the
+  double-click drill-down wiring described above, nothing else about how
+  it renders.
+- Wiring the same double-click drill-down into `YearlyView` (Yearly's
+  month cells have no click interaction at all today — adding one, even
+  just to jump to Monthly, is a separate follow-up).
 - Changing what counts toward the weekly done/total stat (reuses whatever
   `weeklyRollupTasks` already considers "this week's tasks" — see the
   2026-07-20 weekly-rollup spec).
