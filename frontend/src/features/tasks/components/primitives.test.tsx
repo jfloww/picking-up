@@ -259,6 +259,28 @@ describe("PeriodCell", () => {
     );
     expect(screen.queryByRole("button")).toBeNull();
   });
+
+  it("calls onDoubleClick when the faded cell is double-clicked", () => {
+    const onDoubleClick = vi.fn();
+    render(
+      <PeriodCell focused={false} onDoubleClick={onDoubleClick} label="W1">
+        <span>content</span>
+      </PeriodCell>,
+    );
+    fireEvent.doubleClick(screen.getByText("content"));
+    expect(onDoubleClick).toHaveBeenCalled();
+  });
+
+  it("calls onDoubleClick when the focused cell is double-clicked", () => {
+    const onDoubleClick = vi.fn();
+    render(
+      <PeriodCell focused onDoubleClick={onDoubleClick} label="W1">
+        <span>content</span>
+      </PeriodCell>,
+    );
+    fireEvent.doubleClick(screen.getByText("content"));
+    expect(onDoubleClick).toHaveBeenCalled();
+  });
 });
 
 describe("ScopeTasks", () => {

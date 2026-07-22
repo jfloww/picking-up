@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 export function PeriodCell({
   focused,
   onFocus,
+  onDoubleClick,
   label,
   className,
   contentClassName,
@@ -13,6 +14,7 @@ export function PeriodCell({
 }: {
   focused: boolean;
   onFocus?: () => void;
+  onDoubleClick?: () => void;
   label?: ReactNode;
   className?: string;
   contentClassName?: string;
@@ -32,6 +34,7 @@ export function PeriodCell({
     return (
       <div
         aria-label={ariaLabel}
+        onDoubleClick={onDoubleClick}
         className={cn("rounded-md bg-card ring-1 ring-ring/40", className)}
       >
         {content}
@@ -45,6 +48,7 @@ export function PeriodCell({
       role={onFocus ? "button" : undefined}
       tabIndex={onFocus ? 0 : undefined}
       onClick={onFocus}
+      onDoubleClick={onDoubleClick}
       onKeyDown={
         onFocus
           ? (e) => {
