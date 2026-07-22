@@ -34,6 +34,18 @@ describe("TaskDetailDrawer", () => {
     expect(screen.getByTestId("task-detail-drawer").className).toContain("fixed");
   });
 
+  it("is translated into view once mounted", () => {
+    render(<TaskDetailDrawer task={task} {...noopHandlers} />);
+    expect(screen.getByTestId("task-detail-drawer").className).toContain("translate-x-0");
+  });
+
+  it("carries a translate-transform transition for the slide-in animation", () => {
+    render(<TaskDetailDrawer task={task} {...noopHandlers} />);
+    expect(screen.getByTestId("task-detail-drawer").className).toContain(
+      "transition-transform",
+    );
+  });
+
   it("calls onToggle from the header checkbox", () => {
     const onToggle = vi.fn();
     render(<TaskDetailDrawer task={task} {...noopHandlers} onToggle={onToggle} />);
