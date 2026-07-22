@@ -1,5 +1,5 @@
 import type { Task } from "../types";
-import { weekDates, weekStartOf } from "./dates";
+import { DAY_LABELS, weekDates, weekStartOf } from "./dates";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -94,13 +94,11 @@ export function weeklyRollupTasks(tasks: Task[], weekStart: string): WeeklyRollu
   });
 }
 
-const REPEAT_DAY_ABBR = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-
 export function repeatCadenceLabel(weekdays: number[]): string {
   const sorted = [...weekdays].sort((a, b) => a - b);
   if (sorted.length === 7) return "Daily";
   if (sorted.length === 5 && sorted.every((d, i) => d === i + 1)) return "Weekdays";
-  return sorted.map((d) => REPEAT_DAY_ABBR[d]).join("/");
+  return sorted.map((d) => DAY_LABELS[d]).join("/");
 }
 
 export function repeatLabelForTask(task: Task, tasks: Task[]): string | undefined {

@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-import { dayOfMonth, todayKey, weekDates, weekStartOf } from "../../lib/dates";
+import { DAY_LABELS, dayOfMonth, todayKey, weekDates, weekStartOf } from "../../lib/dates";
 import { dayTasksForWeek, weekStats } from "../../lib/times";
 import { useTasks } from "../../store";
 import type { ViewKind } from "../view-switcher";
@@ -17,8 +17,6 @@ export interface CalendarViewProps {
   onAnchorChange: (dateKey: string) => void;
   onDrillDown?: (view: ViewKind, dateKey: string) => void;
 }
-
-export const DAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
   const actions = useTasks();
