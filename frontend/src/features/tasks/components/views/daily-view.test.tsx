@@ -40,7 +40,7 @@ function mockRect(el: HTMLElement, rect: Partial<DOMRect>) {
   } as DOMRect);
 }
 
-describe("DailyView v3 (single-day layout)", () => {
+describe("DailyView v4 (60/40 layout, drawer overlay)", () => {
   it("renders no neighboring-day cells", async () => {
     renderView();
     await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
@@ -49,11 +49,11 @@ describe("DailyView v3 (single-day layout)", () => {
     ).toHaveLength(0);
   });
 
-  it("shows the timeline and the All day agenda side by side, one quick-add total", async () => {
+  it("shows the timeline and agenda side by side, one quick-add total", async () => {
     renderView();
     await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
     expect(screen.getByTestId("now-line")).toBeTruthy(); // anchor is today
-    expect(screen.getByText("All day")).toBeTruthy();
+    expect(screen.getByTestId("day-agenda")).toBeTruthy();
     expect(screen.getAllByLabelText("Add task")).toHaveLength(1);
   });
 
@@ -64,7 +64,7 @@ describe("DailyView v3 (single-day layout)", () => {
   });
 
   it("shows a timed task both as a rail chip and as an agenda card", async () => {
-    const timed = makeTask({ id: "t", title: "dentist", time: "09:30", scope: { kind: "day", date: ANCHOR } });
+    const timed = makeTask({ id: "t", title: "dentist", time: "16:00", scope: { kind: "day", date: ANCHOR } });
     renderView(vi.fn(), [timed]);
     await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
     expect(screen.getByTestId("agenda-t")).toBeTruthy();
@@ -79,33 +79,28 @@ describe("DailyView v3 (single-day layout)", () => {
   });
 });
 
-describe("DailyView task detail panel", () => {
-  it("opens the detail panel for a Daily-tab task, closes on re-click, and swaps on a different task", async () => {
+describe("DailyView task detail drawer", () => {
+  it("opens the drawer for a Daily-tab task, closes on re-click, and swaps on a different task", async () => {
     const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
     const b = makeTask({ id: "b", title: "task b", scope: { kind: "day", date: ANCHOR } });
     renderView(vi.fn(), [a, b]);
-    // Wait for the tasks themselves, not just the (unconditionally-rendered,
-    // initially-empty) agenda container — the store loads tasks async.
     await waitFor(() => expect(screen.getByTestId("agenda-a")).toBeTruthy());
     expect(screen.queryByLabelText("Close details")).toBeNull();
-    expect(screen.getAllByText("task a")).toHaveLength(1); // agenda only (untimed, no rail chip)
+    expect(screen.getAllByText("task a")).toHaveLength(1); // agenda only
 
     fireEvent.click(within(screen.getByTestId("day-agenda")).getByText("task a"));
     await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
-    expect(screen.getAllByText("task a")).toHaveLength(2); // agenda row + panel header
+    expect(screen.getAllByText("task a")).toHaveLength(2); // agenda card + drawer header
 
-    // Re-query: the first click transitioned the right column from a bare
-    // agenda to a ShrinkStack-wrapped agenda (a type change at that tree
-    // position), which remounts DayAgenda — the pre-click node is stale.
     fireEvent.click(within(screen.getByTestId("day-agenda")).getByText("task b"));
-    expect(screen.getAllByText("task a")).toHaveLength(1); // panel swapped away
+    expect(screen.getAllByText("task a")).toHaveLength(1); // drawer swapped away
     expect(screen.getAllByText("task b")).toHaveLength(2);
 
     fireEvent.click(screen.getByLabelText("Close details"));
     expect(screen.queryByLabelText("Close details")).toBeNull();
   });
 
-  it("closes the panel when the same task's title is clicked again", async () => {
+  it("closes the drawer when the same task's title is clicked again", async () => {
     const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
     renderView(vi.fn(), [a]);
     await waitFor(() => expect(screen.getByTestId("agenda-a")).toBeTruthy());
@@ -113,13 +108,23 @@ describe("DailyView task detail panel", () => {
     fireEvent.click(within(screen.getByTestId("day-agenda")).getByText("task a"));
     await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
 
-    // Re-query for the same reason as above: the first click remounted
-    // DayAgenda via the bare-agenda -> ShrinkStack type change.
     fireEvent.click(within(screen.getByTestId("day-agenda")).getByText("task a"));
     expect(screen.queryByLabelText("Close details")).toBeNull();
   });
 
-  it("clears the selection when the selected task is deleted from the panel", async () => {
+  it("closes the drawer on Escape", async () => {
+    const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByTestId("agenda-a")).toBeTruthy());
+
+    fireEvent.click(within(screen.getByTestId("day-agenda")).getByText("task a"));
+    await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByLabelText("Close details")).toBeNull();
+  });
+
+  it("clears the selection when the selected task is deleted from the drawer", async () => {
     const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
     renderView(vi.fn(), [a]);
     await waitFor(() => expect(screen.getByTestId("agenda-a")).toBeTruthy());
@@ -131,19 +136,17 @@ describe("DailyView task detail panel", () => {
     expect(screen.queryByLabelText("Close details")).toBeNull();
   });
 
-  it("renders the detail panel before the agenda list in document order", async () => {
+  it("renders the drawer as a fixed overlay while both columns stay full-size", async () => {
     const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
     renderView(vi.fn(), [a]);
     await waitFor(() => expect(screen.getByTestId("agenda-a")).toBeTruthy());
 
     fireEvent.click(within(screen.getByTestId("day-agenda")).getByText("task a"));
-    await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeTruthy());
 
-    const panelPane = screen.getAllByTestId("shrink-stack-secondary")[0];
-    const listPane = screen.getAllByTestId("shrink-stack-primary")[0];
-    expect(
-      panelPane.compareDocumentPosition(listPane) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(screen.getByTestId("task-detail-drawer").className).toContain("fixed");
+    expect(screen.getByTestId("hour-rail")).toBeTruthy();
+    expect(screen.getByTestId("day-agenda")).toBeTruthy();
   });
 });
 
@@ -168,7 +171,7 @@ describe("DailyView drag-to-schedule (cross-column)", () => {
   });
 
   it("dragging a rail chip onto the agenda list clears its time", async () => {
-    const timed = makeTask({ id: "t", title: "dentist", time: "09:30", scope: { kind: "day", date: ANCHOR } });
+    const timed = makeTask({ id: "t", title: "dentist", time: "16:00", scope: { kind: "day", date: ANCHOR } });
     renderView(vi.fn(), [timed]);
     await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
 
@@ -207,7 +210,7 @@ describe("DailyView drag-to-schedule (cross-column)", () => {
   });
 
   it("dragging inside the expanded editor's memo textarea does not reschedule the task", async () => {
-    const timed = makeTask({ id: "t", title: "dentist", time: "09:30", scope: { kind: "day", date: ANCHOR } });
+    const timed = makeTask({ id: "t", title: "dentist", time: "16:00", scope: { kind: "day", date: ANCHOR } });
     renderView(vi.fn(), [timed]);
     await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
 
