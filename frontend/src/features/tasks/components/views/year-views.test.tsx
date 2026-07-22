@@ -50,6 +50,37 @@ describe("MonthlyView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Focus March" }));
     expect(onAnchorChange).toHaveBeenCalledWith("2026-03-01");
   });
+
+  it("double-clicking a month cell drills down to weekly view at that month's first day", async () => {
+    const onDrillDown = vi.fn();
+    render(
+      <TasksProvider repository={fakeRepository()}>
+        <MonthlyView anchor={ANCHOR} onAnchorChange={vi.fn()} onDrillDown={onDrillDown} />
+      </TasksProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Focus March" })).toBeTruthy(),
+    );
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Focus March" }));
+    expect(onDrillDown).toHaveBeenCalledWith("weekly", "2026-03-01");
+
+    // The currently-focused month (July) isn't a button, but still double-clicks.
+    fireEvent.doubleClick(screen.getByLabelText("Focus July"));
+    expect(onDrillDown).toHaveBeenCalledWith("weekly", "2026-07-01");
+  });
+
+  it("does nothing on double-click when onDrillDown isn't provided", async () => {
+    render(
+      <TasksProvider repository={fakeRepository()}>
+        <MonthlyView anchor={ANCHOR} onAnchorChange={vi.fn()} />
+      </TasksProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Focus March" })).toBeTruthy(),
+    );
+    // Should not throw.
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Focus March" }));
+  });
 });
 
 describe("YearlyView", () => {

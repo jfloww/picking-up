@@ -9,12 +9,14 @@ export function YearGrid({
   year,
   focusedMonth,
   onFocusMonth,
+  onDrillDownMonth,
   sideLabel,
   sideScope,
 }: {
   year: string;
   focusedMonth?: string;
   onFocusMonth?: (monthKey: string) => void;
+  onDrillDownMonth?: (monthKey: string) => void;
   sideLabel: string;
   sideScope: Scope;
 }) {
@@ -43,6 +45,9 @@ export function YearGrid({
                 key={month}
                 focused={month === focusedMonth}
                 onFocus={() => onFocusMonth?.(month)}
+                onDoubleClick={
+                  onDrillDownMonth ? () => onDrillDownMonth(month) : undefined
+                }
                 aria-label={`Focus ${name}`}
                 label={name}
                 className="flex h-24 flex-col p-1.5"
