@@ -74,6 +74,12 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
                 <button
                   type="button"
                   onDoubleClick={() => onDrillDown?.("daily", date)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onDrillDown?.("daily", date);
+                    }
+                  }}
                   aria-label={`Go to ${date}`}
                   className={cn(
                     "text-left text-xs font-semibold",

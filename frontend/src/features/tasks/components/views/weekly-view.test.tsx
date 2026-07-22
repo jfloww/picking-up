@@ -106,4 +106,11 @@ describe("WeeklyView", () => {
     fireEvent.doubleClick(screen.getByLabelText("Go to 2026-07-14"));
     expect(onDrillDown).toHaveBeenCalledWith("daily", "2026-07-14");
   });
+
+  it("calls onDrillDown('daily', date) when Enter is pressed on a day's date button", async () => {
+    const onDrillDown = renderView();
+    await waitFor(() => expect(screen.getByLabelText("Go to 2026-07-14")).toBeTruthy());
+    fireEvent.keyDown(screen.getByLabelText("Go to 2026-07-14"), { key: "Enter" });
+    expect(onDrillDown).toHaveBeenCalledWith("daily", "2026-07-14");
+  });
 });
