@@ -247,6 +247,27 @@ describe("weekStats", () => {
     const undone = task({ scope: { kind: "day", date: "2026-07-15" }, done: false });
     expect(weekStats([done, undone], weekStart)).toEqual({ done: 1, total: 2 });
   });
+
+  it("excludes a week-scoped task rolled over from a different (earlier) week", () => {
+    const staleRollover = task({
+      scope: { kind: "week", weekStart },
+      rolledFrom: { kind: "day", date: "2026-06-28" }, // two weeks before weekStart
+    });
+    expect(weekStats([staleRollover], weekStart)).toEqual({ done: 0, total: 0 });
+  });
+
+  it("includes a week-scoped task rolled over from within this same week", () => {
+    const sameWeekRollover = task({
+      scope: { kind: "week", weekStart },
+      rolledFrom: { kind: "day", date: "2026-07-14" }, // within weekStart's week
+    });
+    expect(weekStats([sameWeekRollover], weekStart)).toEqual({ done: 0, total: 1 });
+  });
+
+  it("includes a genuine week-level task with no rolledFrom", () => {
+    const genuine = task({ scope: { kind: "week", weekStart } });
+    expect(weekStats([genuine], weekStart)).toEqual({ done: 0, total: 1 });
+  });
 });
 
 describe("dayTasksForWeek", () => {

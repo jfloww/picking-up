@@ -1,5 +1,5 @@
 import type { Task } from "../types";
-import { weekStartOf } from "./dates";
+import { weekDates, weekStartOf } from "./dates";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -122,11 +122,13 @@ export interface WeekStats {
 }
 
 export function weekStats(tasks: Task[], weekStart: string): WeekStats {
-  const inWeek = tasks.filter(
-    (t) =>
-      (t.scope.kind === "day" && weekStartOf(t.scope.date) === weekStart) ||
-      (t.scope.kind === "week" && t.scope.weekStart === weekStart),
-  );
+  const dates = new Set(weekDates(weekStart));
+  const inWeek = tasks.filter((t) => {
+    if (t.scope.kind === "day") return weekStartOf(t.scope.date) === weekStart;
+    if (t.scope.kind !== "week" || t.scope.weekStart !== weekStart) return false;
+    if (t.rolledFrom?.kind === "day") return dates.has(t.rolledFrom.date);
+    return true;
+  });
   return {
     total: inWeek.length,
     done: inWeek.filter((t) => t.done).length,
