@@ -38,6 +38,8 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
 export function TaskItem({
   task,
   dateLabel,
+  highlight,
+  repeatLabel,
   onToggle,
   onMemoChange,
   onTimeChange,
@@ -50,6 +52,8 @@ export function TaskItem({
 }: {
   task: Task;
   dateLabel?: string;
+  highlight?: "overdue" | "pending";
+  repeatLabel?: string;
   onToggle: () => void;
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
@@ -66,7 +70,13 @@ export function TaskItem({
 
   return (
     <li>
-      <div className="flex items-center gap-2 py-1.5">
+      <div
+        className={cn(
+          "flex items-center gap-2 rounded-md py-1.5",
+          highlight === "overdue" && "border-l-2 border-destructive bg-destructive/10 pl-1.5",
+          highlight === "pending" && "border-l-2 border-warning bg-warning/10 pl-1.5",
+        )}
+      >
         <Checkbox
           checked={task.done}
           onCheckedChange={onToggle}
@@ -96,6 +106,11 @@ export function TaskItem({
             className="shrink-0 rounded bg-muted px-1 text-[10px] tabular-nums text-muted-foreground"
           >
             {doneCount}/{subtasks.length}
+          </span>
+        )}
+        {repeatLabel && (
+          <span className="shrink-0 rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground">
+            {repeatLabel}
           </span>
         )}
         {task.rolledFrom && (

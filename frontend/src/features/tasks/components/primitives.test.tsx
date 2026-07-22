@@ -127,6 +127,40 @@ describe("TaskItem v2", () => {
     expect(screen.getByText("Mon Jul 20")).toBeTruthy();
   });
 
+  it("applies overdue styling when highlight is 'overdue'", () => {
+    render(
+      <TaskItem task={makeTask({ title: "late" })} {...noopHandlers} highlight="overdue" />,
+    );
+    const row = screen.getByText("late").closest("div");
+    expect(row?.className).toContain("border-destructive");
+  });
+
+  it("applies pending styling when highlight is 'pending'", () => {
+    render(
+      <TaskItem task={makeTask({ title: "today" })} {...noopHandlers} highlight="pending" />,
+    );
+    const row = screen.getByText("today").closest("div");
+    expect(row?.className).toContain("border-warning");
+  });
+
+  it("shows no highlight border when highlight is omitted", () => {
+    render(<TaskItem task={makeTask({ title: "normal" })} {...noopHandlers} />);
+    const row = screen.getByText("normal").closest("div");
+    expect(row?.className).not.toContain("border-destructive");
+    expect(row?.className).not.toContain("border-warning");
+  });
+
+  it("renders a repeat cadence pill when repeatLabel is set", () => {
+    render(
+      <TaskItem
+        task={makeTask({ title: "gym" })}
+        {...noopHandlers}
+        repeatLabel="Weekdays"
+      />,
+    );
+    expect(screen.getByText("Weekdays")).toBeTruthy();
+  });
+
   it("renders the subtask list in the expansion", () => {
     render(
       <TaskItem
