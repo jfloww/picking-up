@@ -5,62 +5,105 @@ import { TasksProvider } from "../../store";
 import { fakeRepository, makeTask } from "../../test-utils";
 import { WeeklyView } from "./weekly-view";
 
-const ANCHOR = "2026-07-16"; // focused week: 2026-07-12 .. 2026-07-18
+const ANCHOR = "2026-07-16"; // Thursday; week: 2026-07-12 .. 2026-07-18
 
-function renderView(onAnchorChange = vi.fn(), tasks = [] as Parameters<typeof fakeRepository>[0]) {
+function renderView(onDrillDown = vi.fn(), tasks = [] as Parameters<typeof fakeRepository>[0]) {
   render(
     <TasksProvider repository={fakeRepository(tasks)}>
-      <WeeklyView anchor={ANCHOR} onAnchorChange={onAnchorChange} />
+      <WeeklyView anchor={ANCHOR} onAnchorChange={vi.fn()} onDrillDown={onDrillDown} />
     </TasksProvider>,
   );
-  return onAnchorChange;
+  return onDrillDown;
 }
 
 describe("WeeklyView", () => {
   beforeAll(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(2026, 6, 16)); // 2026-07-16, matches the fixtures
+    vi.setSystemTime(new Date(2026, 6, 16)); // 2026-07-16, matches ANCHOR
   });
   afterAll(() => {
     vi.useRealTimers();
   });
 
-  it("renders day headers and the Weekly column", async () => {
+  it("renders exactly 7 day boxes for the anchor's week, Sunday through Saturday", async () => {
     renderView();
-    await waitFor(() => expect(screen.getByText("Su")).toBeTruthy());
-    expect(screen.getByText("Weekly")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("Su 12")).toBeTruthy());
+    expect(screen.getByText("Sa 18")).toBeTruthy();
+    expect(screen.getAllByLabelText(/^Go to 2026-07-1[2-8]$/)).toHaveLength(7);
   });
 
-  it("only the focused week offers quick-add inputs (7 days + weekly cell)", async () => {
-    renderView();
-    await waitFor(() =>
-      expect(screen.getAllByLabelText("Add task")).toHaveLength(8),
-    );
+  it("shows the hero's done/total count, 0 when nothing is done", async () => {
+    const a = makeTask({ title: "a", scope: { kind: "day", date: "2026-07-14" } });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByText("This Week")).toBeTruthy());
+    expect(screen.getByText("0")).toBeTruthy();
+    expect(screen.getByText("/1")).toBeTruthy();
   });
 
-  it("shows tasks of the focused week and faded rows are clickable", async () => {
-    const task = makeTask({
-      title: "focused task",
+  it("counts a done task in the hero total", async () => {
+    const a = makeTask({ title: "a", done: true, scope: { kind: "day", date: "2026-07-14" } });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByText("1")).toBeTruthy());
+    expect(screen.getByText("/1")).toBeTruthy();
+  });
+
+  it("excludes a task from another week from the hero count", async () => {
+    const outside = makeTask({ title: "outside", scope: { kind: "day", date: "2026-07-20" } });
+    renderView(vi.fn(), [outside]);
+    await waitFor(() => expect(screen.getByText("This Week")).toBeTruthy());
+    expect(screen.getByText("0")).toBeTruthy();
+    expect(screen.getByText("/0")).toBeTruthy();
+  });
+
+  it("marks a past unfinished task overdue and today's unfinished task pending", async () => {
+    const overdue = makeTask({
+      id: "o",
+      title: "overdue task",
+      scope: { kind: "day", date: "2026-07-14" },
+    });
+    const pending = makeTask({
+      id: "p",
+      title: "pending task",
       scope: { kind: "day", date: "2026-07-16" },
     });
-    const onAnchorChange = renderView(vi.fn(), [task]);
-    await waitFor(() =>
-      expect(screen.getAllByText("focused task")).toHaveLength(2),
+    renderView(vi.fn(), [overdue, pending]);
+    await waitFor(() => expect(screen.getByText("overdue task")).toBeTruthy());
+    expect(screen.getByText("overdue task").closest("div")?.className).toContain(
+      "border-destructive",
     );
-
-    const fadedRows = screen.getAllByRole("button", { name: /Week of/ });
-    expect(fadedRows).toHaveLength(4); // July 2026 has 5 rows, 1 focused
-    fireEvent.click(fadedRows[0]);
-    expect(onAnchorChange).toHaveBeenCalledWith("2026-07-01");
+    expect(screen.getByText("pending task").closest("div")?.className).toContain(
+      "border-warning",
+    );
   });
 
-  it("shows an unfinished day task from the week in the Weekly column, dated", async () => {
-    const dayTask = makeTask({
-      id: "d",
-      title: "weekly-rollup task",
-      scope: { kind: "day", date: "2026-07-17" },
+  it("shows a repeat cadence pill on a repeating task", async () => {
+    const repeating = makeTask({
+      id: "r",
+      title: "gym",
+      scope: { kind: "day", date: "2026-07-14" },
+      repeatWeekdays: [1, 3, 5],
     });
-    renderView(vi.fn(), [dayTask]);
-    await waitFor(() => expect(screen.getByText("Fri Jul 17")).toBeTruthy());
+    renderView(vi.fn(), [repeating]);
+    await waitFor(() => expect(screen.getByText("gym")).toBeTruthy());
+    expect(screen.getByText("Mo/We/Fr")).toBeTruthy();
+  });
+
+  it("opens the detail panel when a task is clicked, and closes it on re-click", async () => {
+    const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: "2026-07-14" } });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "task a" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "task a" }));
+    await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "task a" }));
+    expect(screen.queryByLabelText("Close details")).toBeNull();
+  });
+
+  it("calls onDrillDown('daily', date) when a day's date is double-clicked", async () => {
+    const onDrillDown = renderView();
+    await waitFor(() => expect(screen.getByLabelText("Go to 2026-07-14")).toBeTruthy());
+    fireEvent.doubleClick(screen.getByLabelText("Go to 2026-07-14"));
+    expect(onDrillDown).toHaveBeenCalledWith("daily", "2026-07-14");
   });
 });
