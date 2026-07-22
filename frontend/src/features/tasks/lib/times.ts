@@ -93,3 +93,57 @@ export function weeklyRollupTasks(tasks: Task[], weekStart: string): WeeklyRollu
     return 0;
   });
 }
+
+const REPEAT_DAY_ABBR = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+export function repeatCadenceLabel(weekdays: number[]): string {
+  const sorted = [...weekdays].sort((a, b) => a - b);
+  if (sorted.length === 7) return "Daily";
+  if (sorted.length === 5 && sorted.every((d, i) => d === i + 1)) return "Weekdays";
+  return sorted.map((d) => REPEAT_DAY_ABBR[d]).join("/");
+}
+
+export function repeatLabelForTask(task: Task, tasks: Task[]): string | undefined {
+  if (task.repeatWeekdays && task.repeatWeekdays.length > 0) {
+    return repeatCadenceLabel(task.repeatWeekdays);
+  }
+  if (task.repeatSourceId) {
+    const anchor = tasks.find((t) => t.id === task.repeatSourceId);
+    if (anchor?.repeatWeekdays && anchor.repeatWeekdays.length > 0) {
+      return repeatCadenceLabel(anchor.repeatWeekdays);
+    }
+  }
+  return undefined;
+}
+
+export interface WeekStats {
+  done: number;
+  total: number;
+}
+
+export function weekStats(tasks: Task[], weekStart: string): WeekStats {
+  const inWeek = tasks.filter(
+    (t) =>
+      (t.scope.kind === "day" && weekStartOf(t.scope.date) === weekStart) ||
+      (t.scope.kind === "week" && t.scope.weekStart === weekStart),
+  );
+  return {
+    total: inWeek.length,
+    done: inWeek.filter((t) => t.done).length,
+  };
+}
+
+export function dayTasksForWeek(
+  tasks: Task[],
+  date: string,
+  weekStart: string,
+): Task[] {
+  return tasks.filter(
+    (t) =>
+      (t.scope.kind === "day" && t.scope.date === date) ||
+      (t.scope.kind === "week" &&
+        t.scope.weekStart === weekStart &&
+        t.rolledFrom?.kind === "day" &&
+        t.rolledFrom.date === date),
+  );
+}

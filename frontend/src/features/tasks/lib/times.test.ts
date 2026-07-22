@@ -1,7 +1,19 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { Task } from "../types";
-import { compareTasksForDay, isValidTime, layoutTimedTasks, nowTime, timeToMinutes, weeklyRollupTasks, yToSnappedTime } from "./times";
+import {
+  compareTasksForDay,
+  dayTasksForWeek,
+  isValidTime,
+  layoutTimedTasks,
+  nowTime,
+  repeatCadenceLabel,
+  repeatLabelForTask,
+  timeToMinutes,
+  weeklyRollupTasks,
+  weekStats,
+  yToSnappedTime,
+} from "./times";
 
 function task(overrides: Partial<Task>): Task {
   return {
@@ -175,5 +187,100 @@ describe("weeklyRollupTasks", () => {
       later.id,
       dateless.id,
     ]);
+  });
+});
+
+describe("repeatCadenceLabel", () => {
+  it("returns Daily for all 7 weekdays", () => {
+    expect(repeatCadenceLabel([0, 1, 2, 3, 4, 5, 6])).toBe("Daily");
+  });
+
+  it("returns Weekdays for exactly Mon-Fri", () => {
+    expect(repeatCadenceLabel([1, 2, 3, 4, 5])).toBe("Weekdays");
+  });
+
+  it("abbreviates a specific, non-standard set of days", () => {
+    expect(repeatCadenceLabel([5, 1, 3])).toBe("Mo/We/Fr"); // unsorted input
+  });
+
+  it("handles a single day", () => {
+    expect(repeatCadenceLabel([0])).toBe("Su");
+  });
+});
+
+describe("repeatLabelForTask", () => {
+  it("labels an anchor task from its own repeatWeekdays", () => {
+    const anchor = task({ repeatWeekdays: [1, 2, 3, 4, 5] });
+    expect(repeatLabelForTask(anchor, [anchor])).toBe("Weekdays");
+  });
+
+  it("labels a generated instance by resolving its anchor via repeatSourceId", () => {
+    const anchor = task({ id: "anchor", repeatWeekdays: [0, 6] });
+    const instance = task({ id: "inst", repeatSourceId: "anchor" });
+    expect(repeatLabelForTask(instance, [anchor, instance])).toBe("Su/Sa");
+  });
+
+  it("returns undefined for a non-repeating task", () => {
+    const plain = task({});
+    expect(repeatLabelForTask(plain, [plain])).toBeUndefined();
+  });
+
+  it("returns undefined when the anchor can't be found", () => {
+    const orphan = task({ repeatSourceId: "missing" });
+    expect(repeatLabelForTask(orphan, [orphan])).toBeUndefined();
+  });
+});
+
+describe("weekStats", () => {
+  const weekStart = "2026-07-12"; // Sunday
+
+  it("counts day-scoped tasks within the week and week-scoped tasks for it", () => {
+    const dayTask = task({ scope: { kind: "day", date: "2026-07-14" } });
+    const weekTask = task({ scope: { kind: "week", weekStart } });
+    const outside = task({ scope: { kind: "day", date: "2026-07-20" } });
+    const result = weekStats([dayTask, weekTask, outside], weekStart);
+    expect(result).toEqual({ done: 0, total: 2 });
+  });
+
+  it("counts done tasks separately from total", () => {
+    const done = task({ scope: { kind: "day", date: "2026-07-14" }, done: true });
+    const undone = task({ scope: { kind: "day", date: "2026-07-15" }, done: false });
+    expect(weekStats([done, undone], weekStart)).toEqual({ done: 1, total: 2 });
+  });
+});
+
+describe("dayTasksForWeek", () => {
+  const weekStart = "2026-07-12"; // Sunday
+  const date = "2026-07-14"; // Tuesday, in that week
+
+  it("includes a task still day-scoped on that date", () => {
+    const t = task({ scope: { kind: "day", date } });
+    expect(dayTasksForWeek([t], date, weekStart)).toEqual([t]);
+  });
+
+  it("includes a week-scoped task rolled over from that date", () => {
+    const rolled = task({
+      scope: { kind: "week", weekStart },
+      rolledFrom: { kind: "day", date },
+    });
+    expect(dayTasksForWeek([rolled], date, weekStart)).toEqual([rolled]);
+  });
+
+  it("excludes a week-scoped task rolled over from a different date", () => {
+    const rolled = task({
+      scope: { kind: "week", weekStart },
+      rolledFrom: { kind: "day", date: "2026-07-13" },
+    });
+    expect(dayTasksForWeek([rolled], date, weekStart)).toEqual([]);
+  });
+
+  it("excludes a day-scoped task on a different date", () => {
+    const t = task({ scope: { kind: "day", date: "2026-07-15" } });
+    expect(dayTasksForWeek([t], date, weekStart)).toEqual([]);
+  });
+
+  it("excludes a genuine week-level task with no rolledFrom", () => {
+    const t = task({ scope: { kind: "week", weekStart } });
+    expect(dayTasksForWeek([t], date, weekStart)).toEqual([]);
   });
 });
