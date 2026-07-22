@@ -189,6 +189,35 @@ describe("TaskItem v2", () => {
     fireEvent.click(screen.getByLabelText("Repeat on Wednesday"));
     expect(onRepeatWeekdaysChange).toHaveBeenCalledWith([3]);
   });
+
+  it("renders large size with a bigger title and time after the title", () => {
+    render(
+      <TaskItem
+        task={makeTask({ title: "big task", time: "09:00" })}
+        {...noopHandlers}
+        size="large"
+      />,
+    );
+    const title = screen.getByRole("button", { name: "big task" });
+    expect(title.className).toContain("text-2xl");
+    const row = title.parentElement!;
+    const children = Array.from(row.children);
+    const timeEl = screen.getByText("09:00");
+    expect(children.indexOf(timeEl)).toBeGreaterThan(children.indexOf(title));
+  });
+
+  it("defaults to the compact size with time before the title", () => {
+    render(
+      <TaskItem task={makeTask({ title: "small task", time: "09:00" })} {...noopHandlers} />,
+    );
+    const title = screen.getByRole("button", { name: "small task" });
+    expect(title.className).toContain("text-base");
+    expect(title.className).not.toContain("text-2xl");
+    const row = title.parentElement!;
+    const children = Array.from(row.children);
+    const timeEl = screen.getByText("09:00");
+    expect(children.indexOf(timeEl)).toBeLessThan(children.indexOf(title));
+  });
 });
 
 describe("SubtaskList", () => {

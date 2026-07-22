@@ -40,6 +40,7 @@ export function TaskItem({
   dateLabel,
   highlight,
   repeatLabel,
+  size = "default",
   onToggle,
   onMemoChange,
   onTimeChange,
@@ -54,6 +55,7 @@ export function TaskItem({
   dateLabel?: string;
   highlight?: "overdue" | "pending";
   repeatLabel?: string;
+  size?: "default" | "large";
   onToggle: () => void;
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
@@ -67,12 +69,22 @@ export function TaskItem({
   const [open, setOpen] = useState(false);
   const subtasks = task.subtasks ?? [];
   const doneCount = subtasks.filter((s) => s.done).length;
+  const large = size === "large";
+
+  const timeBadge = task.time && (
+    <span
+      className={cn("shrink-0 tabular-nums text-subtle", large ? "text-sm" : "text-xs")}
+    >
+      {task.time}
+    </span>
+  );
 
   return (
     <li>
       <div
         className={cn(
-          "flex items-center gap-2 rounded-md py-1.5",
+          "flex items-center gap-2 rounded-md",
+          large ? "bg-card p-3 ring-1 ring-border/60" : "py-1.5",
           highlight === "overdue" && "border-l-2 border-destructive bg-destructive/10 pl-1.5",
           highlight === "pending" && "border-l-2 border-warning bg-warning/10 pl-1.5",
         )}
@@ -81,40 +93,50 @@ export function TaskItem({
           checked={task.done}
           onCheckedChange={onToggle}
           aria-label={`Toggle ${task.title}`}
+          className={large ? "size-5" : undefined}
         />
         {dateLabel && (
           <span className="shrink-0 text-xs text-subtle">{dateLabel}</span>
         )}
-        {task.time && (
-          <span className="shrink-0 text-xs tabular-nums text-subtle">
-            {task.time}
-          </span>
-        )}
+        {!large && timeBadge}
         <button
           type="button"
           onClick={() => (onSelect ? onSelect() : setOpen((o) => !o))}
           className={cn(
-            "min-w-0 flex-1 truncate text-left text-base font-medium",
+            "min-w-0 flex-1 truncate text-left font-medium",
+            large ? "text-2xl font-semibold" : "text-base",
             task.done && "text-muted-foreground line-through",
           )}
         >
           {task.title}
         </button>
+        {large && timeBadge}
         {subtasks.length > 0 && (
           <span
             aria-label={`Subtasks: ${doneCount}/${subtasks.length}`}
-            className="shrink-0 rounded bg-muted px-1 text-[10px] tabular-nums text-muted-foreground"
+            className={cn(
+              "shrink-0 rounded bg-muted tabular-nums text-muted-foreground",
+              large ? "px-1.5 text-xs" : "px-1 text-[10px]",
+            )}
           >
             {doneCount}/{subtasks.length}
           </span>
         )}
         {repeatLabel && (
-          <span className="shrink-0 rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground">
+          <span
+            className={cn(
+              "shrink-0 rounded bg-muted font-medium text-muted-foreground",
+              large ? "px-1.5 text-xs" : "px-1 text-[10px]",
+            )}
+          >
             {repeatLabel}
           </span>
         )}
         {task.rolledFrom && (
-          <RotateCw aria-label="Rolled over" className="size-3 shrink-0 text-subtle" />
+          <RotateCw
+            aria-label="Rolled over"
+            className={cn("shrink-0 text-subtle", large ? "size-4" : "size-3")}
+          />
         )}
       </div>
       {open && (
