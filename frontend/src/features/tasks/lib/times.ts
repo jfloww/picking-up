@@ -1,5 +1,5 @@
 import type { Task } from "../types";
-import { weekStartOf } from "./dates";
+import { DAY_LABELS, weekDates, weekStartOf } from "./dates";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -92,4 +92,58 @@ export function weeklyRollupTasks(tasks: Task[], weekStart: string): WeeklyRollu
     if (b.date) return 1;
     return 0;
   });
+}
+
+export function repeatCadenceLabel(weekdays: number[]): string {
+  const sorted = [...weekdays].sort((a, b) => a - b);
+  if (sorted.length === 7) return "Daily";
+  if (sorted.length === 5 && sorted.every((d, i) => d === i + 1)) return "Weekdays";
+  return sorted.map((d) => DAY_LABELS[d]).join("/");
+}
+
+export function repeatLabelForTask(task: Task, tasks: Task[]): string | undefined {
+  if (task.repeatWeekdays && task.repeatWeekdays.length > 0) {
+    return repeatCadenceLabel(task.repeatWeekdays);
+  }
+  if (task.repeatSourceId) {
+    const anchor = tasks.find((t) => t.id === task.repeatSourceId);
+    if (anchor?.repeatWeekdays && anchor.repeatWeekdays.length > 0) {
+      return repeatCadenceLabel(anchor.repeatWeekdays);
+    }
+  }
+  return undefined;
+}
+
+export interface WeekStats {
+  done: number;
+  total: number;
+}
+
+export function weekStats(tasks: Task[], weekStart: string): WeekStats {
+  const dates = new Set(weekDates(weekStart));
+  const inWeek = tasks.filter((t) => {
+    if (t.scope.kind === "day") return weekStartOf(t.scope.date) === weekStart;
+    if (t.scope.kind !== "week" || t.scope.weekStart !== weekStart) return false;
+    if (t.rolledFrom?.kind === "day") return dates.has(t.rolledFrom.date);
+    return true;
+  });
+  return {
+    total: inWeek.length,
+    done: inWeek.filter((t) => t.done).length,
+  };
+}
+
+export function dayTasksForWeek(
+  tasks: Task[],
+  date: string,
+  weekStart: string,
+): Task[] {
+  return tasks.filter(
+    (t) =>
+      (t.scope.kind === "day" && t.scope.date === date) ||
+      (t.scope.kind === "week" &&
+        t.scope.weekStart === weekStart &&
+        t.rolledFrom?.kind === "day" &&
+        t.rolledFrom.date === date),
+  );
 }

@@ -2,16 +2,7 @@
 
 import { useState } from "react";
 
-import {
-  addDays,
-  dayLabel,
-  monthKeyOf,
-  monthLabel,
-  nextMonthKey,
-  prevMonthKey,
-  todayKey,
-  yearOf,
-} from "../lib/dates";
+import { addDays, dayLabel, todayKey, weekRangeLabel, weekStartOf, yearOf } from "../lib/dates";
 import { TasksProvider, useTasks } from "../store";
 import { ViewSwitcher, type ViewKind } from "./view-switcher";
 import { DailyView } from "./views/daily-view";
@@ -27,13 +18,8 @@ export function shiftAnchor(
   switch (view) {
     case "daily":
       return addDays(anchor, dir);
-    case "weekly": {
-      const month =
-        dir === 1
-          ? nextMonthKey(monthKeyOf(anchor))
-          : prevMonthKey(monthKeyOf(anchor));
-      return `${month}-01`;
-    }
+    case "weekly":
+      return addDays(anchor, 7 * dir);
     case "monthly":
     case "yearly":
       return `${Number(yearOf(anchor)) + dir}-${anchor.slice(5, 7)}-01`;
@@ -52,7 +38,7 @@ function dateLabelFor(view: ViewKind, anchor: string): string {
     case "daily":
       return dayLabel(anchor);
     case "weekly":
-      return monthLabel(monthKeyOf(anchor));
+      return weekRangeLabel(weekStartOf(anchor));
     case "monthly":
     case "yearly":
       return yearOf(anchor);
@@ -82,7 +68,14 @@ function CalendarInner() {
         />
       </div>
       <div className="min-h-0 flex-1">
-        <View anchor={anchor} onAnchorChange={setAnchor} />
+        <View
+          anchor={anchor}
+          onAnchorChange={setAnchor}
+          onDrillDown={(nextView, dateKey) => {
+            setView(nextView);
+            setAnchor(dateKey);
+          }}
+        />
       </div>
     </div>
   );

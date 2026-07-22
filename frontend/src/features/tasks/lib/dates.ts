@@ -1,3 +1,5 @@
+export const DAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
 function parse(dateKey: string): Date {
   const [y, m, d] = dateKey.split("-").map(Number);
   return new Date(y, m - 1, d);
@@ -106,4 +108,12 @@ export function shortDateLabel(dateKey: string, today: string): string {
   const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
   const month = d.toLocaleDateString("en-US", { month: "short" });
   return `${weekday} ${month} ${d.getDate()}`;
+}
+
+export function weekRangeLabel(weekStart: string): string {
+  const start = parse(weekStart);
+  const end = parse(addDays(weekStart, 6));
+  const fmt = (d: Date) =>
+    `${d.toLocaleDateString("en-US", { month: "short" })} ${d.getDate()}`;
+  return `${fmt(start)} – ${fmt(end)}`;
 }

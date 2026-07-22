@@ -127,6 +127,40 @@ describe("TaskItem v2", () => {
     expect(screen.getByText("Mon Jul 20")).toBeTruthy();
   });
 
+  it("applies overdue styling when highlight is 'overdue'", () => {
+    render(
+      <TaskItem task={makeTask({ title: "late" })} {...noopHandlers} highlight="overdue" />,
+    );
+    const row = screen.getByText("late").closest("div");
+    expect(row?.className).toContain("border-destructive");
+  });
+
+  it("applies pending styling when highlight is 'pending'", () => {
+    render(
+      <TaskItem task={makeTask({ title: "today" })} {...noopHandlers} highlight="pending" />,
+    );
+    const row = screen.getByText("today").closest("div");
+    expect(row?.className).toContain("border-warning");
+  });
+
+  it("shows no highlight border when highlight is omitted", () => {
+    render(<TaskItem task={makeTask({ title: "normal" })} {...noopHandlers} />);
+    const row = screen.getByText("normal").closest("div");
+    expect(row?.className).not.toContain("border-destructive");
+    expect(row?.className).not.toContain("border-warning");
+  });
+
+  it("renders a repeat cadence pill when repeatLabel is set", () => {
+    render(
+      <TaskItem
+        task={makeTask({ title: "gym" })}
+        {...noopHandlers}
+        repeatLabel="Weekdays"
+      />,
+    );
+    expect(screen.getByText("Weekdays")).toBeTruthy();
+  });
+
   it("renders the subtask list in the expansion", () => {
     render(
       <TaskItem
@@ -224,6 +258,28 @@ describe("PeriodCell", () => {
       </PeriodCell>,
     );
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("calls onDoubleClick when the faded cell is double-clicked", () => {
+    const onDoubleClick = vi.fn();
+    render(
+      <PeriodCell focused={false} onDoubleClick={onDoubleClick} label="W1">
+        <span>content</span>
+      </PeriodCell>,
+    );
+    fireEvent.doubleClick(screen.getByText("content"));
+    expect(onDoubleClick).toHaveBeenCalled();
+  });
+
+  it("calls onDoubleClick when the focused cell is double-clicked", () => {
+    const onDoubleClick = vi.fn();
+    render(
+      <PeriodCell focused onDoubleClick={onDoubleClick} label="W1">
+        <span>content</span>
+      </PeriodCell>,
+    );
+    fireEvent.doubleClick(screen.getByText("content"));
+    expect(onDoubleClick).toHaveBeenCalled();
   });
 });
 
@@ -327,5 +383,95 @@ describe("ScopeTasks weekly rollup", () => {
       </TasksProvider>,
     );
     await waitFor(() => expect(screen.getByText("rolled task")).toBeTruthy());
+  });
+});
+
+describe("ScopeTasks day box (Weekly view props)", () => {
+  it("calls onSelectTask instead of expanding inline when provided", async () => {
+    const day = todayKey();
+    const t = makeTask({ title: "click me", scope: { kind: "day", date: day } });
+    const onSelectTask = vi.fn();
+    render(
+      <TasksProvider repository={fakeRepository([t])}>
+        <ScopeTasks scope={{ kind: "day", date: day }} onSelectTask={onSelectTask} />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("click me")).toBeTruthy());
+    fireEvent.click(screen.getByText("click me"));
+    expect(onSelectTask).toHaveBeenCalledWith(t.id);
+    expect(screen.queryByPlaceholderText("Memo")).toBeNull();
+  });
+
+  it("with highlightOverdue, marks a past unfinished task overdue via its rolled-over week scope", async () => {
+    const past = addDays(todayKey(), -2);
+    const t = makeTask({ title: "old task", scope: { kind: "day", date: past } });
+    render(
+      <TasksProvider repository={fakeRepository([t])}>
+        <ScopeTasks scope={{ kind: "day", date: past }} highlightOverdue />
+      </TasksProvider>,
+    );
+    // rolloverTasks (run on load) has already converted this to week scope by
+    // the time it renders, so this also proves the rolled-over item is found.
+    await waitFor(() => expect(screen.getByText("old task")).toBeTruthy());
+    const row = screen.getByText("old task").closest("div");
+    expect(row?.className).toContain("border-destructive");
+  });
+
+  it("with highlightOverdue, marks today's unfinished task pending, not overdue", async () => {
+    const day = todayKey();
+    const t = makeTask({ title: "today task", scope: { kind: "day", date: day } });
+    render(
+      <TasksProvider repository={fakeRepository([t])}>
+        <ScopeTasks scope={{ kind: "day", date: day }} highlightOverdue />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("today task")).toBeTruthy());
+    const row = screen.getByText("today task").closest("div");
+    expect(row?.className).toContain("border-warning");
+    expect(row?.className).not.toContain("border-destructive");
+  });
+
+  it("without highlightOverdue, a past unfinished task is not found by a day-scope query", async () => {
+    const past = addDays(todayKey(), -2);
+    const t = makeTask({ title: "rolled away", scope: { kind: "day", date: past } });
+    render(
+      <TasksProvider repository={fakeRepository([t])}>
+        <ScopeTasks scope={{ kind: "day", date: past }} quickAdd />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByLabelText("Add task")).toBeTruthy());
+    expect(screen.queryByText("rolled away")).toBeNull();
+  });
+
+  it("with showRepeatLabel, renders the resolved cadence pill", async () => {
+    const day = todayKey();
+    const t = makeTask({
+      title: "gym",
+      scope: { kind: "day", date: day },
+      repeatWeekdays: [1, 2, 3, 4, 5],
+    });
+    render(
+      <TasksProvider repository={fakeRepository([t])}>
+        <ScopeTasks scope={{ kind: "day", date: day }} showRepeatLabel />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("gym")).toBeTruthy());
+    expect(screen.getByText("Weekdays")).toBeTruthy();
+  });
+
+  it("without showRepeatLabel, no pill renders even for a repeating task", async () => {
+    const day = todayKey();
+    const t = makeTask({
+      title: "gym",
+      scope: { kind: "day", date: day },
+      repeatWeekdays: [1, 2, 3, 4, 5],
+    });
+    render(
+      <TasksProvider repository={fakeRepository([t])}>
+        <ScopeTasks scope={{ kind: "day", date: day }} />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("gym")).toBeTruthy());
+    expect(screen.queryByText("Weekdays")).toBeNull();
   });
 });
