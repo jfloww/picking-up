@@ -141,3 +141,64 @@ describe("DayTimeline", () => {
     expect(screen.queryByTestId("drag-preview-line")).toBeNull();
   });
 });
+
+describe("DayTimeline same-day overdue highlighting", () => {
+  it("marks a past-time undone chip overdue when viewing today", async () => {
+    const day = todayKey();
+    const t = makeTask({
+      id: "t",
+      title: "morning meeting",
+      time: "09:00",
+      scope: { kind: "day", date: day },
+    });
+    renderTimeline(day, [t]);
+    await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
+    const row = screen.getByText("morning meeting").closest("div");
+    expect(row?.className).toContain("border-destructive");
+  });
+
+  it("marks a future-time undone chip pending when viewing today", async () => {
+    const day = todayKey();
+    const t = makeTask({
+      id: "t",
+      title: "afternoon call",
+      time: "16:00",
+      scope: { kind: "day", date: day },
+    });
+    renderTimeline(day, [t]);
+    await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
+    const row = screen.getByText("afternoon call").closest("div");
+    expect(row?.className).toContain("border-warning");
+  });
+
+  it("does not highlight a chip when viewing a non-today date", async () => {
+    const other = "2026-07-17";
+    const t = makeTask({
+      id: "t",
+      title: "tomorrow's task",
+      time: "09:00",
+      scope: { kind: "day", date: other },
+    });
+    renderTimeline(other, [t]);
+    await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
+    const row = screen.getByText("tomorrow's task").closest("div");
+    expect(row?.className).not.toContain("border-destructive");
+    expect(row?.className).not.toContain("border-warning");
+  });
+
+  it("does not highlight a done chip even past its time", async () => {
+    const day = todayKey();
+    const t = makeTask({
+      id: "t",
+      title: "done early task",
+      time: "09:00",
+      done: true,
+      scope: { kind: "day", date: day },
+    });
+    renderTimeline(day, [t]);
+    await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
+    const row = screen.getByText("done early task").closest("div");
+    expect(row?.className).not.toContain("border-destructive");
+    expect(row?.className).not.toContain("border-warning");
+  });
+});
