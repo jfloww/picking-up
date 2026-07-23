@@ -17,7 +17,7 @@ import { dayTasksForWeek, resolveRepeatWeekdays, weekStats } from "../../lib/tim
 import { useTasks } from "../../store";
 import type { ViewKind } from "../view-switcher";
 import { ScopeTasks } from "../scope-tasks";
-import { TaskDetailPanel } from "../task-detail-panel";
+import { TaskDetailDrawer } from "../task-detail-drawer";
 import { taskItemHandlers } from "../task-item";
 
 export interface CalendarViewProps {
@@ -51,7 +51,13 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
     : undefined;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
+    <div
+      data-testid="weekly-view"
+      className={cn(
+        "flex h-full min-h-0 flex-col gap-2 transition-[padding-right] duration-200 ease-out",
+        selectedTask && "pr-[400px]",
+      )}
+    >
       <div className="shrink-0 rounded-md bg-muted/40 p-3">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">
           This Week
@@ -68,14 +74,12 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
       </div>
 
       {selectedTask && (
-        <div className="shrink-0">
-          <TaskDetailPanel
-            task={selectedTask}
-            upcomingRepeatDates={selectedTaskUpcomingRepeatDates}
-            onClose={() => setSelectedTaskId(null)}
-            {...taskItemHandlers(selectedTask.id, actions)}
-          />
-        </div>
+        <TaskDetailDrawer
+          task={selectedTask}
+          upcomingRepeatDates={selectedTaskUpcomingRepeatDates}
+          onClose={() => setSelectedTaskId(null)}
+          {...taskItemHandlers(selectedTask.id, actions)}
+        />
       )}
 
       <div className="grid min-h-0 flex-1 grid-cols-7 gap-1.5">
