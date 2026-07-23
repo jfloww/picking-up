@@ -31,7 +31,7 @@ describe("TaskTimeEditor", () => {
     expect(onTimeChange).toHaveBeenCalledWith(undefined);
   });
 
-  it("shows the duration select only when a time is set", () => {
+  it("shows the duration input only when a time is set", () => {
     const { rerender } = render(<TaskTimeEditor {...noopHandlers} />);
     expect(screen.queryByLabelText("Task duration")).toBeNull();
 
@@ -39,29 +39,23 @@ describe("TaskTimeEditor", () => {
     expect(screen.getByLabelText("Task duration")).toBeTruthy();
   });
 
-  it("renders the duration presets and the given value", () => {
+  it("is a number input that offers the duration presets as suggestions, not a hard cap", () => {
     render(<TaskTimeEditor time="14:00" durationMinutes={90} {...noopHandlers} />);
-    const select = screen.getByLabelText("Task duration") as HTMLSelectElement;
-    expect(select.value).toBe("90");
-    const labels = Array.from(select.options).map((o) => o.textContent);
-    expect(labels).toEqual(["No duration", "15m", "30m", "45m", "1h", "1.5h", "2h"]);
+    const input = screen.getByLabelText("Task duration") as HTMLInputElement;
+    expect(input.type).toBe("number");
+    expect(input.value).toBe("90");
+
+    const datalist = document.getElementById(input.list!.id) as HTMLDataListElement;
+    const labels = Array.from(datalist.options).map((o) => o.textContent);
+    expect(labels).toEqual(["15m", "30m", "45m", "1h", "1.5h", "2h"]);
   });
 
-  it("styles every option with the popover tokens, so the native dropdown popup isn't unstyled white-on-white", () => {
+  it("defaults to an empty duration when durationMinutes is unset", () => {
     render(<TaskTimeEditor time="14:00" {...noopHandlers} />);
-    const select = screen.getByLabelText("Task duration") as HTMLSelectElement;
-    for (const option of Array.from(select.options)) {
-      expect(option.className).toContain("bg-popover");
-      expect(option.className).toContain("text-popover-foreground");
-    }
+    expect((screen.getByLabelText("Task duration") as HTMLInputElement).value).toBe("");
   });
 
-  it("defaults to no duration selected when durationMinutes is unset", () => {
-    render(<TaskTimeEditor time="14:00" {...noopHandlers} />);
-    expect((screen.getByLabelText("Task duration") as HTMLSelectElement).value).toBe("");
-  });
-
-  it("calls onDurationChange with a number on selection, and undefined for 'No duration'", () => {
+  it("calls onDurationChange with a typed number, including values well past the presets", () => {
     const onDurationChange = vi.fn();
     render(
       <TaskTimeEditor
@@ -71,11 +65,25 @@ describe("TaskTimeEditor", () => {
         onDurationChange={onDurationChange}
       />,
     );
-    const select = screen.getByLabelText("Task duration");
-    fireEvent.change(select, { target: { value: "60" } });
+    const input = screen.getByLabelText("Task duration");
+    fireEvent.change(input, { target: { value: "60" } });
     expect(onDurationChange).toHaveBeenCalledWith(60);
 
-    fireEvent.change(select, { target: { value: "" } });
+    fireEvent.change(input, { target: { value: "300" } }); // 5h, past every preset
+    expect(onDurationChange).toHaveBeenCalledWith(300);
+
+    fireEvent.change(input, { target: { value: "" } });
     expect(onDurationChange).toHaveBeenCalledWith(undefined);
+  });
+
+  it("gives each instance its own datalist id, so two open editors never collide", () => {
+    render(
+      <>
+        <TaskTimeEditor time="09:00" {...noopHandlers} />
+        <TaskTimeEditor time="10:00" {...noopHandlers} />
+      </>,
+    );
+    const [first, second] = screen.getAllByLabelText("Task duration") as HTMLInputElement[];
+    expect(first.list!.id).not.toBe(second.list!.id);
   });
 });

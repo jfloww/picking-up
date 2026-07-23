@@ -74,9 +74,9 @@ describe("TaskDetailFields showTime", () => {
         onDurationChange={onDurationChange}
       />,
     );
-    const select = screen.getByLabelText("Task duration") as HTMLSelectElement;
-    expect(select.value).toBe("30");
-    fireEvent.change(select, { target: { value: "60" } });
+    const input = screen.getByLabelText("Task duration") as HTMLInputElement;
+    expect(input.value).toBe("30");
+    fireEvent.change(input, { target: { value: "60" } });
     expect(onDurationChange).toHaveBeenCalledWith(60);
   });
 });
