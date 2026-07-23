@@ -25,6 +25,7 @@ export interface Task {
   repeatSourceId?: string;   // set only on a task generated from an anchor
   priority?: boolean;
   durationMinutes?: number; // meaningful alongside `time`; a positive integer
+  background?: boolean; // renders in the timeline's slim background lane instead of the regular overlap columns
 }
 
 export function scopeKey(scope: Scope): string {

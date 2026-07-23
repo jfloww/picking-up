@@ -167,6 +167,82 @@ describe("DayTimeline", () => {
     expect(screen.getByTestId("chip-b").style.left).toBe("calc(50% + 2px)");
   });
 
+  it("renders no background lane when no task is marked background", async () => {
+    const day = todayKey();
+    const t = makeTask({ id: "t", title: "dentist", time: "09:00", scope: { kind: "day", date: day } });
+    renderTimeline(day, [t]);
+    await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
+    expect(screen.queryByTestId("background-lane")).toBeNull();
+    expect(screen.getByTestId("regular-lane").style.left).toBe("0px");
+  });
+
+  it("renders a background task in its own slim lane, separate from the regular lane", async () => {
+    const day = todayKey();
+    const long = makeTask({
+      id: "long",
+      title: "Long-Term Strategy",
+      time: "08:00",
+      durationMinutes: 540,
+      background: true,
+      scope: { kind: "day", date: day },
+    });
+    const regular = makeTask({
+      id: "reg",
+      title: "Finalize API proposal",
+      time: "09:00",
+      durationMinutes: 60,
+      scope: { kind: "day", date: day },
+    });
+    renderTimeline(day, [long, regular]);
+
+    await waitFor(() => expect(screen.getByTestId("background-lane")).toBeTruthy());
+    expect(screen.getByTestId("background-lane").contains(screen.getByTestId("chip-long"))).toBe(
+      true,
+    );
+    expect(screen.getByTestId("regular-lane").contains(screen.getByTestId("chip-reg"))).toBe(
+      true,
+    );
+    // the regular task doesn't overlap any other regular task, so it still gets full width
+    expect(screen.getByTestId("chip-reg").style.width).toBe("calc(100% - 4px)");
+  });
+
+  it("shifts the regular lane to the right of the background lane when one exists", async () => {
+    const day = todayKey();
+    const long = makeTask({
+      id: "long",
+      title: "Long-Term Strategy",
+      time: "08:00",
+      durationMinutes: 540,
+      background: true,
+      scope: { kind: "day", date: day },
+    });
+    renderTimeline(day, [long]);
+    await waitFor(() => expect(screen.getByTestId("background-lane")).toBeTruthy());
+    expect(screen.getByTestId("regular-lane").style.left).toBe("104px"); // 96 + 8
+  });
+
+  it("splits two regular tasks with overlapping durations (but different start times) into side-by-side columns", async () => {
+    const day = todayKey();
+    const long = makeTask({
+      id: "a",
+      title: "a",
+      time: "08:00",
+      durationMinutes: 540,
+      scope: { kind: "day", date: day },
+    });
+    const short = makeTask({
+      id: "b",
+      title: "b",
+      time: "09:00",
+      durationMinutes: 60,
+      scope: { kind: "day", date: day },
+    });
+    renderTimeline(day, [long, short]);
+    await waitFor(() => expect(screen.getByTestId("chip-a")).toBeTruthy());
+    expect(screen.getByTestId("chip-a").style.width).toBe("calc(50% - 4px)");
+    expect(screen.getByTestId("chip-b").style.width).toBe("calc(50% - 4px)");
+  });
+
   it("shows the drag preview line on the rail when dragState has a previewTime", async () => {
     const railRef = { current: null } as React.RefObject<HTMLDivElement | null>;
     render(

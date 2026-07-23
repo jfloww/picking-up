@@ -155,6 +155,62 @@ describe("layoutTimedTasks", () => {
       { task: c, column: 0, columns: 1 },
     ]);
   });
+
+  it("splits tasks with different start times into side-by-side columns when their durations overlap", () => {
+    const long = task({ time: "08:00", durationMinutes: 540 }); // 8:00-17:00
+    const short = task({ time: "09:00", durationMinutes: 60 }); // 9:00-10:00, inside `long`
+    expect(layoutTimedTasks([long, short])).toEqual([
+      { task: long, column: 0, columns: 2 },
+      { task: short, column: 1, columns: 2 },
+    ]);
+  });
+
+  it("does not treat back-to-back tasks (end == next start) as overlapping", () => {
+    const a = task({ time: "09:00", durationMinutes: 60 }); // ends 10:00
+    const b = task({ time: "10:00", durationMinutes: 60 }); // starts exactly when a ends
+    expect(layoutTimedTasks([a, b])).toEqual([
+      { task: a, column: 0, columns: 1 },
+      { task: b, column: 0, columns: 1 },
+    ]);
+  });
+
+  it("gives a duration-less task a 30-minute nominal footprint, so a start inside that window overlaps", () => {
+    const a = task({ time: "09:00" }); // no duration -> nominal 09:00-09:30
+    const b = task({ time: "09:15" }); // falls inside a's nominal window
+    expect(layoutTimedTasks([a, b])).toEqual([
+      { task: a, column: 0, columns: 2 },
+      { task: b, column: 1, columns: 2 },
+    ]);
+  });
+
+  it("does not overlap a duration-less task with one starting exactly when its nominal window ends", () => {
+    const a = task({ time: "09:00" }); // no duration -> nominal 09:00-09:30
+    const c = task({ time: "09:30" });
+    expect(layoutTimedTasks([a, c])).toEqual([
+      { task: a, column: 0, columns: 1 },
+      { task: c, column: 0, columns: 1 },
+    ]);
+  });
+
+  it("computes the column count dynamically for 3+ concurrent tasks, not capped at 2", () => {
+    const a = task({ time: "09:00", durationMinutes: 60 });
+    const b = task({ time: "09:15", durationMinutes: 60 });
+    const c = task({ time: "09:30", durationMinutes: 60 });
+    const layout = layoutTimedTasks([a, b, c]);
+    expect(layout.every((l) => l.columns === 3)).toBe(true);
+    expect(new Set(layout.map((l) => l.column))).toEqual(new Set([0, 1, 2]));
+  });
+
+  it("reuses a freed column once its occupant ends, instead of growing columns unnecessarily", () => {
+    const a = task({ time: "09:00", durationMinutes: 30 }); // 9:00-9:30
+    const b = task({ time: "09:15", durationMinutes: 15 }); // 9:15-9:30, overlaps a
+    const c = task({ time: "09:30", durationMinutes: 30 }); // starts once both have ended
+    expect(layoutTimedTasks([a, b, c])).toEqual([
+      { task: a, column: 0, columns: 2 },
+      { task: b, column: 1, columns: 2 },
+      { task: c, column: 0, columns: 1 },
+    ]);
+  });
 });
 
 describe("weeklyRollupTasks", () => {

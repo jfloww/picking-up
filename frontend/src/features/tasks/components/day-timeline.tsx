@@ -16,6 +16,8 @@ const RAIL_HEIGHT = 24 * HOUR_HEIGHT;
 const VIEWPORT_HOURS = 12; // hours visible in the rail's scroll viewport at once
 const VIEWPORT_HEIGHT = VIEWPORT_HOURS * HOUR_HEIGHT;
 const DEFAULT_SCROLL_HOUR = 7; // fallback start for non-today dates
+const BACKGROUND_LANE_WIDTH = 96; // px; only reserved when a background task exists that day
+const BACKGROUND_LANE_GAP = 8;
 
 const toOffset = (time: string) => (timeToMinutes(time) * HOUR_HEIGHT) / 60;
 
@@ -49,6 +51,9 @@ export function DayTimeline({
   const key = scopeKey(scope);
   const timed = tasks.filter((t) => scopeKey(t.scope) === key && t.time).sort(compareTasksForDay);
   const activeTimedCount = timed.filter((task) => !task.done).length;
+  const backgroundTimed = timed.filter((t) => t.background);
+  const regularTimed = timed.filter((t) => !t.background);
+  const hasBackgroundLane = backgroundTimed.length > 0;
   const today = todayKey();
   const isToday = date === today;
   const currentTime = nowTime();
@@ -115,49 +120,99 @@ export function DayTimeline({
           )}
 
           <div className="absolute inset-y-0 right-10 left-[104px]">
-            {layoutTimedTasks(timed).map(({ task: t, column, columns }) => {
-              const highlight =
-                isToday && !t.done
-                  ? isPastToday(t.time!, date, today, currentTime)
-                    ? "overdue"
-                    : "pending"
-                  : undefined;
-              return (
-                <div
-                  key={t.id}
-                  data-testid={`chip-${t.id}`}
-                  className={cn(
-                    "absolute z-20 min-h-12 touch-none overflow-hidden rounded-r-lg border-l-2 bg-card transition-colors hover:bg-muted focus-within:z-30",
-                    t.done
-                      ? "border-l-muted-foreground bg-muted/10 opacity-60"
-                      : highlight === "overdue"
-                        ? "border-l-destructive bg-destructive/10"
-                        : highlight === "pending"
-                          ? "border-l-warning bg-warning/10"
-                          : "border-l-muted-foreground",
-                  )}
-                  style={{
-                    top: toOffset(t.time!),
-                    left: `calc(${(column / columns) * 100}% + 2px)`,
-                    width: `calc(${100 / columns}% - 4px)`,
-                    height: t.durationMinutes
-                      ? (t.durationMinutes * HOUR_HEIGHT) / 60
-                      : undefined,
-                  }}
-                  {...getDragHandlers(t.id, t.title)}
-                >
-                  <ul>
-                    <TaskItem
-                      task={t}
-                      size="timeline"
-                      highlight={highlight}
-                      {...taskItemHandlers(t.id, actions)}
-                      onSelect={onSelectTask && (() => onSelectTask(t.id))}
-                    />
-                  </ul>
-                </div>
-              );
-            })}
+            {hasBackgroundLane && (
+              <div
+                data-testid="background-lane"
+                className="absolute inset-y-0 left-0"
+                style={{ width: BACKGROUND_LANE_WIDTH }}
+              >
+                {backgroundTimed.map((t) => {
+                  const highlight =
+                    isToday && !t.done
+                      ? isPastToday(t.time!, date, today, currentTime)
+                        ? "overdue"
+                        : "pending"
+                      : undefined;
+                  return (
+                    <div
+                      key={t.id}
+                      data-testid={`chip-${t.id}`}
+                      className={cn(
+                        "absolute inset-x-1 z-10 min-h-12 touch-none overflow-hidden rounded-md border border-border/60 bg-muted/40 opacity-80 transition-colors hover:bg-muted/70 focus-within:z-30",
+                        t.done && "opacity-40",
+                      )}
+                      style={{
+                        top: toOffset(t.time!),
+                        height: t.durationMinutes
+                          ? (t.durationMinutes * HOUR_HEIGHT) / 60
+                          : undefined,
+                      }}
+                      {...getDragHandlers(t.id, t.title)}
+                    >
+                      <ul>
+                        <TaskItem
+                          task={t}
+                          size="timeline"
+                          highlight={highlight}
+                          {...taskItemHandlers(t.id, actions)}
+                          onSelect={onSelectTask && (() => onSelectTask(t.id))}
+                        />
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div
+              data-testid="regular-lane"
+              className="absolute inset-y-0 right-0"
+              style={{ left: hasBackgroundLane ? BACKGROUND_LANE_WIDTH + BACKGROUND_LANE_GAP : 0 }}
+            >
+              {layoutTimedTasks(regularTimed).map(({ task: t, column, columns }) => {
+                const highlight =
+                  isToday && !t.done
+                    ? isPastToday(t.time!, date, today, currentTime)
+                      ? "overdue"
+                      : "pending"
+                    : undefined;
+                return (
+                  <div
+                    key={t.id}
+                    data-testid={`chip-${t.id}`}
+                    className={cn(
+                      "absolute z-20 min-h-12 touch-none overflow-hidden rounded-r-lg border-l-2 bg-card transition-colors hover:bg-muted focus-within:z-30",
+                      t.done
+                        ? "border-l-muted-foreground bg-muted/10 opacity-60"
+                        : highlight === "overdue"
+                          ? "border-l-destructive bg-destructive/10"
+                          : highlight === "pending"
+                            ? "border-l-warning bg-warning/10"
+                            : "border-l-muted-foreground",
+                    )}
+                    style={{
+                      top: toOffset(t.time!),
+                      left: `calc(${(column / columns) * 100}% + 2px)`,
+                      width: `calc(${100 / columns}% - 4px)`,
+                      height: t.durationMinutes
+                        ? (t.durationMinutes * HOUR_HEIGHT) / 60
+                        : undefined,
+                    }}
+                    {...getDragHandlers(t.id, t.title)}
+                  >
+                    <ul>
+                      <TaskItem
+                        task={t}
+                        size="timeline"
+                        highlight={highlight}
+                        {...taskItemHandlers(t.id, actions)}
+                        onSelect={onSelectTask && (() => onSelectTask(t.id))}
+                      />
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {dragState?.previewTime && (

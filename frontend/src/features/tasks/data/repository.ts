@@ -86,17 +86,32 @@ export function normalizeTask(task: Task): Task {
     durationMinutes = undefined;
   }
 
+  let background = task.background;
+  if (background !== undefined && typeof background !== "boolean") {
+    background = undefined;
+  }
+
   if (
     time === task.time &&
     subtasks === task.subtasks &&
     repeatWeekdays === task.repeatWeekdays &&
     repeatSourceId === task.repeatSourceId &&
     priority === task.priority &&
-    durationMinutes === task.durationMinutes
+    durationMinutes === task.durationMinutes &&
+    background === task.background
   ) {
     return task;
   }
-  return { ...task, time, subtasks, repeatWeekdays, repeatSourceId, priority, durationMinutes };
+  return {
+    ...task,
+    time,
+    subtasks,
+    repeatWeekdays,
+    repeatSourceId,
+    priority,
+    durationMinutes,
+    background,
+  };
 }
 
 function isTask(value: unknown): value is Task {

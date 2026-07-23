@@ -302,4 +302,19 @@ describe("TasksProvider", () => {
       expect(result.current.tasks[0].durationMinutes).toBeUndefined();
     });
   });
+
+  describe("background action", () => {
+    it("setBackground sets and clears the flag", async () => {
+      const task = makeTask({ id: "a", time: "08:00", scope: { kind: "day", date: todayKey() } });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setBackground("a", true));
+      expect(result.current.tasks[0].background).toBe(true);
+      await waitFor(() => expect(repo.tasks[0].background).toBe(true));
+
+      act(() => result.current.setBackground("a", false));
+      expect(result.current.tasks[0].background).toBe(false);
+    });
+  });
 });
