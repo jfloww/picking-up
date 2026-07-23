@@ -1,6 +1,6 @@
 "use client";
 
-import { RotateCw, Star } from "lucide-react";
+import { Layers, RotateCw, Star } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ export function TaskDetailFields({
   onRepeatWeekdaysChange,
   onPriorityChange,
   onDurationChange,
+  onBackgroundChange,
   onDelete,
   onAddSubtask,
   onToggleSubtask,
@@ -31,6 +32,7 @@ export function TaskDetailFields({
   onRepeatWeekdaysChange: (weekdays: number[]) => void;
   onPriorityChange: (priority: boolean) => void;
   onDurationChange: (durationMinutes?: number) => void;
+  onBackgroundChange: (background: boolean) => void;
   onDelete: () => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
@@ -80,21 +82,38 @@ export function TaskDetailFields({
         </section>
       )}
 
-      <button
-        type="button"
-        onClick={() => onPriorityChange(!task.priority)}
-        aria-pressed={!!task.priority}
-        className={cn(
-          "flex w-fit items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-          task.priority
-            ? "bg-muted text-foreground"
-            : "bg-transparent text-subtle hover:bg-muted/50",
-          drawer && "px-3 py-2",
-        )}
-      >
-        <Star className={cn("size-3", task.priority && "fill-current")} />
-        Priority
-      </button>
+      <div className="flex w-fit items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPriorityChange(!task.priority)}
+          aria-pressed={!!task.priority}
+          className={cn(
+            "flex w-fit items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+            task.priority
+              ? "bg-muted text-foreground"
+              : "bg-transparent text-subtle hover:bg-muted/50",
+            drawer && "px-3 py-2",
+          )}
+        >
+          <Star className={cn("size-3", task.priority && "fill-current")} />
+          Priority
+        </button>
+        <button
+          type="button"
+          onClick={() => onBackgroundChange(!task.background)}
+          aria-pressed={!!task.background}
+          className={cn(
+            "flex w-fit items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+            task.background
+              ? "bg-muted text-foreground"
+              : "bg-transparent text-subtle hover:bg-muted/50",
+            drawer && "px-3 py-2",
+          )}
+        >
+          <Layers className={cn("size-3", task.background && "fill-current")} />
+          Background
+        </button>
+      </div>
 
       <section className={cn(drawer && "space-y-3")}>
         {drawer && (

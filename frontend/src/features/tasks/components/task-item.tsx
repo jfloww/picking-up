@@ -17,6 +17,7 @@ interface TaskItemActions {
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
   setPriority: (id: string, priority: boolean) => void;
   setDuration: (id: string, durationMinutes: number | undefined) => void;
+  setBackground: (id: string, background: boolean) => void;
   removeTask: (id: string) => void;
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
@@ -60,6 +61,7 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onRepeatWeekdaysChange: (weekdays: number[]) => actions.setRepeatWeekdays(id, weekdays),
     onPriorityChange: (priority: boolean) => actions.setPriority(id, priority),
     onDurationChange: (durationMinutes?: number) => actions.setDuration(id, durationMinutes),
+    onBackgroundChange: (background: boolean) => actions.setBackground(id, background),
     onDelete: () => actions.removeTask(id),
     onAddSubtask: (title: string) => actions.addSubtask(id, title),
     onToggleSubtask: (subtaskId: string) => actions.toggleSubtask(id, subtaskId),
@@ -79,6 +81,7 @@ export function TaskItem({
   onRepeatWeekdaysChange,
   onPriorityChange,
   onDurationChange,
+  onBackgroundChange,
   onDelete,
   onAddSubtask,
   onToggleSubtask,
@@ -96,6 +99,7 @@ export function TaskItem({
   onRepeatWeekdaysChange: (weekdays: number[]) => void;
   onPriorityChange: (priority: boolean) => void;
   onDurationChange: (durationMinutes?: number) => void;
+  onBackgroundChange: (background: boolean) => void;
   onDelete: () => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
@@ -246,6 +250,16 @@ export function TaskItem({
             Priority
           </span>
         )}
+        {task.background && (
+          <span
+            className={cn(
+              "shrink-0 rounded bg-muted font-medium text-muted-foreground",
+              large ? "px-1.5 text-[10px]" : "px-1 text-[10px]",
+            )}
+          >
+            Background
+          </span>
+        )}
         {task.rolledFrom && (
           <RotateCw
             aria-label="Rolled over"
@@ -262,6 +276,7 @@ export function TaskItem({
             onRepeatWeekdaysChange={onRepeatWeekdaysChange}
             onPriorityChange={onPriorityChange}
             onDurationChange={onDurationChange}
+            onBackgroundChange={onBackgroundChange}
             onDelete={onDelete}
             onAddSubtask={onAddSubtask}
             onToggleSubtask={onToggleSubtask}

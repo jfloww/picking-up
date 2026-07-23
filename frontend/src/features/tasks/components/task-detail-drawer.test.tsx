@@ -12,6 +12,7 @@ const noopHandlers = {
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
   onPriorityChange: (_priority: boolean) => {},
   onDurationChange: (_durationMinutes?: number) => {},
+  onBackgroundChange: (_background: boolean) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -86,10 +87,11 @@ describe("TaskDetailDrawer", () => {
   });
 
   describe("draft editing (buffered until Done)", () => {
-    it("does not call any commit handler immediately when the checkbox, priority, duration, time, memo, or repeat are edited", () => {
+    it("does not call any commit handler immediately when the checkbox, priority, background, duration, time, memo, or repeat are edited", () => {
       const handlers = {
         onToggle: vi.fn(),
         onPriorityChange: vi.fn(),
+        onBackgroundChange: vi.fn(),
         onDurationChange: vi.fn(),
         onTimeChange: vi.fn(),
         onMemoChange: vi.fn(),
@@ -100,6 +102,7 @@ describe("TaskDetailDrawer", () => {
 
       fireEvent.click(screen.getByRole("checkbox"));
       fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+      fireEvent.click(screen.getByRole("button", { name: "Background" }));
       fireEvent.change(screen.getByLabelText("Task duration"), { target: { value: "45" } });
       fireEvent.change(screen.getByLabelText("Task time"), { target: { value: "10:30" } });
       fireEvent.change(screen.getByPlaceholderText("Memo"), { target: { value: "updated" } });
@@ -108,6 +111,7 @@ describe("TaskDetailDrawer", () => {
 
       expect(handlers.onToggle).not.toHaveBeenCalled();
       expect(handlers.onPriorityChange).not.toHaveBeenCalled();
+      expect(handlers.onBackgroundChange).not.toHaveBeenCalled();
       expect(handlers.onDurationChange).not.toHaveBeenCalled();
       expect(handlers.onTimeChange).not.toHaveBeenCalled();
       expect(handlers.onMemoChange).not.toHaveBeenCalled();
@@ -121,6 +125,11 @@ describe("TaskDetailDrawer", () => {
         screen.getByRole("button", { name: "Priority" }).getAttribute("aria-pressed"),
       ).toBe("true");
 
+      fireEvent.click(screen.getByRole("button", { name: "Background" }));
+      expect(
+        screen.getByRole("button", { name: "Background" }).getAttribute("aria-pressed"),
+      ).toBe("true");
+
       const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
       fireEvent.click(checkbox);
       expect(screen.getByText("write tests").className).toContain("line-through");
@@ -130,6 +139,7 @@ describe("TaskDetailDrawer", () => {
       const handlers = {
         onToggle: vi.fn(),
         onPriorityChange: vi.fn(),
+        onBackgroundChange: vi.fn(),
         onDurationChange: vi.fn(),
         onTimeChange: vi.fn(),
         onMemoChange: vi.fn(),
@@ -141,6 +151,7 @@ describe("TaskDetailDrawer", () => {
 
       fireEvent.click(screen.getByRole("checkbox"));
       fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+      fireEvent.click(screen.getByRole("button", { name: "Background" }));
       fireEvent.change(screen.getByLabelText("Task duration"), { target: { value: "45" } });
       fireEvent.change(screen.getByLabelText("Task time"), { target: { value: "10:30" } });
       fireEvent.change(screen.getByPlaceholderText("Memo"), { target: { value: "updated" } });
@@ -151,6 +162,7 @@ describe("TaskDetailDrawer", () => {
 
       expect(handlers.onToggle).toHaveBeenCalledTimes(1);
       expect(handlers.onPriorityChange).toHaveBeenCalledWith(true);
+      expect(handlers.onBackgroundChange).toHaveBeenCalledWith(true);
       expect(handlers.onDurationChange).toHaveBeenCalledWith(45);
       expect(handlers.onTimeChange).toHaveBeenCalledWith("10:30");
       expect(handlers.onMemoChange).toHaveBeenCalledWith("updated");
@@ -162,6 +174,7 @@ describe("TaskDetailDrawer", () => {
       const handlers = {
         onToggle: vi.fn(),
         onPriorityChange: vi.fn(),
+        onBackgroundChange: vi.fn(),
         onDurationChange: vi.fn(),
         onTimeChange: vi.fn(),
         onMemoChange: vi.fn(),
@@ -172,6 +185,7 @@ describe("TaskDetailDrawer", () => {
 
       expect(handlers.onToggle).not.toHaveBeenCalled();
       expect(handlers.onPriorityChange).not.toHaveBeenCalled();
+      expect(handlers.onBackgroundChange).not.toHaveBeenCalled();
       expect(handlers.onDurationChange).not.toHaveBeenCalled();
       expect(handlers.onTimeChange).not.toHaveBeenCalled();
       expect(handlers.onMemoChange).not.toHaveBeenCalled();

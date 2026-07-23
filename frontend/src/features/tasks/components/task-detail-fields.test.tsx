@@ -10,6 +10,7 @@ const noopHandlers = {
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
   onPriorityChange: (_priority: boolean) => {},
   onDurationChange: (_durationMinutes?: number) => {},
+  onBackgroundChange: (_background: boolean) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -190,5 +191,47 @@ describe("TaskDetailFields priority", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Priority" }));
     expect(onPriorityChange).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("TaskDetailFields background", () => {
+  it("shows the background toggle unpressed for a regular task", () => {
+    render(<TaskDetailFields task={makeTask({})} {...noopHandlers} />);
+    expect(
+      screen.getByRole("button", { name: "Background" }).getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("shows the background toggle pressed for a background task", () => {
+    render(<TaskDetailFields task={makeTask({ background: true })} {...noopHandlers} />);
+    expect(
+      screen.getByRole("button", { name: "Background" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("calls onBackgroundChange with the toggled value", () => {
+    const onBackgroundChange = vi.fn();
+    render(
+      <TaskDetailFields
+        task={makeTask({ background: false })}
+        {...noopHandlers}
+        onBackgroundChange={onBackgroundChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Background" }));
+    expect(onBackgroundChange).toHaveBeenCalledWith(true);
+  });
+
+  it("toggles off when already background", () => {
+    const onBackgroundChange = vi.fn();
+    render(
+      <TaskDetailFields
+        task={makeTask({ background: true })}
+        {...noopHandlers}
+        onBackgroundChange={onBackgroundChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Background" }));
+    expect(onBackgroundChange).toHaveBeenCalledWith(false);
   });
 });

@@ -54,19 +54,68 @@ export interface TimedTaskLayout {
   columns: number;
 }
 
-export function layoutTimedTasks(timed: Task[]): TimedTaskLayout[] {
-  const groups = new Map<string, Task[]>();
-  for (const task of timed) {
-    const key = task.time!;
-    const group = groups.get(key) ?? [];
-    group.push(task);
-    groups.set(key, group);
-  }
+// Tasks with a time but no explicit duration still need an end point to
+// check overlap against — this is a layout-only footprint, never persisted.
+const NOMINAL_DURATION_MINUTES = 30;
 
-  return timed.map((task) => {
-    const group = groups.get(task.time!)!;
-    return { task, column: group.indexOf(task), columns: group.length };
-  });
+interface TimedInterval {
+  start: number;
+  end: number;
+  task: Task;
+}
+
+// Assigns side-by-side columns to overlapping tasks so none render on top
+// of each other: sort by start time, group into clusters of mutually
+// touching intervals, then within each cluster greedily place each task in
+// the first column whose previous occupant has already ended. Greedy
+// first-fit by start time is optimal for interval graphs — the column
+// count it produces equals the maximum number of tasks overlapping at any
+// instant in that cluster, no more.
+export function layoutTimedTasks(timed: Task[]): TimedTaskLayout[] {
+  const intervals: TimedInterval[] = timed
+    .map((task) => {
+      const start = timeToMinutes(task.time!);
+      const end = start + (task.durationMinutes ?? NOMINAL_DURATION_MINUTES);
+      return { start, end, task };
+    })
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const result: TimedTaskLayout[] = [];
+  let cluster: TimedInterval[] = [];
+  let clusterEnd = -Infinity;
+
+  const flushCluster = () => {
+    if (cluster.length === 0) return;
+    const columnEnds: number[] = [];
+    const columnOf = new Map<TimedInterval, number>();
+    for (const interval of cluster) {
+      let column = columnEnds.findIndex((end) => end <= interval.start);
+      if (column === -1) {
+        column = columnEnds.length;
+        columnEnds.push(interval.end);
+      } else {
+        columnEnds[column] = interval.end;
+      }
+      columnOf.set(interval, column);
+    }
+    const columns = columnEnds.length;
+    for (const interval of cluster) {
+      result.push({ task: interval.task, column: columnOf.get(interval)!, columns });
+    }
+    cluster = [];
+  };
+
+  for (const interval of intervals) {
+    if (cluster.length > 0 && interval.start >= clusterEnd) {
+      flushCluster();
+      clusterEnd = -Infinity;
+    }
+    cluster.push(interval);
+    clusterEnd = Math.max(clusterEnd, interval.end);
+  }
+  flushCluster();
+
+  return result;
 }
 
 export interface WeeklyRollupItem {
