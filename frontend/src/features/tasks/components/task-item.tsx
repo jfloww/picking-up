@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
+import { addMinutesToTime } from "../lib/times";
 import type { Task } from "../types";
 import { TaskDetailFields } from "./task-detail-fields";
 
@@ -22,10 +23,31 @@ interface TaskItemActions {
   removeSubtask: (id: string, subtaskId: string) => void;
 }
 
+function formatHourMinute(hour: number, minute: number): string {
+  return `${hour % 12 || 12}:${String(minute).padStart(2, "0")}`;
+}
+
+function periodOf(hour: number): "AM" | "PM" {
+  return hour >= 12 ? "PM" : "AM";
+}
+
 function formatTaskTime(time: string): string {
   const [hour, minute] = time.split(":").map(Number);
-  const suffix = hour >= 12 ? "PM" : "AM";
-  return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${suffix}`;
+  return `${formatHourMinute(hour, minute)} ${periodOf(hour)}`;
+}
+
+function formatTaskTimeRange(time: string, durationMinutes?: number): string {
+  if (!durationMinutes) return formatTaskTime(time);
+  const [hour, minute] = time.split(":").map(Number);
+  const end = addMinutesToTime(time, durationMinutes);
+  const [endHour, endMinute] = end.split(":").map(Number);
+  const startPeriod = periodOf(hour);
+  const endPeriod = periodOf(endHour);
+  const startLabel =
+    startPeriod === endPeriod
+      ? formatHourMinute(hour, minute)
+      : `${formatHourMinute(hour, minute)} ${startPeriod}`;
+  return `${startLabel} – ${formatHourMinute(endHour, endMinute)} ${endPeriod}`;
 }
 
 // Builds TaskItem's callback props from store actions; shared by ScopeTasks
@@ -86,7 +108,7 @@ export function TaskItem({
   const large = size === "large";
   const timeline = size === "timeline";
   const largeMeta = task.time
-    ? `${highlight === "overdue" ? "Overdue • " : ""}${formatTaskTime(task.time)}`
+    ? `${highlight === "overdue" ? "Overdue • " : ""}${formatTaskTimeRange(task.time, task.durationMinutes)}`
     : "All Day";
 
   const timeBadge = task.time && (
@@ -96,7 +118,7 @@ export function TaskItem({
         timeline ? "text-[11px]" : "text-xs",
       )}
     >
-      {formatTaskTime(task.time)}
+      {timeline ? formatTaskTimeRange(task.time, task.durationMinutes) : formatTaskTime(task.time)}
     </span>
   );
 

@@ -19,6 +19,13 @@ export function timeToMinutes(time: string): number {
   return h * 60 + m;
 }
 
+export function addMinutesToTime(time: string, minutes: number): string {
+  const total = ((timeToMinutes(time) + minutes) % 1440 + 1440) % 1440;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 export function compareTasksForDay(a: Task, b: Task): number {
   if (a.time && b.time) {
     return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { Task } from "../types";
 import {
+  addMinutesToTime,
   compareTasksForDay,
   dayTasksForWeek,
   isPastToday,
@@ -38,6 +39,21 @@ describe("isValidTime", () => {
     expect(isValidTime("9:30")).toBe(false);
     expect(isValidTime("")).toBe(false);
     expect(isValidTime("nine")).toBe(false);
+  });
+});
+
+describe("addMinutesToTime", () => {
+  it("adds minutes within the same day", () => {
+    expect(addMinutesToTime("09:00", 45)).toBe("09:45");
+    expect(addMinutesToTime("09:30", 90)).toBe("11:00");
+  });
+
+  it("wraps past midnight", () => {
+    expect(addMinutesToTime("23:30", 45)).toBe("00:15");
+  });
+
+  it("returns the same time for a zero-minute addition", () => {
+    expect(addMinutesToTime("14:00", 0)).toBe("14:00");
   });
 });
 
