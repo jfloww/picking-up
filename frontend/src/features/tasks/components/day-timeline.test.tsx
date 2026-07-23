@@ -83,6 +83,33 @@ describe("DayTimeline", () => {
     expect(screen.getByText("dentist")).toBeTruthy();
   });
 
+  it("sizes a chip's height to its duration", async () => {
+    const day = todayKey();
+    const timed = makeTask({
+      id: "t",
+      title: "dentist",
+      time: "09:00",
+      durationMinutes: 45,
+      scope: { kind: "day", date: day },
+    });
+    renderTimeline(day, [timed]);
+    await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
+    expect(screen.getByTestId("chip-t").style.height).toBe(`${(45 * HOUR_HEIGHT) / 60}px`);
+  });
+
+  it("falls back to the default compact height when no duration is set", async () => {
+    const day = todayKey();
+    const timed = makeTask({
+      id: "t",
+      title: "dentist",
+      time: "09:00",
+      scope: { kind: "day", date: day },
+    });
+    renderTimeline(day, [timed]);
+    await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
+    expect(screen.getByTestId("chip-t").style.height).toBe("");
+  });
+
   it("shows the now line only on today, at the current time", async () => {
     const { unmount } = renderTimeline(todayKey());
     await waitFor(() => expect(screen.getByTestId("now-line")).toBeTruthy());

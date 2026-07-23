@@ -364,6 +364,39 @@ describe("TaskItem v2", () => {
     expect(children.indexOf(timeEl)).toBeGreaterThan(children.indexOf(title));
   });
 
+  it("large size: shows a time range when a duration is set", () => {
+    render(
+      <TaskItem
+        task={makeTask({ title: "big task", time: "09:00", durationMinutes: 45 })}
+        {...noopHandlers}
+        size="large"
+      />,
+    );
+    expect(screen.getByText("9:00 – 9:45 AM")).toBeTruthy();
+  });
+
+  it("timeline size: shows a time range when a duration is set", () => {
+    render(
+      <TaskItem
+        task={makeTask({ title: "timeline task", time: "09:00", durationMinutes: 45 })}
+        {...noopHandlers}
+        size="timeline"
+      />,
+    );
+    expect(screen.getByText("9:00 – 9:45 AM")).toBeTruthy();
+  });
+
+  it("compact/default size: still shows only the start time, duration is not shown", () => {
+    render(
+      <TaskItem
+        task={makeTask({ title: "small task", time: "09:00", durationMinutes: 45 })}
+        {...noopHandlers}
+      />,
+    );
+    expect(screen.getByText("9:00 AM")).toBeTruthy();
+    expect(screen.queryByText(/–/)).toBeNull();
+  });
+
   it("defaults to the compact size with time before the title", () => {
     render(
       <TaskItem task={makeTask({ title: "small task", time: "09:00" })} {...noopHandlers} />,

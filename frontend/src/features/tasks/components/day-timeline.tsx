@@ -140,6 +140,9 @@ export function DayTimeline({
                     top: toOffset(t.time!),
                     left: `calc(${(column / columns) * 100}% + 2px)`,
                     width: `calc(${100 / columns}% - 4px)`,
+                    height: t.durationMinutes
+                      ? (t.durationMinutes * HOUR_HEIGHT) / 60
+                      : undefined,
                   }}
                   {...getDragHandlers(t.id, t.title)}
                 >
