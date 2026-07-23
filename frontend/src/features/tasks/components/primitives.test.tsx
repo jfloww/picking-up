@@ -153,6 +153,15 @@ describe("TaskItem", () => {
     expect(screen.getByLabelText("Rolled over")).toBeTruthy();
   });
 
+  it("styles the checkbox with the success token and completion pop, for both default and large sizes", () => {
+    const { rerender } = render(<TaskItem task={task} {...noopHandlers} />);
+    expect(screen.getByRole("checkbox").className).toContain("data-checked:bg-success");
+    expect(screen.getByRole("checkbox").className).toContain("data-checked:animate-task-complete");
+
+    rerender(<TaskItem task={task} {...noopHandlers} size="large" />);
+    expect(screen.getByRole("checkbox").className).toContain("data-checked:bg-success");
+  });
+
   it("expands to memo + delete when the title is clicked", () => {
     const onDelete = vi.fn();
     const onMemoChange = vi.fn();

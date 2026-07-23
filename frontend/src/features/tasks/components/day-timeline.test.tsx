@@ -154,6 +154,74 @@ describe("DayTimeline", () => {
     expect(screen.queryByPlaceholderText("Memo")).toBeNull();
   });
 
+  it("also opens the drawer when the time badge (not just the title) is clicked", async () => {
+    const day = todayKey();
+    const timed = makeTask({
+      id: "t",
+      title: "dentist",
+      time: "09:30",
+      scope: { kind: "day", date: day },
+    });
+    const onSelectTask = vi.fn();
+    renderTimeline(day, [timed], onSelectTask);
+    await waitFor(() => expect(screen.getByText("9:30 AM")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("9:30 AM"));
+    expect(onSelectTask).toHaveBeenCalledWith("t");
+  });
+
+  it("makes the clickable area fill the whole chip, not just its content's natural height", async () => {
+    // A chip taller than its title/time row (e.g. from a long duration) must
+    // stay fully clickable, not just the top content-height sliver — the
+    // outer chip is absolutely positioned and can be taller than its
+    // content, so the inner click target has to explicitly fill it (inset-0)
+    // rather than relying on its own content height.
+    const day = todayKey();
+    const timed = makeTask({
+      id: "t",
+      title: "dentist",
+      time: "09:00",
+      durationMinutes: 90,
+      scope: { kind: "day", date: day },
+    });
+    renderTimeline(day, [timed]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "dentist" })).toBeTruthy());
+
+    const clickTarget = screen.getByRole("button", { name: "dentist" }).closest("div")!;
+    expect(clickTarget.className).toContain("absolute");
+    expect(clickTarget.className).toContain("inset-0");
+  });
+
+  it("toggles completion from the chip's checkbox without opening the drawer", async () => {
+    const day = todayKey();
+    const timed = makeTask({
+      id: "t",
+      title: "dentist",
+      time: "09:30",
+      scope: { kind: "day", date: day },
+    });
+    const onSelectTask = vi.fn();
+    renderTimeline(day, [timed], onSelectTask);
+    await waitFor(() => expect(screen.getByLabelText("Toggle dentist")).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText("Toggle dentist"));
+    expect(onSelectTask).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Toggle dentist").getAttribute("aria-checked")).toBe("true"),
+    );
+  });
+
+  it("styles the chip's checkbox with the success token and completion pop", async () => {
+    const day = todayKey();
+    const timed = makeTask({ id: "t", title: "dentist", time: "09:30", scope: { kind: "day", date: day } });
+    renderTimeline(day, [timed]);
+    await waitFor(() => expect(screen.getByLabelText("Toggle dentist")).toBeTruthy());
+    expect(screen.getByLabelText("Toggle dentist").className).toContain("data-checked:bg-success");
+    expect(screen.getByLabelText("Toggle dentist").className).toContain(
+      "data-checked:animate-task-complete",
+    );
+  });
+
   it("lays out same-time chips in side-by-side columns", async () => {
     const day = todayKey();
     const a = makeTask({ id: "a", title: "a", time: "09:00", scope: { kind: "day", date: day } });

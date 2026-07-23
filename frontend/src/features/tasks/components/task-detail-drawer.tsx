@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
 import type { Task } from "../types";
+import { DONE_CHECKBOX_CLASS } from "./task-item";
 import { TaskDetailFields } from "./task-detail-fields";
 import { TaskTimeEditor } from "./task-time-editor";
 
@@ -131,7 +132,7 @@ export function TaskDetailDrawer({
             checked={draft.done}
             onCheckedChange={() => setDraft((d) => ({ ...d, done: !d.done }))}
             aria-label={`Toggle ${task.title}`}
-            className="mt-1 size-[18px]"
+            className={cn("mt-1 size-[18px]", DONE_CHECKBOX_CLASS)}
           />
           <div className="min-w-0 flex-1 space-y-3">
             <h2
