@@ -150,6 +150,7 @@ export function TaskDetailDrawer({
               onDurationChange={(durationMinutes) =>
                 setDraft((d) => ({ ...d, durationMinutes }))
               }
+              variant="drawer"
             />
           </div>
         </div>

@@ -15,9 +15,11 @@ const WEEKDAYS = [
 export function TaskRepeatPicker({
   weekdays,
   onChange,
+  drawer = false,
 }: {
   weekdays: number[];
   onChange: (weekdays: number[]) => void;
+  drawer?: boolean;
 }) {
   const toggle = (day: number) => {
     const next = weekdays.includes(day)
@@ -27,7 +29,11 @@ export function TaskRepeatPicker({
   };
 
   return (
-    <div className="flex items-center gap-1" role="group" aria-label="Repeat on">
+    <div
+      className={cn("flex items-center gap-1", drawer && "gap-1.5")}
+      role="group"
+      aria-label="Repeat on"
+    >
       {WEEKDAYS.map(({ label, fullName }, day) => {
         const active = weekdays.includes(day);
         return (
@@ -38,10 +44,14 @@ export function TaskRepeatPicker({
             aria-pressed={active}
             aria-label={`Repeat on ${fullName}`}
             className={cn(
-              "flex size-6 items-center justify-center rounded-md text-[10px] font-medium",
+              "flex items-center justify-center rounded-md font-medium transition-colors",
+              drawer ? "size-8 text-xs" : "size-6 text-[10px]",
               active
-                ? "bg-brand text-primary-foreground"
-                : "bg-muted text-subtle hover:bg-muted/70",
+                ? "bg-brand font-semibold text-primary-foreground"
+                : cn(
+                    "bg-muted hover:bg-muted/70",
+                    drawer ? "text-muted-foreground" : "text-subtle",
+                  ),
             )}
           >
             {label}
