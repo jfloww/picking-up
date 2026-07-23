@@ -1,6 +1,7 @@
 "use client";
 
 import { Layers, RotateCw, Star } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,15 @@ export function TaskDetailFields({
   const subtasks = task.subtasks ?? [];
   const drawer = variant === "drawer";
   const showRepeat = task.repeatWeekdays !== undefined || task.scope.kind === "day";
+  const memoRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const el = memoRef.current;
+    if (drawer && el) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [drawer]);
 
   return (
     <div className={cn(drawer ? "space-y-7" : "space-y-1.5")}>
@@ -54,6 +64,7 @@ export function TaskDetailFields({
           onTimeChange={onTimeChange}
           durationMinutes={task.durationMinutes}
           onDurationChange={onDurationChange}
+          variant={variant}
         />
       )}
       {showRepeat && (
@@ -72,6 +83,7 @@ export function TaskDetailFields({
             <TaskRepeatPicker
               weekdays={task.repeatWeekdays ?? []}
               onChange={onRepeatWeekdaysChange}
+              drawer={drawer}
             />
           )}
           {upcomingRepeatDates && upcomingRepeatDates.length > 0 && (
@@ -82,20 +94,20 @@ export function TaskDetailFields({
         </section>
       )}
 
-      <div className="flex w-fit items-center gap-2">
+      <div className={cn("flex w-fit items-center gap-2", drawer && "gap-2.5")}>
         <button
           type="button"
           onClick={() => onPriorityChange(!task.priority)}
           aria-pressed={!!task.priority}
           className={cn(
-            "flex w-fit items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+            "flex w-fit items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium transition-colors",
             task.priority
-              ? "bg-muted text-foreground"
-              : "bg-transparent text-subtle hover:bg-muted/50",
-            drawer && "px-3 py-2",
+              ? "border-transparent bg-brand text-primary-foreground"
+              : "border-border bg-transparent text-subtle hover:border-subtle hover:text-foreground",
+            drawer && "px-3.5 py-2 text-sm",
           )}
         >
-          <Star className={cn("size-3", task.priority && "fill-current")} />
+          <Star className={cn("size-3", drawer && "size-3.5", task.priority && "fill-current")} />
           Priority
         </button>
         <button
@@ -103,14 +115,14 @@ export function TaskDetailFields({
           onClick={() => onBackgroundChange(!task.background)}
           aria-pressed={!!task.background}
           className={cn(
-            "flex w-fit items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+            "flex w-fit items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium transition-colors",
             task.background
-              ? "bg-muted text-foreground"
-              : "bg-transparent text-subtle hover:bg-muted/50",
-            drawer && "px-3 py-2",
+              ? "border-transparent bg-brand text-primary-foreground"
+              : "border-border bg-transparent text-subtle hover:border-subtle hover:text-foreground",
+            drawer && "px-3.5 py-2 text-sm",
           )}
         >
-          <Layers className={cn("size-3", task.background && "fill-current")} />
+          <Layers className={cn("size-3", drawer && "size-3.5", task.background && "fill-current")} />
           Background
         </button>
       </div>
@@ -122,13 +134,23 @@ export function TaskDetailFields({
           </h4>
         )}
         <textarea
+          ref={memoRef}
           defaultValue={task.memo ?? ""}
           onBlur={(e) => onMemoChange(e.target.value)}
+          onInput={
+            drawer
+              ? (e) => {
+                  const el = e.currentTarget;
+                  el.style.height = "auto";
+                  el.style.height = `${el.scrollHeight}px`;
+                }
+              : undefined
+          }
           placeholder="Memo"
-          rows={drawer ? 5 : 2}
+          rows={drawer ? 3 : 2}
           className={cn(
             "w-full resize-none rounded-md border border-input bg-transparent p-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-            drawer && "rounded-lg bg-muted/30 p-3 text-sm leading-relaxed",
+            drawer && "overflow-hidden rounded-lg bg-muted/30 p-3 text-sm leading-relaxed",
           )}
         />
       </section>
@@ -144,6 +166,7 @@ export function TaskDetailFields({
           onAdd={onAddSubtask}
           onToggle={onToggleSubtask}
           onRemove={onRemoveSubtask}
+          drawer={drawer}
         />
       </section>
 
