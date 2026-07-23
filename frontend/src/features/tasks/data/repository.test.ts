@@ -151,6 +151,7 @@ describe("v2 field normalization", () => {
       subtasks: [{ id: "s1", title: "ok", done: false }],
       repeatWeekdays: [0, 6],
       priority: true,
+      durationMinutes: 45,
     };
     expect(normalizeTask(clean)).toBe(clean);
     const bare: Task = { ...task, id: "bare" };
@@ -173,5 +174,28 @@ describe("v2 field normalization", () => {
     const [loaded] = await repo.list();
     expect(loaded.id).toBe(task.id);
     expect(loaded.priority).toBeUndefined();
+  });
+
+  it("round-trips a valid durationMinutes", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const timed: Task = { ...task, id: "timed", time: "09:00", durationMinutes: 45 };
+    await repo.create(timed);
+    expect(await repo.list()).toEqual([timed]);
+  });
+
+  it("clears a non-positive-integer durationMinutes but keeps the task", async () => {
+    const repo = createLocalStorageRepository(
+      fakeStorage({
+        "picking-up.tasks.v1": JSON.stringify([
+          { ...task, id: "a", durationMinutes: "45" },
+          { ...task, id: "b", durationMinutes: -30 },
+          { ...task, id: "c", durationMinutes: 0 },
+          { ...task, id: "d", durationMinutes: 12.5 },
+        ]),
+      }),
+    );
+    const loaded = await repo.list();
+    expect(loaded.every((t) => t.durationMinutes === undefined)).toBe(true);
+    expect(loaded.map((t) => t.id)).toEqual(["a", "b", "c", "d"]);
   });
 });

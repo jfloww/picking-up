@@ -76,16 +76,27 @@ export function normalizeTask(task: Task): Task {
     priority = undefined;
   }
 
+  let durationMinutes = task.durationMinutes;
+  if (
+    durationMinutes !== undefined &&
+    (typeof durationMinutes !== "number" ||
+      !Number.isInteger(durationMinutes) ||
+      durationMinutes <= 0)
+  ) {
+    durationMinutes = undefined;
+  }
+
   if (
     time === task.time &&
     subtasks === task.subtasks &&
     repeatWeekdays === task.repeatWeekdays &&
     repeatSourceId === task.repeatSourceId &&
-    priority === task.priority
+    priority === task.priority &&
+    durationMinutes === task.durationMinutes
   ) {
     return task;
   }
-  return { ...task, time, subtasks, repeatWeekdays, repeatSourceId, priority };
+  return { ...task, time, subtasks, repeatWeekdays, repeatSourceId, priority, durationMinutes };
 }
 
 function isTask(value: unknown): value is Task {

@@ -50,12 +50,13 @@ export function tasksReducer(
 }
 
 interface TasksContextValue extends TasksState {
-  addTask: (title: string, scope: Scope) => void;
+  addTask: (title: string, scope: Scope) => Task | undefined;
   toggleTask: (id: string) => void;
   setMemo: (id: string, memo: string) => void;
   setTime: (id: string, time: string | undefined) => void;
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
   setPriority: (id: string, priority: boolean) => void;
+  setDuration: (id: string, durationMinutes: number | undefined) => void;
   removeTask: (id: string) => void;
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
@@ -134,7 +135,7 @@ export function TasksProvider({
       ...state,
       addTask(title, scope) {
         const trimmed = title.trim();
-        if (!trimmed) return;
+        if (!trimmed) return undefined;
         const task: Task = {
           id: crypto.randomUUID(),
           title: trimmed,
@@ -144,6 +145,7 @@ export function TasksProvider({
         };
         dispatch({ type: "added", task });
         void repo.create(task);
+        return task;
       },
       toggleTask(id) {
         const current = state.tasks.find((t) => t.id === id);
@@ -183,6 +185,13 @@ export function TasksProvider({
         const current = state.tasks.find((t) => t.id === id);
         if (!current) return;
         const task: Task = { ...current, priority };
+        dispatch({ type: "updated", task });
+        void repo.update(task);
+      },
+      setDuration(id, durationMinutes) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current) return;
+        const task: Task = { ...current, durationMinutes };
         dispatch({ type: "updated", task });
         void repo.update(task);
       },

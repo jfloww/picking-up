@@ -88,6 +88,22 @@ describe("WeeklyView", () => {
     expect(screen.getByText("Mo/We/Fr")).toBeTruthy();
   });
 
+  it("shows the anchor's upcoming repeat dates in the detail panel", async () => {
+    const repeatingAnchor = makeTask({
+      id: "r2",
+      title: "yoga",
+      scope: { kind: "day", date: "2026-07-14" },
+      repeatWeekdays: [1, 3, 5], // Mon/Wed/Fri
+    });
+    renderView(vi.fn(), [repeatingAnchor]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "yoga" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "yoga" }));
+    await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
+
+    expect(screen.getByText(/Fri Jul 17, Mon Jul 20, Wed Jul 22/)).toBeTruthy();
+  });
+
   it("opens the detail panel when a task is clicked, and closes it on re-click", async () => {
     const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: "2026-07-14" } });
     renderView(vi.fn(), [a]);

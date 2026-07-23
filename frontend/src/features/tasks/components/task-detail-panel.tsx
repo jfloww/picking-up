@@ -17,10 +17,12 @@ export function TaskDetailPanel({
   onTimeChange,
   onRepeatWeekdaysChange,
   onPriorityChange,
+  onDurationChange,
   onDelete,
   onAddSubtask,
   onToggleSubtask,
   onRemoveSubtask,
+  upcomingRepeatDates,
 }: {
   task: Task;
   onToggle: () => void;
@@ -29,10 +31,12 @@ export function TaskDetailPanel({
   onTimeChange: (time?: string) => void;
   onRepeatWeekdaysChange: (weekdays: number[]) => void;
   onPriorityChange: (priority: boolean) => void;
+  onDurationChange: (durationMinutes?: number) => void;
   onDelete: () => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
+  upcomingRepeatDates?: string[];
 }) {
   return (
     <div className="flex h-full flex-col gap-1.5 overflow-y-auto rounded-md border border-border/60 p-1.5">
@@ -50,7 +54,12 @@ export function TaskDetailPanel({
         >
           {task.title}
         </span>
-        <TaskTimeEditor time={task.time} onTimeChange={onTimeChange} />
+        <TaskTimeEditor
+          time={task.time}
+          onTimeChange={onTimeChange}
+          durationMinutes={task.durationMinutes}
+          onDurationChange={onDurationChange}
+        />
         <button
           type="button"
           onClick={onClose}
@@ -66,11 +75,13 @@ export function TaskDetailPanel({
         onTimeChange={onTimeChange}
         onRepeatWeekdaysChange={onRepeatWeekdaysChange}
         onPriorityChange={onPriorityChange}
+        onDurationChange={onDurationChange}
         onDelete={onDelete}
         onAddSubtask={onAddSubtask}
         onToggleSubtask={onToggleSubtask}
         onRemoveSubtask={onRemoveSubtask}
         showTime={false}
+        upcomingRepeatDates={upcomingRepeatDates}
       />
     </div>
   );

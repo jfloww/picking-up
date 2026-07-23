@@ -9,6 +9,7 @@ const noopHandlers = {
   onTimeChange: (_time?: string) => {},
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
   onPriorityChange: (_priority: boolean) => {},
+  onDurationChange: (_durationMinutes?: number) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -26,6 +27,57 @@ describe("TaskDetailFields showTime", () => {
       <TaskDetailFields task={makeTask({ time: "14:00" })} {...noopHandlers} showTime={false} />,
     );
     expect(screen.queryByLabelText("Task time")).toBeNull();
+  });
+
+  it("shows upcoming repeat dates when provided, for an editable anchor task", () => {
+    render(
+      <TaskDetailFields
+        task={makeTask({ scope: { kind: "day", date: "2026-07-16" }, repeatWeekdays: [1, 3, 5] })}
+        {...noopHandlers}
+        upcomingRepeatDates={["Fri Jul 17", "Mon Jul 20", "Wed Jul 22"]}
+      />,
+    );
+    expect(screen.getByText(/Fri Jul 17, Mon Jul 20, Wed Jul 22/)).toBeTruthy();
+  });
+
+  it("shows upcoming repeat dates when provided, for a read-only generated occurrence", () => {
+    render(
+      <TaskDetailFields
+        task={makeTask({
+          scope: { kind: "day", date: "2026-07-16" },
+          repeatSourceId: "anchor-1",
+        })}
+        {...noopHandlers}
+        upcomingRepeatDates={["Fri Jul 17", "Mon Jul 20"]}
+      />,
+    );
+    expect(screen.getByLabelText("Part of a routine")).toBeTruthy();
+    expect(screen.getByText(/Fri Jul 17, Mon Jul 20/)).toBeTruthy();
+  });
+
+  it("shows nothing extra when upcomingRepeatDates is omitted or empty", () => {
+    render(
+      <TaskDetailFields
+        task={makeTask({ scope: { kind: "day", date: "2026-07-16" }, repeatWeekdays: [1] })}
+        {...noopHandlers}
+      />,
+    );
+    expect(screen.queryByText(/Next:/)).toBeNull();
+  });
+
+  it("threads durationMinutes and onDurationChange to TaskTimeEditor", () => {
+    const onDurationChange = vi.fn();
+    render(
+      <TaskDetailFields
+        task={makeTask({ time: "14:00", durationMinutes: 30 })}
+        {...noopHandlers}
+        onDurationChange={onDurationChange}
+      />,
+    );
+    const select = screen.getByLabelText("Task duration") as HTMLSelectElement;
+    expect(select.value).toBe("30");
+    fireEvent.change(select, { target: { value: "60" } });
+    expect(onDurationChange).toHaveBeenCalledWith(60);
   });
 });
 

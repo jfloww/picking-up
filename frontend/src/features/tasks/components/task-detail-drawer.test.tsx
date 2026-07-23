@@ -11,6 +11,7 @@ const noopHandlers = {
   onTimeChange: (_time?: string) => {},
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
   onPriorityChange: (_priority: boolean) => {},
+  onDurationChange: (_durationMinutes?: number) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -31,7 +32,12 @@ describe("TaskDetailDrawer", () => {
 
   it("renders as a fixed-position overlay, not swapped inline", () => {
     render(<TaskDetailDrawer task={task} {...noopHandlers} />);
-    expect(screen.getByTestId("task-detail-drawer").className).toContain("fixed");
+    const drawer = screen.getByTestId("task-detail-drawer");
+    expect(drawer.className).toContain("fixed");
+    expect(drawer.className).toContain("w-[400px]");
+    expect(screen.getByText("Task Details")).toBeTruthy();
+    expect(screen.getByText("Done")).toBeTruthy();
+    expect(screen.getByText("Cancel")).toBeTruthy();
   });
 
   it("is translated into view once mounted", () => {
@@ -46,27 +52,6 @@ describe("TaskDetailDrawer", () => {
     );
   });
 
-  it("calls onToggle from the header checkbox", () => {
-    const onToggle = vi.fn();
-    render(<TaskDetailDrawer task={task} {...noopHandlers} onToggle={onToggle} />);
-    fireEvent.click(screen.getByRole("checkbox"));
-    expect(onToggle).toHaveBeenCalled();
-  });
-
-  it("calls onClose from the close button", () => {
-    const onClose = vi.fn();
-    render(<TaskDetailDrawer task={task} {...noopHandlers} onClose={onClose} />);
-    fireEvent.click(screen.getByLabelText("Close details"));
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it("calls onClose when Escape is pressed", () => {
-    const onClose = vi.fn();
-    render(<TaskDetailDrawer task={task} {...noopHandlers} onClose={onClose} />);
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(onClose).toHaveBeenCalled();
-  });
-
   it("removes its Escape listener on unmount", () => {
     const onClose = vi.fn();
     const { unmount } = render(
@@ -77,25 +62,194 @@ describe("TaskDetailDrawer", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("calls onDelete from the delete button", () => {
-    const onDelete = vi.fn();
-    render(<TaskDetailDrawer task={task} {...noopHandlers} onDelete={onDelete} />);
-    fireEvent.click(screen.getByText("Delete"));
-    expect(onDelete).toHaveBeenCalled();
-  });
-
   it("shows a time input in the header and doesn't duplicate it below", () => {
     const timedTask = makeTask({ id: "a", title: "write tests", time: "14:00" });
     render(<TaskDetailDrawer task={timedTask} {...noopHandlers} />);
     expect(screen.getAllByLabelText("Task time")).toHaveLength(1);
   });
 
-  it("calls onPriorityChange from the priority toggle", () => {
-    const onPriorityChange = vi.fn();
+  it("shows a duration select in the header, next to the time, and doesn't duplicate it below", () => {
+    const timedTask = makeTask({ id: "a", title: "write tests", time: "14:00" });
+    render(<TaskDetailDrawer task={timedTask} {...noopHandlers} />);
+    expect(screen.getAllByLabelText("Task duration")).toHaveLength(1);
+  });
+
+  it("threads upcomingRepeatDates through to TaskDetailFields", () => {
     render(
-      <TaskDetailDrawer task={task} {...noopHandlers} onPriorityChange={onPriorityChange} />,
+      <TaskDetailDrawer
+        task={task}
+        {...noopHandlers}
+        upcomingRepeatDates={["Fri Jul 17", "Mon Jul 20"]}
+      />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Priority" }));
-    expect(onPriorityChange).toHaveBeenCalledWith(true);
+    expect(screen.getByText(/Fri Jul 17, Mon Jul 20/)).toBeTruthy();
+  });
+
+  describe("draft editing (buffered until Done)", () => {
+    it("does not call any commit handler immediately when the checkbox, priority, duration, time, memo, or repeat are edited", () => {
+      const handlers = {
+        onToggle: vi.fn(),
+        onPriorityChange: vi.fn(),
+        onDurationChange: vi.fn(),
+        onTimeChange: vi.fn(),
+        onMemoChange: vi.fn(),
+        onRepeatWeekdaysChange: vi.fn(),
+      };
+      const timedTask = makeTask({ id: "a", title: "write tests", time: "09:00" });
+      render(<TaskDetailDrawer task={timedTask} {...noopHandlers} {...handlers} />);
+
+      fireEvent.click(screen.getByRole("checkbox"));
+      fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+      fireEvent.change(screen.getByLabelText("Task duration"), { target: { value: "45" } });
+      fireEvent.change(screen.getByLabelText("Task time"), { target: { value: "10:30" } });
+      fireEvent.change(screen.getByPlaceholderText("Memo"), { target: { value: "updated" } });
+      fireEvent.blur(screen.getByPlaceholderText("Memo"));
+      fireEvent.click(screen.getByLabelText("Repeat on Monday"));
+
+      expect(handlers.onToggle).not.toHaveBeenCalled();
+      expect(handlers.onPriorityChange).not.toHaveBeenCalled();
+      expect(handlers.onDurationChange).not.toHaveBeenCalled();
+      expect(handlers.onTimeChange).not.toHaveBeenCalled();
+      expect(handlers.onMemoChange).not.toHaveBeenCalled();
+      expect(handlers.onRepeatWeekdaysChange).not.toHaveBeenCalled();
+    });
+
+    it("reflects edits visually right away, even though nothing has been committed", () => {
+      render(<TaskDetailDrawer task={task} {...noopHandlers} />);
+      fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+      expect(
+        screen.getByRole("button", { name: "Priority" }).getAttribute("aria-pressed"),
+      ).toBe("true");
+
+      const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
+      fireEvent.click(checkbox);
+      expect(screen.getByText("write tests").className).toContain("line-through");
+    });
+
+    it("Done commits every edited field and then closes", () => {
+      const handlers = {
+        onToggle: vi.fn(),
+        onPriorityChange: vi.fn(),
+        onDurationChange: vi.fn(),
+        onTimeChange: vi.fn(),
+        onMemoChange: vi.fn(),
+        onRepeatWeekdaysChange: vi.fn(),
+        onClose: vi.fn(),
+      };
+      const timedTask = makeTask({ id: "a", title: "write tests", time: "09:00", memo: "old" });
+      render(<TaskDetailDrawer task={timedTask} {...noopHandlers} {...handlers} />);
+
+      fireEvent.click(screen.getByRole("checkbox"));
+      fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+      fireEvent.change(screen.getByLabelText("Task duration"), { target: { value: "45" } });
+      fireEvent.change(screen.getByLabelText("Task time"), { target: { value: "10:30" } });
+      fireEvent.change(screen.getByPlaceholderText("Memo"), { target: { value: "updated" } });
+      fireEvent.blur(screen.getByPlaceholderText("Memo"));
+      fireEvent.click(screen.getByLabelText("Repeat on Monday"));
+
+      fireEvent.click(screen.getByText("Done"));
+
+      expect(handlers.onToggle).toHaveBeenCalledTimes(1);
+      expect(handlers.onPriorityChange).toHaveBeenCalledWith(true);
+      expect(handlers.onDurationChange).toHaveBeenCalledWith(45);
+      expect(handlers.onTimeChange).toHaveBeenCalledWith("10:30");
+      expect(handlers.onMemoChange).toHaveBeenCalledWith("updated");
+      expect(handlers.onRepeatWeekdaysChange).toHaveBeenCalledWith([1]);
+      expect(handlers.onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("Done does not call commit handlers for fields that were never touched", () => {
+      const handlers = {
+        onToggle: vi.fn(),
+        onPriorityChange: vi.fn(),
+        onDurationChange: vi.fn(),
+        onTimeChange: vi.fn(),
+        onMemoChange: vi.fn(),
+        onRepeatWeekdaysChange: vi.fn(),
+      };
+      render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
+      fireEvent.click(screen.getByText("Done"));
+
+      expect(handlers.onToggle).not.toHaveBeenCalled();
+      expect(handlers.onPriorityChange).not.toHaveBeenCalled();
+      expect(handlers.onDurationChange).not.toHaveBeenCalled();
+      expect(handlers.onTimeChange).not.toHaveBeenCalled();
+      expect(handlers.onMemoChange).not.toHaveBeenCalled();
+      expect(handlers.onRepeatWeekdaysChange).not.toHaveBeenCalled();
+    });
+
+    it("Cancel discards every edit and closes without calling any commit handler", () => {
+      const handlers = {
+        onToggle: vi.fn(),
+        onPriorityChange: vi.fn(),
+        onMemoChange: vi.fn(),
+        onClose: vi.fn(),
+      };
+      render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
+
+      fireEvent.click(screen.getByRole("checkbox"));
+      fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+      fireEvent.change(screen.getByPlaceholderText("Memo"), { target: { value: "updated" } });
+      fireEvent.blur(screen.getByPlaceholderText("Memo"));
+
+      fireEvent.click(screen.getByText("Cancel"));
+
+      expect(handlers.onToggle).not.toHaveBeenCalled();
+      expect(handlers.onPriorityChange).not.toHaveBeenCalled();
+      expect(handlers.onMemoChange).not.toHaveBeenCalled();
+      expect(handlers.onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("closing via the X button discards edits without calling any commit handler", () => {
+      const handlers = { onPriorityChange: vi.fn(), onClose: vi.fn() };
+      render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
+      fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+      fireEvent.click(screen.getByLabelText("Close details"));
+      expect(handlers.onPriorityChange).not.toHaveBeenCalled();
+      expect(handlers.onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("pressing Escape discards edits without calling any commit handler", () => {
+      const handlers = { onPriorityChange: vi.fn(), onClose: vi.fn() };
+      render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
+      fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(handlers.onPriorityChange).not.toHaveBeenCalled();
+      expect(handlers.onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("resets the draft to the new task's values when switching to a different task", () => {
+      const taskA = makeTask({ id: "a", title: "task a", priority: false });
+      const taskB = makeTask({ id: "b", title: "task b", priority: true });
+      const { rerender } = render(<TaskDetailDrawer task={taskA} {...noopHandlers} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+      expect(
+        screen.getByRole("button", { name: "Priority" }).getAttribute("aria-pressed"),
+      ).toBe("true");
+
+      rerender(<TaskDetailDrawer task={taskB} {...noopHandlers} />);
+      expect(
+        screen.getByRole("button", { name: "Priority" }).getAttribute("aria-pressed"),
+      ).toBe("true"); // taskB's own real value, not taskA's uncommitted edit
+    });
+  });
+
+  describe("actions that stay immediate, not deferred to Done", () => {
+    it("calls onDelete immediately from the delete button", () => {
+      const onDelete = vi.fn();
+      render(<TaskDetailDrawer task={task} {...noopHandlers} onDelete={onDelete} />);
+      fireEvent.click(screen.getByLabelText("Delete task"));
+      expect(onDelete).toHaveBeenCalledTimes(1);
+    });
+
+    it("calls onAddSubtask immediately, not deferred to Done", () => {
+      const onAddSubtask = vi.fn();
+      render(<TaskDetailDrawer task={task} {...noopHandlers} onAddSubtask={onAddSubtask} />);
+      const input = screen.getByLabelText("Add subtask");
+      fireEvent.change(input, { target: { value: "buy wood" } });
+      fireEvent.submit(input.closest("form")!);
+      expect(onAddSubtask).toHaveBeenCalledWith("buy wood");
+    });
   });
 });

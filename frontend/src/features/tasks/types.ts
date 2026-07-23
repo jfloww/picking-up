@@ -24,6 +24,7 @@ export interface Task {
   repeatWeekdays?: number[]; // 0=Sun..6=Sat; set only on the anchor task
   repeatSourceId?: string;   // set only on a task generated from an anchor
   priority?: boolean;
+  durationMinutes?: number; // meaningful alongside `time`; a positive integer
 }
 
 export function scopeKey(scope: Scope): string {
