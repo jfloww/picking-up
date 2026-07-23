@@ -104,7 +104,7 @@ describe("WeeklyView", () => {
     expect(screen.getByText(/Fri Jul 17, Mon Jul 20, Wed Jul 22/)).toBeTruthy();
   });
 
-  it("opens the detail panel when a task is clicked, and closes it on re-click", async () => {
+  it("opens the detail drawer when a task is clicked, and closes it on re-click", async () => {
     const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: "2026-07-14" } });
     renderView(vi.fn(), [a]);
     await waitFor(() => expect(screen.getByRole("button", { name: "task a" })).toBeTruthy());
@@ -114,6 +114,21 @@ describe("WeeklyView", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "task a" }));
     expect(screen.queryByLabelText("Close details")).toBeNull();
+  });
+
+  it("shrinks the week grid's available width while the drawer is open, so no day column hides behind it", async () => {
+    const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: "2026-07-14" } });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "task a" })).toBeTruthy());
+
+    expect(screen.getByTestId("weekly-view").className).not.toContain("pr-[400px]");
+
+    fireEvent.click(screen.getByRole("button", { name: "task a" }));
+    await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
+    expect(screen.getByTestId("weekly-view").className).toContain("pr-[400px]");
+
+    fireEvent.click(screen.getByLabelText("Close details"));
+    expect(screen.getByTestId("weekly-view").className).not.toContain("pr-[400px]");
   });
 
   it("calls onDrillDown('daily', date) when a day's date is double-clicked", async () => {
