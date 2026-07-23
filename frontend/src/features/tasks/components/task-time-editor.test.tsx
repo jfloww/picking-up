@@ -47,6 +47,15 @@ describe("TaskTimeEditor", () => {
     expect(labels).toEqual(["No duration", "15m", "30m", "45m", "1h", "1.5h", "2h"]);
   });
 
+  it("styles every option with the popover tokens, so the native dropdown popup isn't unstyled white-on-white", () => {
+    render(<TaskTimeEditor time="14:00" {...noopHandlers} />);
+    const select = screen.getByLabelText("Task duration") as HTMLSelectElement;
+    for (const option of Array.from(select.options)) {
+      expect(option.className).toContain("bg-popover");
+      expect(option.className).toContain("text-popover-foreground");
+    }
+  });
+
   it("defaults to no duration selected when durationMinutes is unset", () => {
     render(<TaskTimeEditor time="14:00" {...noopHandlers} />);
     expect((screen.getByLabelText("Task duration") as HTMLSelectElement).value).toBe("");

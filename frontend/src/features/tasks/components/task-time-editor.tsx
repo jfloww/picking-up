@@ -38,9 +38,11 @@ export function TaskTimeEditor({
           aria-label="Task duration"
           className="rounded-md border border-input bg-transparent px-1.5 py-0.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
-          <option value="">No duration</option>
+          <option value="" className="bg-popover text-popover-foreground">
+            No duration
+          </option>
           {DURATION_PRESETS.map(({ minutes, label }) => (
-            <option key={minutes} value={minutes}>
+            <option key={minutes} value={minutes} className="bg-popover text-popover-foreground">
               {label}
             </option>
           ))}
