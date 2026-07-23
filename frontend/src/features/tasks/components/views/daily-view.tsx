@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 
+import { todayKey, shortDateLabel, upcomingRepeatDates } from "../../lib/dates";
+import { resolveRepeatWeekdays } from "../../lib/times";
 import { useTasks } from "../../store";
 import { DayAgenda } from "../day-agenda";
 import { DayTimeline, HOUR_HEIGHT } from "../day-timeline";
@@ -10,11 +12,21 @@ import { taskItemHandlers } from "../task-item";
 import { useDragToSchedule } from "../use-drag-to-schedule";
 import type { CalendarViewProps } from "./weekly-view";
 
+const UPCOMING_REPEAT_COUNT = 3;
+
 export function DailyView({ anchor }: CalendarViewProps) {
   const actions = useTasks();
   const { tasks, setTime } = actions;
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
+  const selectedTaskRepeatWeekdays = selectedTask
+    ? resolveRepeatWeekdays(selectedTask, tasks)
+    : undefined;
+  const selectedTaskUpcomingRepeatDates = selectedTaskRepeatWeekdays
+    ? upcomingRepeatDates(selectedTaskRepeatWeekdays, todayKey(), UPCOMING_REPEAT_COUNT).map(
+        (date) => shortDateLabel(date, todayKey()),
+      )
+    : undefined;
 
   const handleSelectTask = (id: string) =>
     setSelectedTaskId((current) => (current === id ? null : id));
@@ -30,8 +42,15 @@ export function DailyView({ anchor }: CalendarViewProps) {
 
   return (
     <>
-      <div className="grid h-full grid-cols-[3fr_2fr] gap-1.5">
-        <div className="min-h-64 rounded-md bg-card p-1.5 ring-1 ring-ring/40">
+      <div
+        data-testid="daily-layout"
+        className="grid h-full min-h-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] overflow-hidden bg-background"
+      >
+        <section
+          data-testid="timeline-panel"
+          aria-label="Daily timeline"
+          className="min-h-0 min-w-0 border-r border-border bg-background"
+        >
           <DayTimeline
             date={anchor}
             onSelectTask={handleSelectTask}
@@ -39,20 +58,25 @@ export function DailyView({ anchor }: CalendarViewProps) {
             getDragHandlers={getDragHandlers}
             dragState={dragState}
           />
-        </div>
-        <div className="min-h-64 rounded-md bg-muted/40 p-1.5">
+        </section>
+        <aside
+          data-testid="agenda-panel"
+          aria-label="Daily task list"
+          className="min-h-0 min-w-0 bg-card/50"
+        >
           <DayAgenda
             date={anchor}
             onSelectTask={handleSelectTask}
             agendaZoneRef={agendaZoneRef}
             getDragHandlers={getDragHandlers}
           />
-        </div>
+        </aside>
       </div>
 
       {selectedTask && (
         <TaskDetailDrawer
           task={selectedTask}
+          upcomingRepeatDates={selectedTaskUpcomingRepeatDates}
           onClose={() => setSelectedTaskId(null)}
           {...taskItemHandlers(selectedTask.id, actions)}
         />

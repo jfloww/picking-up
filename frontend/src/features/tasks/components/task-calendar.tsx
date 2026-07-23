@@ -47,7 +47,7 @@ function dateLabelFor(view: ViewKind, anchor: string): string {
 
 function CalendarInner() {
   const { loaded } = useTasks();
-  const [view, setView] = useState<ViewKind>("weekly");
+  const [view, setView] = useState<ViewKind>("daily");
   const [anchor, setAnchor] = useState(() => todayKey());
 
   // Nothing date-dependent renders before the client loads tasks, which
@@ -55,19 +55,31 @@ function CalendarInner() {
   if (!loaded) return <div aria-busy="true" className="min-h-64" />;
 
   const View = VIEW_COMPONENTS[view];
+  const dateLabel = dateLabelFor(view, anchor);
+  const weekLabel = `Week of ${weekRangeLabel(weekStartOf(anchor))}`;
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="shrink-0 space-y-3">
-        <h2 className="text-lg font-semibold">{dateLabelFor(view, anchor)}</h2>
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <header className="h-[72px] shrink-0 border-b border-border px-10">
         <ViewSwitcher
           view={view}
+          leading={
+            <div className="flex min-w-max flex-col">
+              <h1 className="text-[20px] leading-7 font-bold tracking-tight">
+                {dateLabel}
+              </h1>
+              <span className="min-h-4 text-[12px] font-medium tracking-wider text-muted-foreground uppercase">
+                {view === "daily" ? weekLabel : ""}
+              </span>
+            </div>
+          }
           onViewChange={setView}
           onToday={() => setAnchor(todayKey())}
           onPrev={() => setAnchor((a) => shiftAnchor(view, a, -1))}
           onNext={() => setAnchor((a) => shiftAnchor(view, a, 1))}
         />
-      </div>
-      <div className="min-h-0 flex-1">
+      </header>
+      <div className="min-h-0 flex-1 overflow-hidden">
         <View
           anchor={anchor}
           onAnchorChange={setAnchor}

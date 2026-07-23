@@ -16,6 +16,7 @@ const noopHandlers = {
   onTimeChange: (_time?: string) => {},
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
   onPriorityChange: (_priority: boolean) => {},
+  onDurationChange: (_durationMinutes?: number) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -31,6 +32,106 @@ describe("QuickAdd", () => {
     fireEvent.submit(input.closest("form")!);
     expect(onAdd).toHaveBeenCalledWith("ship it");
     expect(input.value).toBe("");
+  });
+
+  it("supports a Daily panel footer presentation without changing submission", () => {
+    const onAdd = vi.fn();
+    render(
+      <QuickAdd
+        onAdd={onAdd}
+        placeholder="New task"
+        ariaLabel="Add task"
+        variant="panel-footer"
+      />,
+    );
+    const input = screen.getByLabelText("Add task") as HTMLInputElement;
+    expect(input.placeholder).toBe("New task");
+    expect(screen.getByTestId("quick-add-panel-footer")).toBeTruthy();
+    fireEvent.change(input, { target: { value: "  focus  " } });
+    fireEvent.submit(input.closest("form")!);
+    expect(onAdd).toHaveBeenCalledWith("focus");
+  });
+
+  it("plain Enter still calls onAdd, not onAddAndOpen, so rapid adds aren't interrupted", () => {
+    const onAdd = vi.fn();
+    const onAddAndOpen = vi.fn();
+    render(
+      <QuickAdd
+        onAdd={onAdd}
+        onAddAndOpen={onAddAndOpen}
+        variant="panel-footer"
+      />,
+    );
+    const input = screen.getByLabelText("Add task") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "task one" } });
+    fireEvent.submit(input.closest("form")!);
+    expect(onAdd).toHaveBeenCalledWith("task one");
+    expect(onAddAndOpen).not.toHaveBeenCalled();
+    expect(input.value).toBe("");
+  });
+
+  it("Shift+Enter calls onAddAndOpen instead of onAdd, and clears the input", () => {
+    const onAdd = vi.fn();
+    const onAddAndOpen = vi.fn();
+    render(
+      <QuickAdd
+        onAdd={onAdd}
+        onAddAndOpen={onAddAndOpen}
+        variant="panel-footer"
+      />,
+    );
+    const input = screen.getByLabelText("Add task") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "  task two  " } });
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    expect(onAddAndOpen).toHaveBeenCalledWith("task two");
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(input.value).toBe("");
+  });
+
+  it("Shift+Enter falls back to onAdd when onAddAndOpen isn't provided", () => {
+    const onAdd = vi.fn();
+    render(<QuickAdd onAdd={onAdd} variant="panel-footer" />);
+    const input = screen.getByLabelText("Add task") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "task three" } });
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    expect(onAdd).toHaveBeenCalledWith("task three");
+  });
+
+  it("ignores a blank value on Shift+Enter", () => {
+    const onAdd = vi.fn();
+    const onAddAndOpen = vi.fn();
+    render(
+      <QuickAdd onAdd={onAdd} onAddAndOpen={onAddAndOpen} variant="panel-footer" />,
+    );
+    const input = screen.getByLabelText("Add task") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    expect(onAddAndOpen).not.toHaveBeenCalled();
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it("the expand affordance calls onAddAndOpen with the current value and clears it", () => {
+    const onAdd = vi.fn();
+    const onAddAndOpen = vi.fn();
+    render(
+      <QuickAdd
+        onAdd={onAdd}
+        onAddAndOpen={onAddAndOpen}
+        variant="panel-footer"
+      />,
+    );
+    const input = screen.getByLabelText("Add task") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "task four" } });
+    fireEvent.click(screen.getByLabelText("Add and open task details"));
+    expect(onAddAndOpen).toHaveBeenCalledWith("task four");
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(input.value).toBe("");
+  });
+
+  it("does not render the expand affordance for the default variant", () => {
+    const onAdd = vi.fn();
+    render(<QuickAdd onAdd={onAdd} onAddAndOpen={vi.fn()} />);
+    expect(screen.queryByLabelText("Add and open task details")).toBeNull();
   });
 });
 
@@ -95,7 +196,7 @@ describe("TaskItem v2", () => {
         {...noopHandlers}
       />,
     );
-    expect(screen.getByText("14:00")).toBeTruthy();
+    expect(screen.getByText("2:00 PM")).toBeTruthy();
     expect(screen.getByLabelText("Subtasks: 1/2").textContent).toBe("1/2");
   });
 
@@ -217,7 +318,21 @@ describe("TaskItem v2", () => {
     expect(onRepeatWeekdaysChange).toHaveBeenCalledWith([3]);
   });
 
-  it("renders large size with a bigger title and time after the title", () => {
+  it("threads onDurationChange to the inline TaskDetailFields expansion", () => {
+    const onDurationChange = vi.fn();
+    render(
+      <TaskItem
+        task={makeTask({ title: "dentist", time: "09:00" })}
+        {...noopHandlers}
+        onDurationChange={onDurationChange}
+      />,
+    );
+    fireEvent.click(screen.getByText("dentist"));
+    fireEvent.change(screen.getByLabelText("Task duration"), { target: { value: "45" } });
+    expect(onDurationChange).toHaveBeenCalledWith(45);
+  });
+
+  it("renders large size with compact Daily typography and time after the title", () => {
     render(
       <TaskItem
         task={makeTask({ title: "big task", time: "09:00" })}
@@ -226,10 +341,26 @@ describe("TaskItem v2", () => {
       />,
     );
     const title = screen.getByRole("button", { name: "big task" });
-    expect(title.className).toContain("text-2xl");
+    expect(title.className).toContain("text-[15px]");
     const row = title.parentElement!;
     const children = Array.from(row.children);
-    const timeEl = screen.getByText("09:00");
+    const timeEl = screen.getByText("9:00 AM");
+    expect(children.indexOf(timeEl)).toBeGreaterThan(children.indexOf(title));
+  });
+
+  it("renders timeline size compactly with time after the title", () => {
+    render(
+      <TaskItem
+        task={makeTask({ title: "timeline task", time: "09:00" })}
+        {...noopHandlers}
+        size="timeline"
+      />,
+    );
+    const title = screen.getByRole("button", { name: "timeline task" });
+    expect(title.className).toContain("text-[15px]");
+    const row = title.parentElement!;
+    const children = Array.from(row.children);
+    const timeEl = screen.getByText("9:00 AM");
     expect(children.indexOf(timeEl)).toBeGreaterThan(children.indexOf(title));
   });
 
@@ -242,8 +373,65 @@ describe("TaskItem v2", () => {
     expect(title.className).not.toContain("text-2xl");
     const row = title.parentElement!;
     const children = Array.from(row.children);
-    const timeEl = screen.getByText("09:00");
+    const timeEl = screen.getByText("9:00 AM");
     expect(children.indexOf(timeEl)).toBeLessThan(children.indexOf(title));
+  });
+
+  it("large size: clicking anywhere on the card, not just the title, calls onSelect", () => {
+    const onSelect = vi.fn();
+    render(
+      <TaskItem
+        task={makeTask({ title: "big task", time: "09:00" })}
+        {...noopHandlers}
+        size="large"
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.click(screen.getByText("9:00 AM"));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it("large size: clicking the checkbox does not call onSelect", () => {
+    const onSelect = vi.fn();
+    const onToggle = vi.fn();
+    render(
+      <TaskItem
+        task={makeTask({ title: "big task" })}
+        {...noopHandlers}
+        size="large"
+        onToggle={onToggle}
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("large size, no onSelect: clicking anywhere on the card toggles the inline expansion", () => {
+    render(
+      <TaskItem
+        task={makeTask({ title: "big task", time: "09:00" })}
+        {...noopHandlers}
+        size="large"
+      />,
+    );
+    fireEvent.click(screen.getByText("9:00 AM"));
+    expect(screen.getByPlaceholderText("Memo")).toBeTruthy();
+  });
+
+  it("timeline size: clicking anywhere on the chip, not just the title, calls onSelect", () => {
+    const onSelect = vi.fn();
+    render(
+      <TaskItem
+        task={makeTask({ title: "timeline task", time: "09:00" })}
+        {...noopHandlers}
+        size="timeline"
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.click(screen.getByText("9:00 AM"));
+    expect(onSelect).toHaveBeenCalledTimes(1);
   });
 });
 

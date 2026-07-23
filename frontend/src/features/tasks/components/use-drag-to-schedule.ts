@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 
 import { yToSnappedTime } from "../lib/times";
 
-const DRAG_THRESHOLD_PX = 6;
+const DRAG_THRESHOLD_PX = 10;
 const EDGE_ZONE_PX = 32;
 const AUTO_SCROLL_STEP_PX = 12;
 

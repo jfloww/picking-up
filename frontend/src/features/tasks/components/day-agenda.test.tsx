@@ -45,6 +45,10 @@ describe("DayAgenda sections", () => {
   it("shows a quick-add pinned at the bottom", async () => {
     renderAgenda(ANCHOR);
     await waitFor(() => expect(screen.getByLabelText("Add task")).toBeTruthy());
+    expect(screen.getByPlaceholderText("New task")).toBeTruthy();
+    expect(screen.getByTestId("day-agenda-scroll").className).toContain("overflow-y-auto");
+    expect(screen.getByTestId("day-agenda-footer").className).toContain("shrink-0");
+    expect(screen.getByTestId("quick-add-panel-footer")).toBeTruthy();
   });
 
   it("puts an untimed, undone task under All Day To-Do", async () => {
@@ -52,6 +56,7 @@ describe("DayAgenda sections", () => {
     renderAgenda(ANCHOR, [t]);
     await waitFor(() => expect(screen.getByText("water plants")).toBeTruthy());
     expect(screen.getByText("All Day To-Do")).toBeTruthy();
+    expect(screen.getByLabelText("All Day To-Do: 1").textContent).toBe("1");
     expect(screen.queryByText("Next Up")).toBeNull();
     expect(screen.queryByText("Done Today")).toBeNull();
   });
@@ -114,11 +119,11 @@ describe("DayAgenda sections", () => {
     expect(screen.queryByText("other day")).toBeNull();
   });
 
-  it("renders each task as a large-size card", async () => {
+  it("renders each task as a compact Daily card", async () => {
     const t = makeTask({ id: "t", title: "big card", scope: { kind: "day", date: ANCHOR } });
     renderAgenda(ANCHOR, [t]);
     await waitFor(() => expect(screen.getByText("big card")).toBeTruthy());
-    expect(screen.getByRole("button", { name: "big card" }).className).toContain("text-2xl");
+    expect(screen.getByRole("button", { name: "big card" }).className).toContain("text-[15px]");
   });
 
   it("calls onSelectTask instead of expanding inline when a card's title is clicked", async () => {
@@ -139,6 +144,41 @@ describe("DayAgenda sections", () => {
     fireEvent.submit(input.closest("form")!);
     await waitFor(() => expect(screen.getByText("new task")).toBeTruthy());
   });
+
+  it("plain Enter adds a task without selecting it", async () => {
+    const onSelectTask = vi.fn();
+    renderAgenda(ANCHOR, [], onSelectTask);
+    await waitFor(() => expect(screen.getByLabelText("Add task")).toBeTruthy());
+    const input = screen.getByLabelText("Add task");
+    fireEvent.change(input, { target: { value: "quick task" } });
+    fireEvent.submit(input.closest("form")!);
+    await waitFor(() => expect(screen.getByText("quick task")).toBeTruthy());
+    expect(onSelectTask).not.toHaveBeenCalled();
+  });
+
+  it("Shift+Enter adds a task and immediately selects it to open its detail", async () => {
+    const onSelectTask = vi.fn();
+    renderAgenda(ANCHOR, [], onSelectTask);
+    await waitFor(() => expect(screen.getByLabelText("Add task")).toBeTruthy());
+    const input = screen.getByLabelText("Add task");
+    fireEvent.change(input, { target: { value: "detailed task" } });
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    await waitFor(() => expect(screen.getByText("detailed task")).toBeTruthy());
+    expect(onSelectTask).toHaveBeenCalledTimes(1);
+    const [selectedId] = onSelectTask.mock.calls[0];
+    expect(screen.getByTestId(`agenda-${selectedId}`).textContent).toContain("detailed task");
+  });
+
+  it("the expand affordance adds a task and immediately selects it", async () => {
+    const onSelectTask = vi.fn();
+    renderAgenda(ANCHOR, [], onSelectTask);
+    await waitFor(() => expect(screen.getByLabelText("Add task")).toBeTruthy());
+    const input = screen.getByLabelText("Add task");
+    fireEvent.change(input, { target: { value: "expand task" } });
+    fireEvent.click(screen.getByLabelText("Add and open task details"));
+    await waitFor(() => expect(screen.getByText("expand task")).toBeTruthy());
+    expect(onSelectTask).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("DayAgenda same-day overdue highlighting", () => {
@@ -151,8 +191,8 @@ describe("DayAgenda same-day overdue highlighting", () => {
     });
     renderAgenda(ANCHOR, [t]);
     await waitFor(() => expect(screen.getByText("morning meeting")).toBeTruthy());
-    const row = screen.getByText("morning meeting").closest("div");
-    expect(row?.className).toContain("border-destructive");
+    const row = screen.getByText("morning meeting").closest("li")?.firstElementChild;
+    expect(row?.className).toContain("ring-destructive");
   });
 
   it("marks a future-time undone task pending when viewing today", async () => {
@@ -164,8 +204,9 @@ describe("DayAgenda same-day overdue highlighting", () => {
     });
     renderAgenda(ANCHOR, [t]);
     await waitFor(() => expect(screen.getByText("afternoon call")).toBeTruthy());
-    const row = screen.getByText("afternoon call").closest("div");
-    expect(row?.className).toContain("border-warning");
+    const row = screen.getByText("afternoon call").closest("li")?.firstElementChild;
+    expect(row?.className).not.toContain("ring-destructive");
+    expect(screen.getByText("4:00 PM")).toBeTruthy();
   });
 
   it("does not highlight timed tasks when viewing a day other than today", async () => {
@@ -178,8 +219,7 @@ describe("DayAgenda same-day overdue highlighting", () => {
     });
     renderAgenda(other, [t]);
     await waitFor(() => expect(screen.getByText("tomorrow's task")).toBeTruthy());
-    const row = screen.getByText("tomorrow's task").closest("div");
-    expect(row?.className).not.toContain("border-destructive");
-    expect(row?.className).not.toContain("border-warning");
+    const row = screen.getByText("tomorrow's task").closest("li")?.firstElementChild;
+    expect(row?.className).not.toContain("ring-destructive");
   });
 });

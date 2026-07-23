@@ -65,18 +65,39 @@ export function DayAgenda({
   }
 
   return (
-    <div ref={agendaZoneRef} data-testid="day-agenda" className="flex h-full flex-col">
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+    <div
+      ref={agendaZoneRef}
+      data-testid="day-agenda"
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-card/50"
+    >
+      <div
+        data-testid="day-agenda-scroll"
+        className="min-h-0 flex-1 space-y-10 overflow-y-auto p-10"
+      >
         {allDayToDo.length > 0 && (
           <section>
-            <div className="mb-1 shrink-0 text-xs font-semibold">All Day To-Do</div>
-            <div className="space-y-2">{allDayToDo.map((t) => renderCard(t))}</div>
+            <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
+              <h3 className="text-[13px] font-semibold tracking-wider text-subtle uppercase">
+                All Day To-Do
+              </h3>
+              <span
+                aria-label={`All Day To-Do: ${allDayToDo.length}`}
+                className="text-xs font-semibold tabular-nums text-brand"
+              >
+                {allDayToDo.length}
+              </span>
+            </div>
+            <div className="space-y-3">{allDayToDo.map((t) => renderCard(t))}</div>
           </section>
         )}
         {nextUp.length > 0 && (
           <section>
-            <div className="mb-1 shrink-0 text-xs font-semibold">Next Up</div>
-            <div className="space-y-2">
+            <div className="mb-4 flex shrink-0 items-center gap-3">
+              <h3 className="text-[13px] font-semibold tracking-wider text-subtle uppercase">
+                Next Up
+              </h3>
+            </div>
+            <div className="space-y-3">
               {nextUp.map((t) =>
                 renderCard(
                   t,
@@ -92,12 +113,33 @@ export function DayAgenda({
         )}
         {doneToday.length > 0 && (
           <section className="opacity-60">
-            <div className="mb-1 shrink-0 text-xs font-semibold">Done Today</div>
-            <div className="space-y-2">{doneToday.map((t) => renderCard(t))}</div>
+            <div className="mb-4 flex shrink-0 items-center gap-3">
+              <h3 className="text-[13px] font-semibold tracking-wider text-subtle uppercase">
+                Done Today
+              </h3>
+            </div>
+            <div className="space-y-3">{doneToday.map((t) => renderCard(t))}</div>
           </section>
         )}
       </div>
-      <QuickAdd onAdd={(title) => addTask(title, scope)} />
+      <div
+        data-testid="day-agenda-footer"
+        className="shrink-0 border-t border-border bg-card p-6"
+      >
+        <QuickAdd
+          onAdd={(title) => addTask(title, scope)}
+          onAddAndOpen={
+            onSelectTask &&
+            ((title) => {
+              const created = addTask(title, scope);
+              if (created) onSelectTask(created.id);
+            })
+          }
+          placeholder="New task"
+          ariaLabel="Add task"
+          variant="panel-footer"
+        />
+      </div>
     </div>
   );
 }
