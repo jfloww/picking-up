@@ -11,6 +11,7 @@ const noopHandlers = {
   onTimeChange: (_time?: string) => {},
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
   onPriorityChange: (_priority: boolean) => {},
+  onDurationChange: (_durationMinutes?: number) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -73,6 +74,28 @@ describe("TaskDetailPanel", () => {
   it("shows the repeat picker for a day-scoped task with no routine yet", () => {
     render(<TaskDetailPanel task={task} {...noopHandlers} />);
     expect(screen.getByLabelText("Repeat on Monday")).toBeTruthy();
+  });
+
+  it("threads upcomingRepeatDates through to TaskDetailFields", () => {
+    render(
+      <TaskDetailPanel
+        task={task}
+        {...noopHandlers}
+        upcomingRepeatDates={["Fri Jul 17", "Mon Jul 20"]}
+      />,
+    );
+    expect(screen.getByText(/Fri Jul 17, Mon Jul 20/)).toBeTruthy();
+  });
+
+  it("calls onDurationChange from the header duration select", () => {
+    const onDurationChange = vi.fn();
+    const timedTask = makeTask({ id: "a", title: "write tests", time: "14:00" });
+    render(
+      <TaskDetailPanel task={timedTask} {...noopHandlers} onDurationChange={onDurationChange} />,
+    );
+    const header = within(screen.getByTestId("task-detail-header"));
+    fireEvent.change(header.getByLabelText("Task duration"), { target: { value: "45" } });
+    expect(onDurationChange).toHaveBeenCalledWith(45);
   });
 
   it("threads onPriorityChange through to TaskDetailFields", () => {

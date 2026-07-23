@@ -63,8 +63,8 @@ features/tasks/
     ├── scope-tasks.tsx     # connected task list for one scope
     ├── task-item.tsx  quick-add.tsx  view-switcher.tsx  task-calendar.tsx
     └── views/
-        ├── weekly-view.tsx  # default; exports CalendarViewProps + DAY_LABELS
-        ├── daily-view.tsx
+        ├── weekly-view.tsx  # exports CalendarViewProps + DAY_LABELS
+        ├── daily-view.tsx   # default
         ├── year-grid.tsx    # shared by monthly + yearly
         ├── monthly-view.tsx
         └── yearly-view.tsx

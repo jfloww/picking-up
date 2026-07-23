@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+import { cn } from "@/lib/utils";
+
 import { todayKey } from "../lib/dates";
 import { compareTasksForDay, isPastToday, layoutTimedTasks, nowTime, timeToMinutes } from "../lib/times";
 import { useTasks } from "../store";
@@ -9,7 +11,7 @@ import { scopeKey, type Scope } from "../types";
 import { TaskItem, taskItemHandlers } from "./task-item";
 import type { DragState } from "./use-drag-to-schedule";
 
-export const HOUR_HEIGHT = 48; // px per hour on the rail
+export const HOUR_HEIGHT = 64; // px per hour, matching the Focus Planner grid
 const RAIL_HEIGHT = 24 * HOUR_HEIGHT;
 const VIEWPORT_HOURS = 12; // hours visible in the rail's scroll viewport at once
 const VIEWPORT_HEIGHT = VIEWPORT_HOURS * HOUR_HEIGHT;
@@ -46,6 +48,7 @@ export function DayTimeline({
   const scope: Scope = { kind: "day", date };
   const key = scopeKey(scope);
   const timed = tasks.filter((t) => scopeKey(t.scope) === key && t.time).sort(compareTasksForDay);
+  const activeTimedCount = timed.filter((task) => !task.done).length;
   const today = todayKey();
   const isToday = date === today;
   const currentTime = nowTime();
@@ -63,74 +66,109 @@ export function DayTimeline({
   }, [date, isToday, railRef, currentTime]);
 
   return (
-    <div
-      ref={railRef}
-      data-testid="hour-rail"
-      className="relative h-full overflow-y-auto rounded-md border border-border/60"
-    >
-      <div className="relative" style={{ height: RAIL_HEIGHT }}>
-        {Array.from({ length: 24 }, (_, hour) => (
-          <div
-            key={hour}
-            className="absolute inset-x-0 border-t border-border/15"
-            style={{ top: hour * HOUR_HEIGHT }}
-          >
-            <span className="pl-1 text-[10px] tabular-nums text-subtle">
-              {String(hour).padStart(2, "0")}:00
-            </span>
-          </div>
-        ))}
+    <div data-testid="day-timeline" className="flex h-full min-h-0 flex-col bg-background">
+      <header
+        data-testid="timeline-header"
+        className="flex shrink-0 items-end justify-between border-b border-border/60 px-10 pt-10 pb-6"
+      >
+        <div>
+          <h3 className="text-[13px] font-semibold tracking-wider text-subtle uppercase">
+            Focus Agenda
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {activeTimedCount === 0
+              ? "No timed tasks scheduled"
+              : `${activeTimedCount} ${activeTimedCount === 1 ? "task" : "tasks"} scheduled today`}
+          </p>
+        </div>
+      </header>
 
-        {isToday && (
-          <div
-            data-testid="now-line"
-            className="absolute inset-x-0 z-10 border-t-2 border-brand"
-            style={{ top: toOffset(currentTime) }}
-          />
-        )}
-
-        {layoutTimedTasks(timed).map(({ task: t, column, columns }) => {
-          const highlight =
-            isToday && !t.done
-              ? isPastToday(t.time!, date, today, currentTime)
-                ? "overdue"
-                : "pending"
-              : undefined;
-          return (
+      <div
+        ref={railRef}
+        data-testid="hour-rail"
+        className="relative min-h-0 flex-1 overflow-y-auto bg-background"
+        style={{
+          backgroundImage:
+            "linear-gradient(to bottom, var(--border) 1px, transparent 1px)",
+          backgroundSize: `100% ${HOUR_HEIGHT}px`,
+        }}
+      >
+        <div className="relative" style={{ height: RAIL_HEIGHT }}>
+          {Array.from({ length: 24 }, (_, hour) => (
             <div
-              key={t.id}
-              data-testid={`chip-${t.id}`}
-              className="absolute z-20 touch-none rounded-md bg-brand/10 px-1 ring-1 ring-brand/30 focus-within:z-30"
-              style={{
-                top: toOffset(t.time!),
-                left: `calc(${(column / columns) * 100}% + 2px)`,
-                width: `calc(${100 / columns}% - 4px)`,
-              }}
-              {...getDragHandlers(t.id, t.title)}
+              key={hour}
+              className="absolute inset-x-0"
+              style={{ top: hour * HOUR_HEIGHT }}
             >
-              <ul>
-                <TaskItem
-                  task={t}
-                  highlight={highlight}
-                  {...taskItemHandlers(t.id, actions)}
-                  onSelect={onSelectTask && (() => onSelectTask(t.id))}
-                />
-              </ul>
+              <span className="absolute top-2 left-10 text-[12px] leading-4 tabular-nums text-subtle select-none">
+                {String(hour).padStart(2, "0")}:00
+              </span>
             </div>
-          );
-        })}
+          ))}
 
-        {dragState?.previewTime && (
-          <div
-            data-testid="drag-preview-line"
-            className="pointer-events-none absolute inset-x-0 z-40 border-t-2 border-dashed border-brand"
-            style={{ top: toOffset(dragState.previewTime) }}
-          >
-            <span className="bg-brand px-1 text-[10px] text-primary-foreground">
-              {dragState.previewTime}
-            </span>
+          {isToday && (
+            <div
+              data-testid="now-line"
+              className="absolute right-10 left-[104px] z-10 border-t-2 border-brand"
+              style={{ top: toOffset(currentTime) }}
+            />
+          )}
+
+          <div className="absolute inset-y-0 right-10 left-[104px]">
+            {layoutTimedTasks(timed).map(({ task: t, column, columns }) => {
+              const highlight =
+                isToday && !t.done
+                  ? isPastToday(t.time!, date, today, currentTime)
+                    ? "overdue"
+                    : "pending"
+                  : undefined;
+              return (
+                <div
+                  key={t.id}
+                  data-testid={`chip-${t.id}`}
+                  className={cn(
+                    "absolute z-20 min-h-12 touch-none overflow-hidden rounded-r-lg border-l-2 bg-card transition-colors hover:bg-muted focus-within:z-30",
+                    t.done
+                      ? "border-l-muted-foreground bg-muted/10 opacity-60"
+                      : highlight === "overdue"
+                        ? "border-l-destructive bg-destructive/10"
+                        : highlight === "pending"
+                          ? "border-l-warning bg-warning/10"
+                          : "border-l-muted-foreground",
+                  )}
+                  style={{
+                    top: toOffset(t.time!),
+                    left: `calc(${(column / columns) * 100}% + 2px)`,
+                    width: `calc(${100 / columns}% - 4px)`,
+                  }}
+                  {...getDragHandlers(t.id, t.title)}
+                >
+                  <ul>
+                    <TaskItem
+                      task={t}
+                      size="timeline"
+                      highlight={highlight}
+                      {...taskItemHandlers(t.id, actions)}
+                      onSelect={onSelectTask && (() => onSelectTask(t.id))}
+                    />
+                  </ul>
+                </div>
+              );
+            })}
           </div>
-        )}
+
+          {dragState?.previewTime && (
+            <div
+              data-testid="drag-preview-line"
+              className="pointer-events-none absolute right-10 left-[104px] z-40 border-t-2 border-dashed border-brand"
+              style={{ top: toOffset(dragState.previewTime) }}
+            >
+              <span className="bg-brand px-1 text-[10px] text-primary-foreground">
+                {dragState.previewTime}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -110,6 +110,22 @@ export function shortDateLabel(dateKey: string, today: string): string {
   return `${weekday} ${month} ${d.getDate()}`;
 }
 
+export function upcomingRepeatDates(
+  weekdays: number[],
+  from: string,
+  count: number,
+): string[] {
+  const dates: string[] = [];
+  let cursor = from;
+  while (dates.length < count && weekdays.length > 0) {
+    if (weekdays.includes(weekdayOf(cursor))) {
+      dates.push(cursor);
+    }
+    cursor = addDays(cursor, 1);
+  }
+  return dates;
+}
+
 export function weekRangeLabel(weekStart: string): string {
   const start = parse(weekStart);
   const end = parse(addDays(weekStart, 6));

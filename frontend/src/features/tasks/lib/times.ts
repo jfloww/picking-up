@@ -101,17 +101,22 @@ export function repeatCadenceLabel(weekdays: number[]): string {
   return sorted.map((d) => DAY_LABELS[d]).join("/");
 }
 
-export function repeatLabelForTask(task: Task, tasks: Task[]): string | undefined {
+export function resolveRepeatWeekdays(task: Task, tasks: Task[]): number[] | undefined {
   if (task.repeatWeekdays && task.repeatWeekdays.length > 0) {
-    return repeatCadenceLabel(task.repeatWeekdays);
+    return task.repeatWeekdays;
   }
   if (task.repeatSourceId) {
     const anchor = tasks.find((t) => t.id === task.repeatSourceId);
     if (anchor?.repeatWeekdays && anchor.repeatWeekdays.length > 0) {
-      return repeatCadenceLabel(anchor.repeatWeekdays);
+      return anchor.repeatWeekdays;
     }
   }
   return undefined;
+}
+
+export function repeatLabelForTask(task: Task, tasks: Task[]): string | undefined {
+  const weekdays = resolveRepeatWeekdays(task, tasks);
+  return weekdays && repeatCadenceLabel(weekdays);
 }
 
 export interface WeekStats {

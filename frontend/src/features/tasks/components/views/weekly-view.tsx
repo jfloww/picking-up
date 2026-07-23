@@ -4,8 +4,16 @@ import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-import { DAY_LABELS, dayOfMonth, todayKey, weekDates, weekStartOf } from "../../lib/dates";
-import { dayTasksForWeek, weekStats } from "../../lib/times";
+import {
+  DAY_LABELS,
+  dayOfMonth,
+  shortDateLabel,
+  todayKey,
+  upcomingRepeatDates,
+  weekDates,
+  weekStartOf,
+} from "../../lib/dates";
+import { dayTasksForWeek, resolveRepeatWeekdays, weekStats } from "../../lib/times";
 import { useTasks } from "../../store";
 import type { ViewKind } from "../view-switcher";
 import { ScopeTasks } from "../scope-tasks";
@@ -17,6 +25,8 @@ export interface CalendarViewProps {
   onAnchorChange: (dateKey: string) => void;
   onDrillDown?: (view: ViewKind, dateKey: string) => void;
 }
+
+const UPCOMING_REPEAT_COUNT = 3;
 
 export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
   const actions = useTasks();
@@ -31,6 +41,14 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
   const handleSelectTask = (id: string) =>
     setSelectedTaskId((current) => (current === id ? null : id));
+  const selectedTaskRepeatWeekdays = selectedTask
+    ? resolveRepeatWeekdays(selectedTask, tasks)
+    : undefined;
+  const selectedTaskUpcomingRepeatDates = selectedTaskRepeatWeekdays
+    ? upcomingRepeatDates(selectedTaskRepeatWeekdays, today, UPCOMING_REPEAT_COUNT).map((date) =>
+        shortDateLabel(date, today),
+      )
+    : undefined;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
@@ -53,6 +71,7 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
         <div className="shrink-0">
           <TaskDetailPanel
             task={selectedTask}
+            upcomingRepeatDates={selectedTaskUpcomingRepeatDates}
             onClose={() => setSelectedTaskId(null)}
             {...taskItemHandlers(selectedTask.id, actions)}
           />

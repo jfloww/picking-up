@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TasksProvider, tasksReducer, useTasks } from "./store";
 import { fakeRepository, makeTask } from "./test-utils";
 import { addDays, todayKey, weekStartOf } from "./lib/dates";
+import type { Task } from "./types";
 
 describe("tasksReducer", () => {
   it("handles loaded/added/updated/removed", () => {
@@ -62,6 +63,22 @@ describe("TasksProvider", () => {
     expect(result.current.tasks).toHaveLength(1);
     expect(result.current.tasks[0].title).toBe("write plan");
     await waitFor(() => expect(repo.tasks).toHaveLength(1));
+  });
+
+  it("addTask returns the created task, or undefined for a blank title", async () => {
+    const { result } = setup();
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    let created: Task | undefined;
+    let blank: Task | undefined;
+    act(() => {
+      created = result.current.addTask("write plan", { kind: "day", date: todayKey() });
+      blank = result.current.addTask("   ", { kind: "day", date: todayKey() });
+    });
+
+    expect(created?.title).toBe("write plan");
+    expect(result.current.tasks.some((t) => t.id === created?.id)).toBe(true);
+    expect(blank).toBeUndefined();
   });
 
   it("toggleTask flips done and sets/clears completedAt", async () => {
@@ -268,6 +285,21 @@ describe("TasksProvider", () => {
 
       act(() => result.current.setPriority("a", false));
       expect(result.current.tasks[0].priority).toBe(false);
+    });
+  });
+
+  describe("duration action", () => {
+    it("setDuration sets and clears the duration", async () => {
+      const task = makeTask({ id: "a", time: "09:00", scope: { kind: "day", date: todayKey() } });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setDuration("a", 45));
+      expect(result.current.tasks[0].durationMinutes).toBe(45);
+      await waitFor(() => expect(repo.tasks[0].durationMinutes).toBe(45));
+
+      act(() => result.current.setDuration("a", undefined));
+      expect(result.current.tasks[0].durationMinutes).toBeUndefined();
     });
   });
 });

@@ -52,9 +52,18 @@ describe("DailyView v4 (60/40 layout, drawer overlay)", () => {
   it("shows the timeline and agenda side by side, one quick-add total", async () => {
     renderView();
     await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
+    expect(screen.getByTestId("daily-layout").className).toContain(
+      "grid-cols-[minmax(0,3fr)_minmax(0,2fr)]",
+    );
+    expect(screen.getByTestId("timeline-panel").className).toContain("border-r");
+    expect(screen.getByTestId("agenda-panel")).toBeTruthy();
     expect(screen.getByTestId("now-line")).toBeTruthy(); // anchor is today
     expect(screen.getByTestId("day-agenda")).toBeTruthy();
+    expect(screen.getByTestId("day-agenda-scroll").className).toContain("overflow-y-auto");
+    expect(screen.getByTestId("day-agenda-footer").className).toContain("shrink-0");
     expect(screen.getAllByLabelText("Add task")).toHaveLength(1);
+    expect(screen.getByPlaceholderText("New task")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /new task/i })).toBeNull();
   });
 
   it("never calls onAnchorChange itself (only the toolbar changes the focused day)", async () => {
@@ -148,6 +157,55 @@ describe("DailyView task detail drawer", () => {
     expect(screen.getByTestId("hour-rail")).toBeTruthy();
     expect(screen.getByTestId("day-agenda")).toBeTruthy();
   });
+
+  it("shows the anchor's upcoming repeat dates in the drawer", async () => {
+    const anchor = makeTask({
+      id: "a",
+      title: "gym",
+      scope: { kind: "day", date: ANCHOR },
+      repeatWeekdays: [1, 3, 5], // Mon/Wed/Fri
+    });
+    renderView(vi.fn(), [anchor]);
+    await waitFor(() => expect(screen.getByTestId("agenda-a")).toBeTruthy());
+
+    fireEvent.click(within(screen.getByTestId("day-agenda")).getByText("gym"));
+    await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeTruthy());
+
+    expect(screen.getByText(/Fri Jul 17, Mon Jul 20, Wed Jul 22/)).toBeTruthy();
+  });
+
+  it("shows a generated occurrence's upcoming repeat dates resolved from its anchor", async () => {
+    const anchor = makeTask({
+      id: "anchor",
+      title: "gym",
+      scope: { kind: "week", weekStart: "2026-07-12" },
+      repeatWeekdays: [1, 3, 5],
+    });
+    const instance = makeTask({
+      id: "inst",
+      title: "gym",
+      scope: { kind: "day", date: ANCHOR },
+      repeatSourceId: "anchor",
+    });
+    renderView(vi.fn(), [anchor, instance]);
+    await waitFor(() => expect(screen.getByTestId("agenda-inst")).toBeTruthy());
+
+    fireEvent.click(within(screen.getByTestId("day-agenda")).getByText("gym"));
+    await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeTruthy());
+
+    expect(screen.getByText(/Fri Jul 17, Mon Jul 20, Wed Jul 22/)).toBeTruthy();
+  });
+
+  it("shows no upcoming repeat dates for a non-repeating task", async () => {
+    const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByTestId("agenda-a")).toBeTruthy());
+
+    fireEvent.click(within(screen.getByTestId("day-agenda")).getByText("task a"));
+    await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeTruthy());
+
+    expect(screen.queryByText(/Next:/)).toBeNull();
+  });
 });
 
 describe("DailyView drag-to-schedule (cross-column)", () => {
@@ -163,8 +221,8 @@ describe("DailyView drag-to-schedule (cross-column)", () => {
 
     const source = screen.getByTestId("agenda-u");
     fireEvent.pointerDown(source, { pointerId: 1, clientX: 410, clientY: 10 });
-    fireEvent.pointerMove(source, { pointerId: 1, clientX: 10, clientY: 556 }); // -> 09:30
-    fireEvent.pointerUp(source, { pointerId: 1, clientX: 10, clientY: 556 });
+    fireEvent.pointerMove(source, { pointerId: 1, clientX: 10, clientY: 708 }); // -> 09:30
+    fireEvent.pointerUp(source, { pointerId: 1, clientX: 10, clientY: 708 });
 
     await waitFor(() => expect(screen.getByTestId("chip-u")).toBeTruthy());
     expect(screen.getByTestId("chip-u").style.top).toBe(`${(570 * HOUR_HEIGHT) / 60}px`);
@@ -201,8 +259,8 @@ describe("DailyView drag-to-schedule (cross-column)", () => {
 
     const chip = screen.getByTestId("chip-t");
     fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 148 }); // rail-relative y=48 -> 09:00
-    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 10, clientY: 772 }); // rail-relative y=672 -> 14:00
-    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 10, clientY: 772 });
+    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 10, clientY: 996 }); // rail-relative y=896 -> 14:00
+    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 10, clientY: 996 });
 
     await waitFor(() =>
       expect(screen.getByTestId("chip-t").style.top).toBe(`${(14 * 60 * HOUR_HEIGHT) / 60}px`),
@@ -243,13 +301,27 @@ describe("DailyView drag-to-schedule (cross-column)", () => {
 
     const source = screen.getByTestId("agenda-u");
     fireEvent.pointerDown(source, { pointerId: 1, clientX: 410, clientY: 10 });
-    fireEvent.pointerMove(source, { pointerId: 1, clientX: 10, clientY: 556 });
+    fireEvent.pointerMove(source, { pointerId: 1, clientX: 10, clientY: 708 });
 
     expect(screen.getByTestId("drag-ghost").textContent).toBe("untimed");
     expect(screen.getByTestId("drag-preview-line").textContent).toBe("09:30");
 
-    fireEvent.pointerUp(source, { pointerId: 1, clientX: 10, clientY: 556 });
+    fireEvent.pointerUp(source, { pointerId: 1, clientX: 10, clientY: 708 });
     expect(screen.queryByTestId("drag-ghost")).toBeNull();
     expect(screen.queryByTestId("drag-preview-line")).toBeNull();
+  });
+
+  it("still opens the drawer when a click carries a few pixels of incidental jitter", async () => {
+    const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: ANCHOR } });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByTestId("agenda-a")).toBeTruthy());
+
+    const title = within(screen.getByTestId("agenda-a")).getByText("task a");
+    fireEvent.pointerDown(title, { pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(title, { pointerId: 1, clientX: 107, clientY: 100 }); // 7px of jitter, under DRAG_THRESHOLD_PX
+    fireEvent.pointerUp(title, { pointerId: 1, clientX: 107, clientY: 100 });
+    fireEvent.click(title);
+
+    await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
   });
 });

@@ -43,6 +43,28 @@ function renderTimeline(
 }
 
 describe("DayTimeline", () => {
+  it("renders a fixed Focus Agenda header with the timed task count", async () => {
+    const day = todayKey();
+    const timed = makeTask({
+      id: "t",
+      title: "dentist",
+      time: "09:30",
+      scope: { kind: "day", date: day },
+    });
+    const untimed = makeTask({
+      id: "u",
+      title: "groceries",
+      scope: { kind: "day", date: day },
+    });
+    renderTimeline(day, [timed, untimed]);
+
+    await waitFor(() => expect(screen.getByText("Focus Agenda")).toBeTruthy());
+    expect(screen.getByText("1 task scheduled today")).toBeTruthy();
+    expect(screen.queryByText("Planned")).toBeNull();
+    expect(screen.getByTestId("timeline-header").className).toContain("shrink-0");
+    expect(screen.getByTestId("hour-rail").className).toContain("overflow-y-auto");
+  });
+
   it("places timed task chips at their hour offset", async () => {
     const day = todayKey();
     const timed = makeTask({
@@ -76,9 +98,10 @@ describe("DayTimeline", () => {
   it("on today, centers the rail scroll on the current time within a 12h viewport", async () => {
     const { railRef } = renderTimeline(todayKey());
     await waitFor(() => expect(screen.getByTestId("hour-rail")).toBeTruthy());
-    // system time is 14:05 -> now offset = 845min * (48/60) = 676px
-    // viewport is 12h = 576px, so centered scrollTop = 676 - 288 = 388
-    expect(railRef.current?.scrollTop).toBe(388);
+    // system time is 14:05; keep it centered within the 12-hour viewport.
+    expect(railRef.current?.scrollTop).toBe(
+      (845 * HOUR_HEIGHT) / 60 - (12 * HOUR_HEIGHT) / 2,
+    );
   });
 
   it("on a non-today date, falls back to a 07:00 scroll start", async () => {
@@ -153,8 +176,7 @@ describe("DayTimeline same-day overdue highlighting", () => {
     });
     renderTimeline(day, [t]);
     await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
-    const row = screen.getByText("morning meeting").closest("div");
-    expect(row?.className).toContain("border-destructive");
+    expect(screen.getByTestId("chip-t").className).toContain("border-l-destructive");
   });
 
   it("marks a future-time undone chip pending when viewing today", async () => {
@@ -167,8 +189,7 @@ describe("DayTimeline same-day overdue highlighting", () => {
     });
     renderTimeline(day, [t]);
     await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
-    const row = screen.getByText("afternoon call").closest("div");
-    expect(row?.className).toContain("border-warning");
+    expect(screen.getByTestId("chip-t").className).toContain("border-l-warning");
   });
 
   it("does not highlight a chip when viewing a non-today date", async () => {
@@ -181,9 +202,7 @@ describe("DayTimeline same-day overdue highlighting", () => {
     });
     renderTimeline(other, [t]);
     await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
-    const row = screen.getByText("tomorrow's task").closest("div");
-    expect(row?.className).not.toContain("border-destructive");
-    expect(row?.className).not.toContain("border-warning");
+    expect(screen.getByTestId("chip-t").className).not.toContain("border-l-destructive");
   });
 
   it("does not highlight a done chip even past its time", async () => {
@@ -197,8 +216,6 @@ describe("DayTimeline same-day overdue highlighting", () => {
     });
     renderTimeline(day, [t]);
     await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
-    const row = screen.getByText("done early task").closest("div");
-    expect(row?.className).not.toContain("border-destructive");
-    expect(row?.className).not.toContain("border-warning");
+    expect(screen.getByTestId("chip-t").className).toContain("border-l-muted-foreground");
   });
 });

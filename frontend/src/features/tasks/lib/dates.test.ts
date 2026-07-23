@@ -15,6 +15,7 @@ import {
   todayKey,
   weekDates,
   weekdayOf,
+  upcomingRepeatDates,
   weekRangeLabel,
   weekStartOf,
   yearOf,
@@ -133,5 +134,37 @@ describe("weekRangeLabel", () => {
 
   it("formats a week spanning two months", () => {
     expect(weekRangeLabel("2026-06-28")).toBe("Jun 28 – Jul 4");
+  });
+});
+
+describe("upcomingRepeatDates", () => {
+  it("returns the next N dates matching the given weekdays, starting from `from`", () => {
+    // 2026-07-16 is a Thursday; Mon/Wed/Fri next occurrences from there:
+    expect(upcomingRepeatDates([1, 3, 5], "2026-07-16", 3)).toEqual([
+      "2026-07-17",
+      "2026-07-20",
+      "2026-07-22",
+    ]);
+  });
+
+  it("includes `from` itself when its weekday matches", () => {
+    // 2026-07-16 is a Thursday (weekday 4)
+    expect(upcomingRepeatDates([4], "2026-07-16", 2)).toEqual([
+      "2026-07-16",
+      "2026-07-23",
+    ]);
+  });
+
+  it("returns an empty array for count 0 or empty weekdays", () => {
+    expect(upcomingRepeatDates([1, 3, 5], "2026-07-16", 0)).toEqual([]);
+    expect(upcomingRepeatDates([], "2026-07-16", 3)).toEqual([]);
+  });
+
+  it("handles a daily cadence (every weekday present)", () => {
+    expect(upcomingRepeatDates([0, 1, 2, 3, 4, 5, 6], "2026-07-16", 3)).toEqual([
+      "2026-07-16",
+      "2026-07-17",
+      "2026-07-18",
+    ]);
   });
 });

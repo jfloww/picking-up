@@ -10,6 +10,7 @@ import {
   nowTime,
   repeatCadenceLabel,
   repeatLabelForTask,
+  resolveRepeatWeekdays,
   timeToMinutes,
   weeklyRollupTasks,
   weekStats,
@@ -229,6 +230,29 @@ describe("repeatLabelForTask", () => {
   it("returns undefined when the anchor can't be found", () => {
     const orphan = task({ repeatSourceId: "missing" });
     expect(repeatLabelForTask(orphan, [orphan])).toBeUndefined();
+  });
+});
+
+describe("resolveRepeatWeekdays", () => {
+  it("resolves an anchor task's own repeatWeekdays", () => {
+    const anchor = task({ repeatWeekdays: [1, 3, 5] });
+    expect(resolveRepeatWeekdays(anchor, [anchor])).toEqual([1, 3, 5]);
+  });
+
+  it("resolves a generated instance's weekdays via its anchor's repeatSourceId", () => {
+    const anchor = task({ id: "anchor", repeatWeekdays: [0, 6] });
+    const instance = task({ id: "inst", repeatSourceId: "anchor" });
+    expect(resolveRepeatWeekdays(instance, [anchor, instance])).toEqual([0, 6]);
+  });
+
+  it("returns undefined for a non-repeating task", () => {
+    const plain = task({});
+    expect(resolveRepeatWeekdays(plain, [plain])).toBeUndefined();
+  });
+
+  it("returns undefined when the anchor can't be found", () => {
+    const orphan = task({ repeatSourceId: "missing" });
+    expect(resolveRepeatWeekdays(orphan, [orphan])).toBeUndefined();
   });
 });
 

@@ -22,16 +22,14 @@ describe("shiftAnchor", () => {
 });
 
 describe("TaskCalendar", () => {
-  it("defaults to the weekly view and switches scales", async () => {
+  it("defaults to the Daily Focus Planner view and switches scales", async () => {
     render(<TaskCalendar />);
-    // "Weekly"/"Yearly" appear both as tab labels and grid headers, so query
-    // tabs by role and assert view content via text unique to each view.
     await waitFor(() =>
       expect(
-        screen.getByRole("tab", { name: "Weekly", selected: true }),
+        screen.getByRole("tab", { name: "Daily", selected: true }),
       ).toBeTruthy(),
     );
-    expect(screen.getByText("This Week")).toBeTruthy(); // weekly hero box
+    expect(screen.getByText("Focus Agenda")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("tab", { name: "Yearly" }));
     await waitFor(() => expect(screen.getByText("January")).toBeTruthy());
@@ -48,19 +46,16 @@ describe("TaskCalendar", () => {
 
     it("shows a date label matching the current view, and keeps tabs/nav/label together as one non-shrinking block", async () => {
       render(<TaskCalendar />);
-      await waitFor(() => expect(screen.getByText("Jul 12 – Jul 18")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("Week of Jul 12 – Jul 18")).toBeTruthy());
 
-      const header = screen.getByText("Jul 12 – Jul 18").parentElement;
+      const header = screen.getByText("Week of Jul 12 – Jul 18").closest("header");
       expect(
         header?.contains(screen.getByRole("tablist", { name: "Calendar scale" })),
       ).toBe(true);
       expect(header?.contains(screen.getByText("Today"))).toBe(true);
       expect(header?.className).toContain("shrink-0");
 
-      fireEvent.click(screen.getByRole("tab", { name: "Daily" }));
-      await waitFor(() =>
-        expect(screen.getByText("Thursday, July 16")).toBeTruthy(),
-      );
+      expect(screen.getByText("Thursday, July 16")).toBeTruthy();
 
       fireEvent.click(screen.getByRole("tab", { name: "Monthly" }));
       await waitFor(() => expect(screen.getByText("2026")).toBeTruthy());
@@ -79,6 +74,8 @@ describe("drill-down navigation", () => {
 
   it("double-clicking a Weekly day date switches to Daily anchored on that date", async () => {
     render(<TaskCalendar />);
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Weekly" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("tab", { name: "Weekly" }));
     await waitFor(() => expect(screen.getByLabelText("Go to 2026-07-14")).toBeTruthy());
     fireEvent.doubleClick(screen.getByLabelText("Go to 2026-07-14"));
     await waitFor(() =>
