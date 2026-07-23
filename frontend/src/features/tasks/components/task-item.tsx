@@ -10,6 +10,12 @@ import { addMinutesToTime } from "../lib/times";
 import type { Task } from "../types";
 import { TaskDetailFields } from "./task-detail-fields";
 
+// Applied only to checkboxes that represent top-level task completion (not
+// subtasks, not the shared Checkbox primitive's default styling), so the
+// green + pop feedback stays scoped to "this task is done".
+export const DONE_CHECKBOX_CLASS =
+  "data-checked:border-success data-checked:bg-success data-checked:animate-task-complete";
+
 interface TaskItemActions {
   toggleTask: (id: string) => void;
   setMemo: (id: string, memo: string) => void;
@@ -133,8 +139,16 @@ export function TaskItem({
       <li>
         <div
           onClick={selectOrToggle}
-          className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2.5"
+          className="absolute inset-0 flex cursor-pointer items-center gap-3 px-3 py-2.5"
         >
+          <span onClick={(e) => e.stopPropagation()} className="contents">
+            <Checkbox
+              checked={task.done}
+              onCheckedChange={onToggle}
+              aria-label={`Toggle ${task.title}`}
+              className={DONE_CHECKBOX_CLASS}
+            />
+          </span>
           <button
             type="button"
             className={cn(
@@ -176,7 +190,7 @@ export function TaskItem({
             checked={task.done}
             onCheckedChange={onToggle}
             aria-label={`Toggle ${task.title}`}
-            className={large ? "size-[18px] border-subtle" : undefined}
+            className={cn(large && "size-[18px] border-subtle", DONE_CHECKBOX_CLASS)}
           />
         </span>
         {dateLabel && (

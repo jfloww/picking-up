@@ -267,6 +267,27 @@ describe("DailyView drag-to-schedule (cross-column)", () => {
     );
   });
 
+  it("dragging a rail chip does not open its detail drawer", async () => {
+    const timed = makeTask({ id: "t", title: "dentist", time: "09:00", scope: { kind: "day", date: ANCHOR } });
+    renderView(vi.fn(), [timed]);
+    await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
+
+    const rail = screen.getByTestId("hour-rail");
+    mockRect(rail, { top: 100, bottom: 1300, left: 0, right: 300 });
+    Object.defineProperty(rail, "scrollTop", { value: 0, writable: true });
+    mockRect(screen.getByTestId("day-agenda"), { top: 0, bottom: 90, left: 400, right: 700 });
+
+    const chip = screen.getByTestId("chip-t");
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 148 }); // rail-relative y=48 -> 09:00
+    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 10, clientY: 996 }); // rail-relative y=896 -> 14:00
+    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 10, clientY: 996 });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("chip-t").style.top).toBe(`${(14 * 60 * HOUR_HEIGHT) / 60}px`),
+    );
+    expect(screen.queryByLabelText("Close details")).toBeNull();
+  });
+
   it("dragging inside the expanded editor's memo textarea does not reschedule the task", async () => {
     const timed = makeTask({ id: "t", title: "dentist", time: "16:00", scope: { kind: "day", date: ANCHOR } });
     renderView(vi.fn(), [timed]);

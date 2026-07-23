@@ -31,6 +31,12 @@ describe("TaskDetailDrawer", () => {
     ).toBe("with care");
   });
 
+  it("styles the header checkbox with the success token and completion pop", () => {
+    render(<TaskDetailDrawer task={task} {...noopHandlers} />);
+    expect(screen.getByRole("checkbox").className).toContain("data-checked:bg-success");
+    expect(screen.getByRole("checkbox").className).toContain("data-checked:animate-task-complete");
+  });
+
   it("renders as a fixed-position overlay, not swapped inline", () => {
     render(<TaskDetailDrawer task={task} {...noopHandlers} />);
     const drawer = screen.getByTestId("task-detail-drawer");
