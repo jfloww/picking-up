@@ -27,6 +27,7 @@
   --input: #f2f3f4;
   --ring: #3b6b96;
   --brand: #3b6b96;
+  --wordmark: #3b6b96;
   --subtle: #8b9299;
   --chart-1: #3b6b96;
   --chart-2: #5f6a72;
@@ -65,6 +66,7 @@
   --input: #181c20;
   --ring: #d4a85f;
   --brand: #d4a85f;
+  --wordmark: #6f9cc4;
   --subtle: #697681;
   --chart-1: #6f9cc4;
   --chart-2: #a6afb5;
@@ -85,6 +87,7 @@
   --font-heading: var(--font-sans);
   --font-sans: var(--font-sans);
   --color-brand: var(--brand);
+  --color-wordmark: var(--wordmark);
   --color-subtle: var(--subtle);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);

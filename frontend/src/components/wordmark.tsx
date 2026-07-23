@@ -11,7 +11,7 @@ export function Wordmark({ className }: { className?: string }) {
         className,
       )}
     >
-      PICKING&nbsp;<span className="text-brand">UP</span>
+      PICKING&nbsp;<span className="text-wordmark">UP</span>
     </Link>
   );
 }
