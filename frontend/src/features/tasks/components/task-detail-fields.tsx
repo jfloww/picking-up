@@ -15,6 +15,7 @@ export function TaskDetailFields({
   onMemoChange,
   onTimeChange,
   onRepeatWeekdaysChange,
+  onDetachFromRoutine,
   onPriorityChange,
   onDurationChange,
   onBackgroundChange,
@@ -31,6 +32,7 @@ export function TaskDetailFields({
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
   onRepeatWeekdaysChange: (weekdays: number[]) => void;
+  onDetachFromRoutine: () => void;
   onPriorityChange: (priority: boolean) => void;
   onDurationChange: (durationMinutes?: number) => void;
   onBackgroundChange: (background: boolean) => void;
@@ -78,6 +80,13 @@ export function TaskDetailFields({
             <span className="flex items-center gap-1 text-xs text-subtle">
               <RotateCw aria-label="Part of a routine" className="size-3" />
               Part of a routine
+              <button
+                type="button"
+                onClick={() => onDetachFromRoutine()}
+                className="text-subtle underline decoration-dotted underline-offset-2 hover:text-foreground"
+              >
+                Detach
+              </button>
             </span>
           ) : (
             <TaskRepeatPicker

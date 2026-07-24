@@ -55,6 +55,7 @@ interface TasksContextValue extends TasksState {
   setMemo: (id: string, memo: string) => void;
   setTime: (id: string, time: string | undefined) => void;
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
+  detachFromRoutine: (id: string, weekdays?: number[]) => void;
   setPriority: (id: string, priority: boolean) => void;
   setDuration: (id: string, durationMinutes: number | undefined) => void;
   setBackground: (id: string, background: boolean) => void;
@@ -181,6 +182,24 @@ export function TasksProvider({
         const task: Task = { ...current, repeatWeekdays: normalized };
         dispatch({ type: "updated", task });
         void repo.update(task);
+      },
+      detachFromRoutine(id, weekdays) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current) return;
+        const normalized = weekdays && weekdays.length > 0 ? weekdays : undefined;
+        const task: Task = { ...current, repeatSourceId: undefined, repeatWeekdays: normalized };
+        dispatch({ type: "updated", task });
+        void repo.update(task);
+
+        if (current.repeatSourceId !== undefined && current.scope.kind === "day") {
+          const anchor = state.tasks.find((t) => t.id === current.repeatSourceId);
+          if (anchor) {
+            const excludedDates = [...(anchor.excludedDates ?? []), current.scope.date];
+            const updatedAnchor: Task = { ...anchor, excludedDates };
+            dispatch({ type: "updated", task: updatedAnchor });
+            void repo.update(updatedAnchor);
+          }
+        }
       },
       setPriority(id, priority) {
         const current = state.tasks.find((t) => t.id === id);

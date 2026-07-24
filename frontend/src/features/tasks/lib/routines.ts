@@ -15,6 +15,7 @@ export function materializeRoutines(tasks: Task[], today: string): Task[] {
       // without this check, the very day repeat is turned on would spawn a
       // second, duplicate occurrence alongside the anchor itself.
       if (anchor.scope.kind === "day" && anchor.scope.date === today) return false;
+      if (anchor.excludedDates?.includes(today)) return false;
       return !tasks.some(
         (t) =>
           t.repeatSourceId === anchor.id &&

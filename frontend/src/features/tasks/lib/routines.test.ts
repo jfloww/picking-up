@@ -81,4 +81,12 @@ describe("materializeRoutines", () => {
       repeatSourceId: "anchor",
     });
   });
+
+  it("does not spawn for a date in the anchor's excludedDates, even if it otherwise matches", () => {
+    const anchor = makeTask({
+      repeatWeekdays: [4],
+      excludedDates: [TODAY],
+    });
+    expect(materializeRoutines([anchor], TODAY)).toEqual([]);
+  });
 });
