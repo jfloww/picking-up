@@ -211,6 +211,35 @@ describe("TasksProvider", () => {
       act(() => result.current.setRepeatWeekdays("a", []));
       expect(result.current.tasks[0].repeatWeekdays).toBeUndefined();
     });
+
+    it("detachFromRoutine clears repeatSourceId, leaving repeatWeekdays unset by default", async () => {
+      const occurrence = makeTask({
+        id: "occ",
+        scope: { kind: "day", date: todayKey() },
+        repeatSourceId: "anchor",
+      });
+      const { repo, result } = setup(fakeRepository([occurrence]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.detachFromRoutine("occ"));
+      expect(result.current.tasks[0].repeatSourceId).toBeUndefined();
+      expect(result.current.tasks[0].repeatWeekdays).toBeUndefined();
+      await waitFor(() => expect(repo.tasks[0].repeatSourceId).toBeUndefined());
+    });
+
+    it("detachFromRoutine sets repeatWeekdays when weekdays are provided", async () => {
+      const occurrence = makeTask({
+        id: "occ",
+        scope: { kind: "day", date: todayKey() },
+        repeatSourceId: "anchor",
+      });
+      const { result } = setup(fakeRepository([occurrence]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.detachFromRoutine("occ", [2, 4]));
+      expect(result.current.tasks[0].repeatSourceId).toBeUndefined();
+      expect(result.current.tasks[0].repeatWeekdays).toEqual([2, 4]);
+    });
   });
 
   describe("time and subtask actions", () => {
