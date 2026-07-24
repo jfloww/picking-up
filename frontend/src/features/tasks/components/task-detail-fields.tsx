@@ -82,7 +82,7 @@ export function TaskDetailFields({
               Part of a routine
               <button
                 type="button"
-                onClick={onDetachFromRoutine}
+                onClick={() => onDetachFromRoutine()}
                 className="text-subtle underline decoration-dotted underline-offset-2 hover:text-foreground"
               >
                 Detach

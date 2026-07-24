@@ -152,6 +152,16 @@ time together) and is out of scope to fix generally here — but since
 detach+weekdays is directly part of this feature, the design avoids it by
 construction (one action, both fields set together).
 
+Note that this protection covers only the detach+weekdays combination.
+Detaching together with an edit to any *other* field (memo, time, duration,
+priority, background) in the same Done click is still subject to the
+general multi-field clobber risk described above — `handleDone` fires each
+field's store action separately, all closing over the same pre-edit `task`
+snapshot, and whichever dispatch lands last wins. That risk is pre-existing,
+not specific to routines, and remains out of scope for this feature; it is
+called out here only so this section isn't misread as making detach fully
+safe against clobbering.
+
 ### Non-goals / accepted quirks
 
 - Not fixing the general multi-field clobber risk elsewhere in
@@ -163,6 +173,13 @@ construction (one action, both fields set together).
   dates. This clears up once Done is clicked and the page recomputes from
   the real (now-detached) task. Not worth suppressing for this transient
   state.
+- Detaching a past-dated, still-unfinished occurrence changes its rollover
+  eligibility. Routine occurrences are exempt from rollover (`lib/rollover.ts`),
+  but once detached, the task becomes a plain task and is no longer exempt,
+  so it may get moved into the current week's scope on the next load. This
+  is believed to be the correct/intended behavior for a task that's no
+  longer part of a routine — it just hadn't previously been written down as
+  standalone.
 
 ## Testing
 

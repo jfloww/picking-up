@@ -109,10 +109,11 @@ export function TaskDetailDrawer({
     onClose();
   };
 
+  const { detached, ...draftFields } = draft;
   const draftTask: Task = {
     ...task,
-    ...draft,
-    repeatSourceId: draft.detached ? undefined : task.repeatSourceId,
+    ...draftFields,
+    repeatSourceId: detached ? undefined : task.repeatSourceId,
   };
 
   return (

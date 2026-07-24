@@ -369,6 +369,20 @@ describe("TaskItem v2", () => {
     expect(onDetachFromRoutine).toHaveBeenCalledTimes(1);
   });
 
+  it("does not forward the click event as an argument to onDetachFromRoutine", () => {
+    const onDetachFromRoutine = vi.fn();
+    render(
+      <TaskItem
+        task={makeTask({ title: "dentist", repeatSourceId: "anchor-1" })}
+        {...noopHandlers}
+        onDetachFromRoutine={onDetachFromRoutine}
+      />,
+    );
+    fireEvent.click(screen.getByText("dentist"));
+    fireEvent.click(screen.getByText("Detach"));
+    expect(onDetachFromRoutine).toHaveBeenCalledWith();
+  });
+
   it("threads onDurationChange to the inline TaskDetailFields expansion", () => {
     const onDurationChange = vi.fn();
     render(
