@@ -15,6 +15,7 @@ const noopHandlers = {
   onMemoChange: (_memo: string) => {},
   onTimeChange: (_time?: string) => {},
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
+  onDetachFromRoutine: () => {},
   onPriorityChange: (_priority: boolean) => {},
   onDurationChange: (_durationMinutes?: number) => {},
   onBackgroundChange: (_background: boolean) => {},
@@ -352,6 +353,20 @@ describe("TaskItem v2", () => {
     fireEvent.click(screen.getByText("dentist"));
     fireEvent.click(screen.getByLabelText("Repeat on Wednesday"));
     expect(onRepeatWeekdaysChange).toHaveBeenCalledWith([3]);
+  });
+
+  it("detaches from routine via the expansion", () => {
+    const onDetachFromRoutine = vi.fn();
+    render(
+      <TaskItem
+        task={makeTask({ title: "dentist", repeatSourceId: "anchor-1" })}
+        {...noopHandlers}
+        onDetachFromRoutine={onDetachFromRoutine}
+      />,
+    );
+    fireEvent.click(screen.getByText("dentist"));
+    fireEvent.click(screen.getByText("Detach"));
+    expect(onDetachFromRoutine).toHaveBeenCalledTimes(1);
   });
 
   it("threads onDurationChange to the inline TaskDetailFields expansion", () => {

@@ -21,6 +21,7 @@ interface TaskItemActions {
   setMemo: (id: string, memo: string) => void;
   setTime: (id: string, time: string | undefined) => void;
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
+  detachFromRoutine: (id: string, weekdays?: number[]) => void;
   setPriority: (id: string, priority: boolean) => void;
   setDuration: (id: string, durationMinutes: number | undefined) => void;
   setBackground: (id: string, background: boolean) => void;
@@ -65,6 +66,7 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onMemoChange: (memo: string) => actions.setMemo(id, memo),
     onTimeChange: (time?: string) => actions.setTime(id, time),
     onRepeatWeekdaysChange: (weekdays: number[]) => actions.setRepeatWeekdays(id, weekdays),
+    onDetachFromRoutine: (weekdays?: number[]) => actions.detachFromRoutine(id, weekdays),
     onPriorityChange: (priority: boolean) => actions.setPriority(id, priority),
     onDurationChange: (durationMinutes?: number) => actions.setDuration(id, durationMinutes),
     onBackgroundChange: (background: boolean) => actions.setBackground(id, background),
@@ -85,6 +87,7 @@ export function TaskItem({
   onMemoChange,
   onTimeChange,
   onRepeatWeekdaysChange,
+  onDetachFromRoutine,
   onPriorityChange,
   onDurationChange,
   onBackgroundChange,
@@ -103,6 +106,7 @@ export function TaskItem({
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
   onRepeatWeekdaysChange: (weekdays: number[]) => void;
+  onDetachFromRoutine: (weekdays?: number[]) => void;
   onPriorityChange: (priority: boolean) => void;
   onDurationChange: (durationMinutes?: number) => void;
   onBackgroundChange: (background: boolean) => void;
@@ -288,6 +292,7 @@ export function TaskItem({
             onMemoChange={onMemoChange}
             onTimeChange={onTimeChange}
             onRepeatWeekdaysChange={onRepeatWeekdaysChange}
+            onDetachFromRoutine={onDetachFromRoutine}
             onPriorityChange={onPriorityChange}
             onDurationChange={onDurationChange}
             onBackgroundChange={onBackgroundChange}
