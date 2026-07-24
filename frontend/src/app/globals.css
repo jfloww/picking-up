@@ -66,8 +66,8 @@
   --success: #4ade80;
   --border: rgb(255 255 255 / 9%);
   --input: #181c20;
-  --ring: #d4a85f;
-  --brand: #d4a85f;
+  --ring: #6f9cc4;
+  --brand: #6f9cc4;
   --wordmark: #6f9cc4;
   --subtle: #697681;
   --chart-1: #6f9cc4;
@@ -82,7 +82,7 @@
   --sidebar-accent: #181c20;
   --sidebar-accent-foreground: #f4f5f6;
   --sidebar-border: rgb(255 255 255 / 9%);
-  --sidebar-ring: #d4a85f;
+  --sidebar-ring: #6f9cc4;
 }
 
 @theme inline {
