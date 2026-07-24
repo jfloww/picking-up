@@ -8,6 +8,7 @@ const noopHandlers = {
   onMemoChange: (_memo: string) => {},
   onTimeChange: (_time?: string) => {},
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
+  onDetachFromRoutine: () => {},
   onPriorityChange: (_priority: boolean) => {},
   onDurationChange: (_durationMinutes?: number) => {},
   onBackgroundChange: (_background: boolean) => {},
@@ -105,6 +106,22 @@ describe("TaskDetailFields repeat", () => {
     );
     expect(screen.queryByLabelText("Repeat on Monday")).toBeNull();
     expect(screen.getByLabelText("Part of a routine")).toBeTruthy();
+  });
+
+  it("shows a Detach control for a generated occurrence and calls onDetachFromRoutine when clicked", () => {
+    const onDetachFromRoutine = vi.fn();
+    render(
+      <TaskDetailFields
+        task={makeTask({
+          scope: { kind: "day", date: "2026-07-16" },
+          repeatSourceId: "anchor-1",
+        })}
+        {...noopHandlers}
+        onDetachFromRoutine={onDetachFromRoutine}
+      />,
+    );
+    fireEvent.click(screen.getByText("Detach"));
+    expect(onDetachFromRoutine).toHaveBeenCalledTimes(1);
   });
 
   it("hides the repeat row entirely for a non-day-scoped task", () => {
