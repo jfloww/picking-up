@@ -43,6 +43,10 @@ function isValidWeekdays(value: unknown): value is number[] {
   );
 }
 
+function isValidDateList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((d) => typeof d === "string");
+}
+
 // The read path normalizes v2 fields instead of rejecting the whole task:
 // only v1 structural validation (isTask/isScope) may drop a task.
 export function normalizeTask(task: Task): Task {
@@ -71,6 +75,11 @@ export function normalizeTask(task: Task): Task {
     repeatSourceId = undefined;
   }
 
+  let excludedDates = task.excludedDates;
+  if (excludedDates !== undefined && !isValidDateList(excludedDates)) {
+    excludedDates = undefined;
+  }
+
   let priority = task.priority;
   if (priority !== undefined && typeof priority !== "boolean") {
     priority = undefined;
@@ -96,6 +105,7 @@ export function normalizeTask(task: Task): Task {
     subtasks === task.subtasks &&
     repeatWeekdays === task.repeatWeekdays &&
     repeatSourceId === task.repeatSourceId &&
+    excludedDates === task.excludedDates &&
     priority === task.priority &&
     durationMinutes === task.durationMinutes &&
     background === task.background
@@ -108,6 +118,7 @@ export function normalizeTask(task: Task): Task {
     subtasks,
     repeatWeekdays,
     repeatSourceId,
+    excludedDates,
     priority,
     durationMinutes,
     background,

@@ -23,6 +23,7 @@ export interface Task {
   subtasks?: Subtask[]; // one level deep; no scope/memo/time of their own
   repeatWeekdays?: number[]; // 0=Sun..6=Sat; set only on the anchor task
   repeatSourceId?: string;   // set only on a task generated from an anchor
+  excludedDates?: string[];  // day-scope dates ("YYYY-MM-DD") the anchor should not spawn for; set only on the anchor task
   priority?: boolean;
   durationMinutes?: number; // meaningful alongside `time`; a positive integer
   background?: boolean; // renders in the timeline's slim background lane instead of the regular overlap columns

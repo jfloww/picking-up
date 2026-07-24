@@ -240,6 +240,83 @@ describe("TasksProvider", () => {
       expect(result.current.tasks[0].repeatSourceId).toBeUndefined();
       expect(result.current.tasks[0].repeatWeekdays).toEqual([2, 4]);
     });
+
+    it("detachFromRoutine records the occurrence's date in the anchor's excludedDates", async () => {
+      const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
+      const occurrence = makeTask({
+        id: "occ",
+        scope: { kind: "day", date: "2026-07-16" },
+        repeatSourceId: "anchor",
+      });
+      const { repo, result } = setup(fakeRepository([anchor, occurrence]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.detachFromRoutine("occ"));
+
+      expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual(["2026-07-16"]);
+      await waitFor(() =>
+        expect(repo.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual(["2026-07-16"]),
+      );
+    });
+
+    it("detachFromRoutine appends to existing excludedDates rather than replacing them", async () => {
+      const anchor = makeTask({
+        id: "anchor",
+        scope: { kind: "day", date: "2026-07-01" },
+        repeatWeekdays: [4],
+        excludedDates: ["2026-07-09"],
+      });
+      const occurrence = makeTask({
+        id: "occ",
+        scope: { kind: "day", date: "2026-07-16" },
+        repeatSourceId: "anchor",
+      });
+      const { result } = setup(fakeRepository([anchor, occurrence]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.detachFromRoutine("occ"));
+
+      expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual([
+        "2026-07-09",
+        "2026-07-16",
+      ]);
+    });
+
+    it("detaching a task that was already standalone (no repeatSourceId) does not touch any anchor", async () => {
+      const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
+      const standalone = makeTask({ id: "solo", scope: { kind: "day", date: "2026-07-16" } });
+      const { result } = setup(fakeRepository([anchor, standalone]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.detachFromRoutine("solo"));
+
+      expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toBeUndefined();
+    });
+
+    it("detaching today's occurrence, then reloading from the repository, does not respawn a duplicate", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 6, 16)); // Thursday, weekday 4
+      const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
+      const { repo, result } = setup(fakeRepository([anchor]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const spawned = result.current.tasks.find((t) => t.repeatSourceId === "anchor");
+      expect(spawned).toBeTruthy();
+
+      act(() => result.current.detachFromRoutine(spawned!.id));
+      await waitFor(() =>
+        expect(repo.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual(["2026-07-16"]),
+      );
+
+      const { result: reloaded } = setup(repo);
+      await waitFor(() => expect(reloaded.current.loaded).toBe(true));
+      const duplicates = reloaded.current.tasks.filter(
+        (t) =>
+          t.repeatSourceId === "anchor" &&
+          t.scope.kind === "day" &&
+          t.scope.date === "2026-07-16",
+      );
+      expect(duplicates).toHaveLength(0);
+    });
   });
 
   describe("time and subtask actions", () => {

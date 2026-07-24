@@ -190,6 +190,16 @@ export function TasksProvider({
         const task: Task = { ...current, repeatSourceId: undefined, repeatWeekdays: normalized };
         dispatch({ type: "updated", task });
         void repo.update(task);
+
+        if (current.repeatSourceId !== undefined && current.scope.kind === "day") {
+          const anchor = state.tasks.find((t) => t.id === current.repeatSourceId);
+          if (anchor) {
+            const excludedDates = [...(anchor.excludedDates ?? []), current.scope.date];
+            const updatedAnchor: Task = { ...anchor, excludedDates };
+            dispatch({ type: "updated", task: updatedAnchor });
+            void repo.update(updatedAnchor);
+          }
+        }
       },
       setPriority(id, priority) {
         const current = state.tasks.find((t) => t.id === id);

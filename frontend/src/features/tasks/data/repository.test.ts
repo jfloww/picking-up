@@ -143,6 +143,24 @@ describe("v2 field normalization", () => {
     expect(loaded.repeatSourceId).toBeUndefined();
   });
 
+  it("round-trips a valid excludedDates array", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const anchor: Task = { ...task, id: "anchor", excludedDates: ["2026-07-09", "2026-07-16"] };
+    await repo.create(anchor);
+    expect(await repo.list()).toEqual([anchor]);
+  });
+
+  it("clears a malformed excludedDates value but keeps the task", async () => {
+    const repo = createLocalStorageRepository(
+      fakeStorage({
+        "picking-up.tasks.v1": JSON.stringify([{ ...task, excludedDates: [1, 2, 3] }]),
+      }),
+    );
+    const [loaded] = await repo.list();
+    expect(loaded.id).toBe(task.id);
+    expect(loaded.excludedDates).toBeUndefined();
+  });
+
   it("normalizeTask returns the same reference when nothing changed", () => {
     const clean: Task = {
       ...task,
