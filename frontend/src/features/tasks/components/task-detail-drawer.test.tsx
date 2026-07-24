@@ -10,6 +10,7 @@ const noopHandlers = {
   onMemoChange: (_memo: string) => {},
   onTimeChange: (_time?: string) => {},
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
+  onDetachFromRoutine: (_weekdays?: number[]) => {},
   onPriorityChange: (_priority: boolean) => {},
   onDurationChange: (_durationMinutes?: number) => {},
   onBackgroundChange: (_background: boolean) => {},
@@ -252,6 +253,97 @@ describe("TaskDetailDrawer", () => {
       expect(
         screen.getByRole("button", { name: "Priority" }).getAttribute("aria-pressed"),
       ).toBe("true"); // taskB's own real value, not taskA's uncommitted edit
+    });
+  });
+
+  describe("detaching from a routine occurrence", () => {
+    const routineTask = makeTask({
+      id: "occ",
+      title: "gym",
+      scope: { kind: "day", date: "2026-07-16" },
+      repeatSourceId: "anchor-1",
+    });
+
+    it("swaps the routine label for the weekday picker immediately when Detach is clicked, before Done", () => {
+      render(<TaskDetailDrawer task={routineTask} {...noopHandlers} />);
+      expect(screen.getByLabelText("Part of a routine")).toBeTruthy();
+
+      fireEvent.click(screen.getByText("Detach"));
+
+      expect(screen.queryByLabelText("Part of a routine")).toBeNull();
+      expect(screen.getByLabelText("Repeat on Monday")).toBeTruthy();
+    });
+
+    it("Done calls onDetachFromRoutine with no weekdays when none were chosen after detaching", () => {
+      const onDetachFromRoutine = vi.fn();
+      const onRepeatWeekdaysChange = vi.fn();
+      render(
+        <TaskDetailDrawer
+          task={routineTask}
+          {...noopHandlers}
+          onDetachFromRoutine={onDetachFromRoutine}
+          onRepeatWeekdaysChange={onRepeatWeekdaysChange}
+        />,
+      );
+
+      fireEvent.click(screen.getByText("Detach"));
+      fireEvent.click(screen.getByText("Done"));
+
+      expect(onDetachFromRoutine).toHaveBeenCalledWith(undefined);
+      expect(onRepeatWeekdaysChange).not.toHaveBeenCalled();
+    });
+
+    it("Done calls onDetachFromRoutine with the chosen weekdays when the picker was also used", () => {
+      const onDetachFromRoutine = vi.fn();
+      const onRepeatWeekdaysChange = vi.fn();
+      render(
+        <TaskDetailDrawer
+          task={routineTask}
+          {...noopHandlers}
+          onDetachFromRoutine={onDetachFromRoutine}
+          onRepeatWeekdaysChange={onRepeatWeekdaysChange}
+        />,
+      );
+
+      fireEvent.click(screen.getByText("Detach"));
+      fireEvent.click(screen.getByLabelText("Repeat on Monday"));
+      fireEvent.click(screen.getByLabelText("Repeat on Wednesday"));
+      fireEvent.click(screen.getByText("Done"));
+
+      expect(onDetachFromRoutine).toHaveBeenCalledWith([1, 3]);
+      expect(onRepeatWeekdaysChange).not.toHaveBeenCalled();
+    });
+
+    it("Cancel after Detach discards the change and calls neither commit handler", () => {
+      const onDetachFromRoutine = vi.fn();
+      const onRepeatWeekdaysChange = vi.fn();
+      render(
+        <TaskDetailDrawer
+          task={routineTask}
+          {...noopHandlers}
+          onDetachFromRoutine={onDetachFromRoutine}
+          onRepeatWeekdaysChange={onRepeatWeekdaysChange}
+        />,
+      );
+
+      fireEvent.click(screen.getByText("Detach"));
+      fireEvent.click(screen.getByText("Cancel"));
+
+      expect(onDetachFromRoutine).not.toHaveBeenCalled();
+      expect(onRepeatWeekdaysChange).not.toHaveBeenCalled();
+    });
+
+    it("Done does not call onDetachFromRoutine when Detach was never clicked", () => {
+      const onDetachFromRoutine = vi.fn();
+      render(
+        <TaskDetailDrawer
+          task={routineTask}
+          {...noopHandlers}
+          onDetachFromRoutine={onDetachFromRoutine}
+        />,
+      );
+      fireEvent.click(screen.getByText("Done"));
+      expect(onDetachFromRoutine).not.toHaveBeenCalled();
     });
   });
 

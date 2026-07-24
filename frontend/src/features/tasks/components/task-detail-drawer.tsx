@@ -19,6 +19,7 @@ interface Draft {
   priority: boolean;
   background: boolean;
   repeatWeekdays: number[];
+  detached: boolean;
 }
 
 function draftFromTask(task: Task): Draft {
@@ -30,6 +31,7 @@ function draftFromTask(task: Task): Draft {
     priority: !!task.priority,
     background: !!task.background,
     repeatWeekdays: task.repeatWeekdays ?? [],
+    detached: false,
   };
 }
 
@@ -40,6 +42,7 @@ export function TaskDetailDrawer({
   onMemoChange,
   onTimeChange,
   onRepeatWeekdaysChange,
+  onDetachFromRoutine,
   onPriorityChange,
   onDurationChange,
   onBackgroundChange,
@@ -55,6 +58,7 @@ export function TaskDetailDrawer({
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
   onRepeatWeekdaysChange: (weekdays: number[]) => void;
+  onDetachFromRoutine: (weekdays?: number[]) => void;
   onPriorityChange: (priority: boolean) => void;
   onDurationChange: (durationMinutes?: number) => void;
   onBackgroundChange: (background: boolean) => void;
@@ -94,14 +98,22 @@ export function TaskDetailDrawer({
     if (draft.priority !== !!task.priority) onPriorityChange(draft.priority);
     if (draft.background !== !!task.background) onBackgroundChange(draft.background);
     const original = task.repeatWeekdays ?? [];
-    const changed =
+    const weekdaysChanged =
       draft.repeatWeekdays.length !== original.length ||
       draft.repeatWeekdays.some((d, i) => d !== original[i]);
-    if (changed) onRepeatWeekdaysChange(draft.repeatWeekdays);
+    if (draft.detached) {
+      onDetachFromRoutine(weekdaysChanged ? draft.repeatWeekdays : undefined);
+    } else if (weekdaysChanged) {
+      onRepeatWeekdaysChange(draft.repeatWeekdays);
+    }
     onClose();
   };
 
-  const draftTask: Task = { ...task, ...draft };
+  const draftTask: Task = {
+    ...task,
+    ...draft,
+    repeatSourceId: draft.detached ? undefined : task.repeatSourceId,
+  };
 
   return (
     <aside
@@ -160,6 +172,7 @@ export function TaskDetailDrawer({
           onMemoChange={(memo) => setDraft((d) => ({ ...d, memo }))}
           onTimeChange={(time) => setDraft((d) => ({ ...d, time }))}
           onRepeatWeekdaysChange={(repeatWeekdays) => setDraft((d) => ({ ...d, repeatWeekdays }))}
+          onDetachFromRoutine={() => setDraft((d) => ({ ...d, detached: true }))}
           onPriorityChange={(priority) => setDraft((d) => ({ ...d, priority }))}
           onDurationChange={(durationMinutes) => setDraft((d) => ({ ...d, durationMinutes }))}
           onBackgroundChange={(background) => setDraft((d) => ({ ...d, background }))}
