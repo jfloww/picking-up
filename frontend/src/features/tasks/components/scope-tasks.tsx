@@ -13,7 +13,6 @@ export function ScopeTasks({
   scope,
   quickAdd = false,
   compact = false,
-  excludeDate,
   onSelectTask,
   highlightOverdue = false,
   showRepeatLabel = false,
@@ -21,7 +20,6 @@ export function ScopeTasks({
   scope: Scope;
   quickAdd?: boolean;
   compact?: boolean;
-  excludeDate?: string;
   onSelectTask?: (id: string) => void;
   highlightOverdue?: boolean;
   showRepeatLabel?: boolean;
@@ -41,12 +39,6 @@ export function ScopeTasks({
     const ordered =
       scope.kind === "day" ? [...scoped].sort(compareTasksForDay) : scoped;
     items = ordered.map((task) => ({ task, date: null }));
-  }
-
-  if (excludeDate) {
-    items = items.filter(
-      (i) => !(i.task.scope.kind === "day" && i.task.scope.date === excludeDate),
-    );
   }
 
   if (compact) {

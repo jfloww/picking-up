@@ -697,35 +697,6 @@ describe("ScopeTasks weekly rollup", () => {
     expect(screen.queryByText(shortDateLabel(future, todayKey()))).toBeNull();
   });
 
-  it("excludes a day-scoped task dated excludeDate", async () => {
-    const week = weekStartOf(todayKey());
-    const future = addDays(week, 2);
-    const dayTask = makeTask({ id: "d", title: "day task", scope: { kind: "day", date: future } });
-    render(
-      <TasksProvider repository={fakeRepository([dayTask])}>
-        <ScopeTasks scope={{ kind: "week", weekStart: week }} quickAdd excludeDate={future} />
-      </TasksProvider>,
-    );
-    await waitFor(() => expect(screen.getByLabelText("Add task")).toBeTruthy());
-    expect(screen.queryByText("day task")).toBeNull();
-  });
-
-  it("keeps a week-scoped task rolled over from excludeDate", async () => {
-    const week = weekStartOf(todayKey());
-    const future = addDays(week, 2);
-    const rolledTask = makeTask({
-      id: "w",
-      title: "rolled task",
-      scope: { kind: "week", weekStart: week },
-      rolledFrom: { kind: "day", date: future },
-    });
-    render(
-      <TasksProvider repository={fakeRepository([rolledTask])}>
-        <ScopeTasks scope={{ kind: "week", weekStart: week }} excludeDate={future} />
-      </TasksProvider>,
-    );
-    await waitFor(() => expect(screen.getByText("rolled task")).toBeTruthy());
-  });
 });
 
 describe("ScopeTasks day box (Weekly view props)", () => {
