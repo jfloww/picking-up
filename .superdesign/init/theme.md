@@ -1,0 +1,175 @@
+# Theme and Design Tokens
+
+## Compact token summary
+
+- Framework: Tailwind CSS v4 through `@tailwindcss/postcss`; shadcn base-nova; no `tailwind.config.*` file.
+- Typography: Geist loaded by `next/font/google` into `--font-sans`; both body and heading aliases use this sans family. App type sizes are mostly Tailwind defaults with dense task UI at 10–16px and page headings at 18px+.
+- Base radius: `0.625rem` (10px). Derived radii: sm 6px, md 8px, lg 10px, xl 14px, 2xl 18px, 3xl 22px, 4xl 26px.
+- Light palette: background/card/sidebar `#ffffff`; foreground/primary `#171a1c`; secondary/muted/input `#f2f3f4`; muted text `#5f6a72`; border `#e5e7e6`; brand/ring `#3b6b96`; subtle `#8b9299`; destructive `#b42318`; warning `#b45309`.
+- Dark palette (default): background `#0a0b0c`; card/sidebar/popover `#121518`; secondary/muted/accent/input `#181c20`; foreground/primary `#f4f5f6`; muted text `#a3adb7`; subtle `#697681`; brand/ring `#d4a85f`; border/sidebar-border `rgb(255 255 255 / 9%)`; destructive `#ff8a7a`; warning `#fbbf24`.
+- Dark chart scale: `#6f9cc4`, `#a6afb5`, `#7b858c`, `#4a5258`, `#22272b`.
+- Layout spacing: page shell uses horizontal 24px at base and 40px from `sm`; `/app` content is capped at `max-w-6xl` with 24px page padding; common compact gaps are 4–16px.
+- Shadows: mostly Tailwind `shadow-lg` for drag ghost and `shadow-2xl` for the task drawer; panels favor 1px rings/borders rather than broad shadows.
+- Breakpoints: Tailwind v4 defaults; source explicitly uses `sm` and `md` variants.
+- Motion: transition colors/all for controls; task drawer uses 200ms ease-out transform; global animation helpers come from `tw-animate-css`.
+
+## Raw source: `frontend/src/app/globals.css`
+
+```css
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  color-scheme: light;
+  --radius: 0.625rem;
+  --background: #ffffff;
+  --foreground: #171a1c;
+  --card: #ffffff;
+  --card-foreground: #171a1c;
+  --popover: #ffffff;
+  --popover-foreground: #171a1c;
+  --primary: #171a1c;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f3f4;
+  --secondary-foreground: #171a1c;
+  --muted: #f2f3f4;
+  --muted-foreground: #5f6a72;
+  --accent: #f2f3f4;
+  --accent-foreground: #171a1c;
+  --destructive: #b42318;
+  --warning: #b45309;
+  --border: #e5e7e6;
+  --input: #f2f3f4;
+  --ring: #3b6b96;
+  --brand: #3b6b96;
+  --subtle: #8b9299;
+  --chart-1: #3b6b96;
+  --chart-2: #5f6a72;
+  --chart-3: #8b9299;
+  --chart-4: #b9c0c4;
+  --chart-5: #e5e7e6;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #171a1c;
+  --sidebar-primary: #171a1c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f2f3f4;
+  --sidebar-accent-foreground: #171a1c;
+  --sidebar-border: #e5e7e6;
+  --sidebar-ring: #3b6b96;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #0a0b0c;
+  --foreground: #f4f5f6;
+  --card: #121518;
+  --card-foreground: #f4f5f6;
+  --popover: #121518;
+  --popover-foreground: #f4f5f6;
+  --primary: #f4f5f6;
+  --primary-foreground: #0a0b0c;
+  --secondary: #181c20;
+  --secondary-foreground: #f4f5f6;
+  --muted: #181c20;
+  --muted-foreground: #a3adb7;
+  --accent: #181c20;
+  --accent-foreground: #f4f5f6;
+  --destructive: #ff8a7a;
+  --warning: #fbbf24;
+  --border: rgb(255 255 255 / 9%);
+  --input: #181c20;
+  --ring: #d4a85f;
+  --brand: #d4a85f;
+  --subtle: #697681;
+  --chart-1: #6f9cc4;
+  --chart-2: #a6afb5;
+  --chart-3: #7b858c;
+  --chart-4: #4a5258;
+  --chart-5: #22272b;
+  --sidebar: #121518;
+  --sidebar-foreground: #f4f5f6;
+  --sidebar-primary: #f4f5f6;
+  --sidebar-primary-foreground: #0a0b0c;
+  --sidebar-accent: #181c20;
+  --sidebar-accent-foreground: #f4f5f6;
+  --sidebar-border: rgb(255 255 255 / 9%);
+  --sidebar-ring: #d4a85f;
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans);
+  --color-brand: var(--brand);
+  --color-subtle: var(--subtle);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+```
+
+## Raw source: `frontend/src/components/theme-provider.tsx`
+
+```tsx
+"use client";
+
+import { ThemeProvider as NextThemesProvider } from "next-themes";
+
+export function ThemeProvider(
+  props: React.ComponentProps<typeof NextThemesProvider>,
+) {
+  return <NextThemesProvider {...props} />;
+}
+```
+
+There is no `tailwind.config.*`; Tailwind v4 theme aliases are declared in `globals.css` with `@theme inline`.

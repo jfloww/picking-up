@@ -18,4 +18,3 @@ If `.venv` is already activated in your shell (`.\.venv\Scripts\Activate.ps1`), 
 ## Frontend
 
 No platform difference — see [frontend.md](frontend.md) directly.
-
