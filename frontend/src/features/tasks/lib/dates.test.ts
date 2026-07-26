@@ -4,6 +4,8 @@ import {
   addDays,
   dayLabel,
   dayOfMonth,
+  dueDateLabel,
+  isOverdue,
   monthGrid,
   monthKeyOf,
   monthKeys,
@@ -166,5 +168,39 @@ describe("upcomingRepeatDates", () => {
       "2026-07-17",
       "2026-07-18",
     ]);
+  });
+});
+
+describe("dueDateLabel", () => {
+  it("returns 'Due Today' when the due date is today", () => {
+    expect(dueDateLabel("2026-07-16", "2026-07-16")).toBe("Due Today");
+  });
+
+  it("returns a weekday name for a due date 1 to 7 days out", () => {
+    expect(dueDateLabel("2026-07-17", "2026-07-16")).toBe("Due Fri"); // 1 day out
+    expect(dueDateLabel("2026-07-23", "2026-07-16")).toBe("Due Thu"); // 7 days out
+  });
+
+  it("returns a short date for a due date more than 7 days out", () => {
+    expect(dueDateLabel("2026-07-24", "2026-07-16")).toBe("Due Jul 24"); // 8 days out
+    expect(dueDateLabel("2026-08-14", "2026-07-16")).toBe("Due Aug 14");
+  });
+
+  it("returns a short date, not a weekday, for an already-past due date", () => {
+    expect(dueDateLabel("2026-07-14", "2026-07-16")).toBe("Due Jul 14"); // 2 days ago
+  });
+});
+
+describe("isOverdue", () => {
+  it("is false when the due date is today", () => {
+    expect(isOverdue("2026-07-16", "2026-07-16")).toBe(false);
+  });
+
+  it("is false when the due date is in the future", () => {
+    expect(isOverdue("2026-07-17", "2026-07-16")).toBe(false);
+  });
+
+  it("is true when the due date is in the past", () => {
+    expect(isOverdue("2026-07-15", "2026-07-16")).toBe(true);
   });
 });

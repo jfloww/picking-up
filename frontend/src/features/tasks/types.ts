@@ -27,6 +27,7 @@ export interface Task {
   priority?: boolean;
   durationMinutes?: number; // meaningful alongside `time`; a positive integer
   background?: boolean; // renders in the timeline's slim background lane instead of the regular overlap columns
+  dueDate?: string; // "YYYY-MM-DD"; independent of scope; unset for routine tasks
 }
 
 export function scopeKey(scope: Scope): string {
