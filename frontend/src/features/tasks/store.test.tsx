@@ -423,4 +423,47 @@ describe("TasksProvider", () => {
       expect(result.current.tasks[0].background).toBe(false);
     });
   });
+
+  describe("due date action", () => {
+    it("setDueDate sets and clears the field", async () => {
+      const task = makeTask({ id: "a", scope: { kind: "day", date: todayKey() } });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setDueDate("a", "2026-07-31"));
+      expect(result.current.tasks[0].dueDate).toBe("2026-07-31");
+      await waitFor(() => expect(repo.tasks[0].dueDate).toBe("2026-07-31"));
+
+      act(() => result.current.setDueDate("a", undefined));
+      expect(result.current.tasks[0].dueDate).toBeUndefined();
+    });
+
+    it("setRepeatWeekdays clears dueDate when weekdays become non-empty", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        dueDate: "2026-07-31",
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setRepeatWeekdays("a", [1, 3]));
+      expect(result.current.tasks[0].dueDate).toBeUndefined();
+      await waitFor(() => expect(repo.tasks[0].dueDate).toBeUndefined());
+    });
+
+    it("setRepeatWeekdays leaves dueDate untouched when weekdays are cleared", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        dueDate: "2026-07-31",
+        repeatWeekdays: [1],
+      });
+      const { result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setRepeatWeekdays("a", []));
+      expect(result.current.tasks[0].dueDate).toBe("2026-07-31");
+    });
+  });
 });

@@ -16,6 +16,7 @@ const noopHandlers = {
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
   onRemoveSubtask: (_id: string) => {},
+  onDueDateChange: (_dueDate?: string) => {},
 };
 
 describe("TaskDetailFields showTime", () => {
@@ -250,5 +251,44 @@ describe("TaskDetailFields background", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Background" }));
     expect(onBackgroundChange).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("TaskDetailFields due date", () => {
+  it("shows the due date editor for a non-routine task", () => {
+    render(<TaskDetailFields task={makeTask({})} {...noopHandlers} />);
+    expect(screen.getByLabelText("Due date")).toBeTruthy();
+  });
+
+  it("hides the due date editor for a routine anchor", () => {
+    render(
+      <TaskDetailFields
+        task={makeTask({ scope: { kind: "day", date: "2026-07-16" }, repeatWeekdays: [1] })}
+        {...noopHandlers}
+      />,
+    );
+    expect(screen.queryByLabelText("Due date")).toBeNull();
+  });
+
+  it("hides the due date editor for a generated routine occurrence", () => {
+    render(
+      <TaskDetailFields
+        task={makeTask({
+          scope: { kind: "day", date: "2026-07-16" },
+          repeatSourceId: "anchor-1",
+        })}
+        {...noopHandlers}
+      />,
+    );
+    expect(screen.queryByLabelText("Due date")).toBeNull();
+  });
+
+  it("calls onDueDateChange with the new value", () => {
+    const onDueDateChange = vi.fn();
+    render(
+      <TaskDetailFields task={makeTask({})} {...noopHandlers} onDueDateChange={onDueDateChange} />,
+    );
+    fireEvent.change(screen.getByLabelText("Due date"), { target: { value: "2026-07-31" } });
+    expect(onDueDateChange).toHaveBeenCalledWith("2026-07-31");
   });
 });

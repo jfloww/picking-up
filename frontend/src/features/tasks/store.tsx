@@ -59,6 +59,7 @@ interface TasksContextValue extends TasksState {
   setPriority: (id: string, priority: boolean) => void;
   setDuration: (id: string, durationMinutes: number | undefined) => void;
   setBackground: (id: string, background: boolean) => void;
+  setDueDate: (id: string, dueDate: string | undefined) => void;
   removeTask: (id: string) => void;
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
@@ -179,7 +180,11 @@ export function TasksProvider({
         const current = state.tasks.find((t) => t.id === id);
         if (!current) return;
         const normalized = weekdays && weekdays.length > 0 ? weekdays : undefined;
-        const task: Task = { ...current, repeatWeekdays: normalized };
+        const task: Task = {
+          ...current,
+          repeatWeekdays: normalized,
+          dueDate: normalized ? undefined : current.dueDate,
+        };
         dispatch({ type: "updated", task });
         void repo.update(task);
       },
@@ -219,6 +224,13 @@ export function TasksProvider({
         const current = state.tasks.find((t) => t.id === id);
         if (!current) return;
         const task: Task = { ...current, background };
+        dispatch({ type: "updated", task });
+        void repo.update(task);
+      },
+      setDueDate(id, dueDate) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current) return;
+        const task: Task = { ...current, dueDate };
         dispatch({ type: "updated", task });
         void repo.update(task);
       },

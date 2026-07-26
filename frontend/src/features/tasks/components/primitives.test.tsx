@@ -19,6 +19,7 @@ const noopHandlers = {
   onPriorityChange: (_priority: boolean) => {},
   onDurationChange: (_durationMinutes?: number) => {},
   onBackgroundChange: (_background: boolean) => {},
+  onDueDateChange: (_dueDate?: string) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -530,6 +531,73 @@ describe("TaskItem v2", () => {
     );
     fireEvent.click(screen.getByText("9:00 AM"));
     expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("TaskItem due date badge", () => {
+  it("renders no due-date badge when dueDate is unset", () => {
+    render(<TaskItem task={makeTask({ title: "gym" })} {...noopHandlers} />);
+    expect(screen.queryByText(/^Due /)).toBeNull();
+  });
+
+  it("renders 'Due Today' for a task due today, neutral (not red)", () => {
+    render(
+      <TaskItem
+        task={makeTask({ title: "gym", dueDate: todayKey() })}
+        {...noopHandlers}
+      />,
+    );
+    const badge = screen.getByText("Due Today");
+    expect(badge.className).not.toContain("text-destructive");
+  });
+
+  it("renders a red badge for an overdue, unfinished task", () => {
+    const past = addDays(todayKey(), -2);
+    render(
+      <TaskItem
+        task={makeTask({ title: "gym", dueDate: past, done: false })}
+        {...noopHandlers}
+      />,
+    );
+    const badge = screen.getByText(/^Due /);
+    expect(badge.className).toContain("text-destructive");
+  });
+
+  it("stays neutral for an overdue but done task", () => {
+    const past = addDays(todayKey(), -2);
+    render(
+      <TaskItem
+        task={makeTask({ title: "gym", dueDate: past, done: true })}
+        {...noopHandlers}
+      />,
+    );
+    const badge = screen.getByText(/^Due /);
+    expect(badge.className).not.toContain("text-destructive");
+  });
+
+  it("does not render the due-date badge on timeline size", () => {
+    render(
+      <TaskItem
+        task={makeTask({ title: "gym", dueDate: todayKey() })}
+        {...noopHandlers}
+        size="timeline"
+      />,
+    );
+    expect(screen.queryByText("Due Today")).toBeNull();
+  });
+
+  it("threads onDueDateChange to the inline TaskDetailFields expansion", () => {
+    const onDueDateChange = vi.fn();
+    render(
+      <TaskItem
+        task={makeTask({ title: "dentist" })}
+        {...noopHandlers}
+        onDueDateChange={onDueDateChange}
+      />,
+    );
+    fireEvent.click(screen.getByText("dentist"));
+    fireEvent.change(screen.getByLabelText("Due date"), { target: { value: "2026-07-31" } });
+    expect(onDueDateChange).toHaveBeenCalledWith("2026-07-31");
   });
 });
 

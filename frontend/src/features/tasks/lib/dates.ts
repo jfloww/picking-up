@@ -133,3 +133,22 @@ export function weekRangeLabel(weekStart: string): string {
     `${d.toLocaleDateString("en-US", { month: "short" })} ${d.getDate()}`;
   return `${fmt(start)} – ${fmt(end)}`;
 }
+
+function daysBetween(fromKey: string, toKey: string): number {
+  return Math.round((parse(toKey).getTime() - parse(fromKey).getTime()) / 86_400_000);
+}
+
+export function isOverdue(dueDate: string, today: string): boolean {
+  return dueDate < today;
+}
+
+export function dueDateLabel(dueDate: string, today: string): string {
+  const diff = daysBetween(today, dueDate);
+  if (diff === 0) return "Due Today";
+  if (diff > 0 && diff <= 7) {
+    const weekday = parse(dueDate).toLocaleDateString("en-US", { weekday: "short" });
+    return `Due ${weekday}`;
+  }
+  const d = parse(dueDate);
+  return `Due ${d.toLocaleDateString("en-US", { month: "short" })} ${d.getDate()}`;
+}

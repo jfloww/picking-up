@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
+import { dueDateLabel, isOverdue, todayKey } from "../lib/dates";
 import { addMinutesToTime } from "../lib/times";
 import type { Task } from "../types";
 import { TaskDetailFields } from "./task-detail-fields";
@@ -25,6 +26,7 @@ interface TaskItemActions {
   setPriority: (id: string, priority: boolean) => void;
   setDuration: (id: string, durationMinutes: number | undefined) => void;
   setBackground: (id: string, background: boolean) => void;
+  setDueDate: (id: string, dueDate: string | undefined) => void;
   removeTask: (id: string) => void;
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
@@ -70,6 +72,7 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onPriorityChange: (priority: boolean) => actions.setPriority(id, priority),
     onDurationChange: (durationMinutes?: number) => actions.setDuration(id, durationMinutes),
     onBackgroundChange: (background: boolean) => actions.setBackground(id, background),
+    onDueDateChange: (dueDate?: string) => actions.setDueDate(id, dueDate),
     onDelete: () => actions.removeTask(id),
     onAddSubtask: (title: string) => actions.addSubtask(id, title),
     onToggleSubtask: (subtaskId: string) => actions.toggleSubtask(id, subtaskId),
@@ -91,6 +94,7 @@ export function TaskItem({
   onPriorityChange,
   onDurationChange,
   onBackgroundChange,
+  onDueDateChange,
   onDelete,
   onAddSubtask,
   onToggleSubtask,
@@ -110,6 +114,7 @@ export function TaskItem({
   onPriorityChange: (priority: boolean) => void;
   onDurationChange: (durationMinutes?: number) => void;
   onBackgroundChange: (background: boolean) => void;
+  onDueDateChange: (dueDate?: string) => void;
   onDelete: () => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
@@ -133,6 +138,19 @@ export function TaskItem({
       )}
     >
       {timeline ? formatTaskTimeRange(task.time, task.durationMinutes) : formatTaskTime(task.time)}
+    </span>
+  );
+
+  const today = todayKey();
+  const dueBadge = task.dueDate && !timeline && (
+    <span
+      className={cn(
+        "shrink-0 rounded bg-muted font-medium text-muted-foreground",
+        large ? "px-1.5 text-[10px]" : "px-1 text-[10px]",
+        isOverdue(task.dueDate, today) && !task.done && "bg-destructive/10 text-destructive",
+      )}
+    >
+      {dueDateLabel(task.dueDate, today)}
     </span>
   );
 
@@ -248,6 +266,7 @@ export function TaskItem({
             {doneCount}/{subtasks.length}
           </span>
         )}
+        {dueBadge}
         {repeatLabel && (
           <span
             className={cn(
@@ -296,6 +315,7 @@ export function TaskItem({
             onPriorityChange={onPriorityChange}
             onDurationChange={onDurationChange}
             onBackgroundChange={onBackgroundChange}
+            onDueDateChange={onDueDateChange}
             onDelete={onDelete}
             onAddSubtask={onAddSubtask}
             onToggleSubtask={onToggleSubtask}

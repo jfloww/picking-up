@@ -14,6 +14,7 @@ const noopHandlers = {
   onPriorityChange: (_priority: boolean) => {},
   onDurationChange: (_durationMinutes?: number) => {},
   onBackgroundChange: (_background: boolean) => {},
+  onDueDateChange: (_dueDate?: string) => {},
   onDelete: () => {},
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
@@ -253,6 +254,47 @@ describe("TaskDetailDrawer", () => {
       expect(
         screen.getByRole("button", { name: "Priority" }).getAttribute("aria-pressed"),
       ).toBe("true"); // taskB's own real value, not taskA's uncommitted edit
+    });
+  });
+
+  describe("due date editing (buffered until Done)", () => {
+    it("does not call onDueDateChange immediately when the due date is edited", () => {
+      const onDueDateChange = vi.fn();
+      render(<TaskDetailDrawer task={task} {...noopHandlers} onDueDateChange={onDueDateChange} />);
+      fireEvent.change(screen.getByLabelText("Due date"), { target: { value: "2026-07-31" } });
+      expect(onDueDateChange).not.toHaveBeenCalled();
+    });
+
+    it("Done commits the edited due date", () => {
+      const onDueDateChange = vi.fn();
+      const onClose = vi.fn();
+      render(
+        <TaskDetailDrawer
+          task={task}
+          {...noopHandlers}
+          onDueDateChange={onDueDateChange}
+          onClose={onClose}
+        />,
+      );
+      fireEvent.change(screen.getByLabelText("Due date"), { target: { value: "2026-07-31" } });
+      fireEvent.click(screen.getByText("Done"));
+      expect(onDueDateChange).toHaveBeenCalledWith("2026-07-31");
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("Done does not call onDueDateChange when the due date was never touched", () => {
+      const onDueDateChange = vi.fn();
+      render(<TaskDetailDrawer task={task} {...noopHandlers} onDueDateChange={onDueDateChange} />);
+      fireEvent.click(screen.getByText("Done"));
+      expect(onDueDateChange).not.toHaveBeenCalled();
+    });
+
+    it("Cancel discards the edited due date", () => {
+      const onDueDateChange = vi.fn();
+      render(<TaskDetailDrawer task={task} {...noopHandlers} onDueDateChange={onDueDateChange} />);
+      fireEvent.change(screen.getByLabelText("Due date"), { target: { value: "2026-07-31" } });
+      fireEvent.click(screen.getByText("Cancel"));
+      expect(onDueDateChange).not.toHaveBeenCalled();
     });
   });
 
