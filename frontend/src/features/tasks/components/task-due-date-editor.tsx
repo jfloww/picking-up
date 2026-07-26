@@ -13,9 +13,9 @@ export function TaskDueDateEditor({
 }) {
   const drawer = variant === "drawer";
   return (
-    <label className={cn("flex flex-col gap-1", drawer && "gap-1.5")}>
-      {drawer && <span className="text-[11px] font-medium text-subtle">Due date</span>}
-      <div className="flex items-center gap-2">
+    <div className={cn("flex items-end gap-2", drawer && "flex-wrap gap-4")}>
+      <label className={cn("flex flex-col gap-1", drawer && "gap-1.5")}>
+        {drawer && <span className="text-[11px] font-medium text-subtle">Due date</span>}
         <input
           type="date"
           value={dueDate ?? ""}
@@ -26,19 +26,19 @@ export function TaskDueDateEditor({
             drawer && "px-2.5 py-1.5 text-sm",
           )}
         />
-        {dueDate && (
-          <button
-            type="button"
-            onClick={() => onDueDateChange(undefined)}
-            className={cn(
-              "text-xs text-subtle hover:text-foreground",
-              drawer && "text-sm hover:underline",
-            )}
-          >
-            Clear
-          </button>
-        )}
-      </div>
-    </label>
+      </label>
+      {dueDate && (
+        <button
+          type="button"
+          onClick={() => onDueDateChange(undefined)}
+          className={cn(
+            "text-xs text-subtle hover:text-foreground",
+            drawer && "pb-1.5 text-sm hover:underline",
+          )}
+        >
+          Clear
+        </button>
+      )}
+    </div>
   );
 }
