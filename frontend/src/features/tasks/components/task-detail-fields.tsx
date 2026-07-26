@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 import type { Task } from "../types";
 import { SubtaskList } from "./subtask-list";
+import { TaskDueDateEditor } from "./task-due-date-editor";
 import { TaskRepeatPicker } from "./task-repeat-picker";
 import { TaskTimeEditor } from "./task-time-editor";
 
@@ -19,6 +20,7 @@ export function TaskDetailFields({
   onPriorityChange,
   onDurationChange,
   onBackgroundChange,
+  onDueDateChange,
   onDelete,
   onAddSubtask,
   onToggleSubtask,
@@ -36,6 +38,7 @@ export function TaskDetailFields({
   onPriorityChange: (priority: boolean) => void;
   onDurationChange: (durationMinutes?: number) => void;
   onBackgroundChange: (background: boolean) => void;
+  onDueDateChange: (dueDate?: string) => void;
   onDelete: () => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
@@ -48,6 +51,7 @@ export function TaskDetailFields({
   const subtasks = task.subtasks ?? [];
   const drawer = variant === "drawer";
   const showRepeat = task.repeatWeekdays !== undefined || task.scope.kind === "day";
+  const isRoutine = task.repeatWeekdays !== undefined || task.repeatSourceId !== undefined;
   const memoRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -100,6 +104,16 @@ export function TaskDetailFields({
               Next: {upcomingRepeatDates.join(", ")}
             </p>
           )}
+        </section>
+      )}
+
+      {!isRoutine && (
+        <section className={cn(drawer && "space-y-3")}>
+          <TaskDueDateEditor
+            dueDate={task.dueDate}
+            onDueDateChange={onDueDateChange}
+            variant={variant}
+          />
         </section>
       )}
 
