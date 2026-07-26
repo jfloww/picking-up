@@ -51,7 +51,11 @@ export function TaskDetailFields({
   const subtasks = task.subtasks ?? [];
   const drawer = variant === "drawer";
   const showRepeat = task.repeatWeekdays !== undefined || task.scope.kind === "day";
-  const isRoutine = task.repeatWeekdays !== undefined || task.repeatSourceId !== undefined;
+  // Note: checked against length, not `!== undefined` — TaskDetailDrawer's
+  // buffered draft always spreads repeatWeekdays as an array (defaulting to
+  // []) for a non-routine task, so an emptiness check (not just definedness)
+  // is required for this to correctly detect non-routine tasks there too.
+  const isRoutine = (task.repeatWeekdays?.length ?? 0) > 0 || task.repeatSourceId !== undefined;
   const memoRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {

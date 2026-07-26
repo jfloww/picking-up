@@ -20,6 +20,7 @@ interface Draft {
   background: boolean;
   repeatWeekdays: number[];
   detached: boolean;
+  dueDate?: string;
 }
 
 function draftFromTask(task: Task): Draft {
@@ -32,6 +33,7 @@ function draftFromTask(task: Task): Draft {
     background: !!task.background,
     repeatWeekdays: task.repeatWeekdays ?? [],
     detached: false,
+    dueDate: task.dueDate,
   };
 }
 
@@ -46,6 +48,7 @@ export function TaskDetailDrawer({
   onPriorityChange,
   onDurationChange,
   onBackgroundChange,
+  onDueDateChange,
   onDelete,
   onAddSubtask,
   onToggleSubtask,
@@ -62,6 +65,7 @@ export function TaskDetailDrawer({
   onPriorityChange: (priority: boolean) => void;
   onDurationChange: (durationMinutes?: number) => void;
   onBackgroundChange: (background: boolean) => void;
+  onDueDateChange: (dueDate?: string) => void;
   onDelete: () => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
@@ -97,6 +101,7 @@ export function TaskDetailDrawer({
     if (draft.durationMinutes !== task.durationMinutes) onDurationChange(draft.durationMinutes);
     if (draft.priority !== !!task.priority) onPriorityChange(draft.priority);
     if (draft.background !== !!task.background) onBackgroundChange(draft.background);
+    if (draft.dueDate !== task.dueDate) onDueDateChange(draft.dueDate);
     const original = task.repeatWeekdays ?? [];
     const weekdaysChanged =
       draft.repeatWeekdays.length !== original.length ||
@@ -177,6 +182,7 @@ export function TaskDetailDrawer({
           onPriorityChange={(priority) => setDraft((d) => ({ ...d, priority }))}
           onDurationChange={(durationMinutes) => setDraft((d) => ({ ...d, durationMinutes }))}
           onBackgroundChange={(background) => setDraft((d) => ({ ...d, background }))}
+          onDueDateChange={(dueDate) => setDraft((d) => ({ ...d, dueDate }))}
           upcomingRepeatDates={upcomingRepeatDates}
           onDelete={onDelete}
           onAddSubtask={onAddSubtask}
