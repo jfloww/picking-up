@@ -14,12 +14,20 @@ class TaskSerializer(serializers.ModelSerializer):
     memo = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     done = serializers.BooleanField(required=False, default=False)
     rolled_from_kind = serializers.ChoiceField(
-        choices=SCOPE_KIND_CHOICES, required=False, allow_null=True, default=None,
+        choices=SCOPE_KIND_CHOICES, required=False, allow_null=True, allow_blank=True, default=None,
     )
-    rolled_from_value = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
-    completed_at = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
-    time = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
-    due_date = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    rolled_from_value = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True, default=None, max_length=20,
+    )
+    completed_at = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True, default=None, max_length=32,
+    )
+    time = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True, default=None, max_length=5,
+    )
+    due_date = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True, default=None, max_length=10,
+    )
     subtasks = SubtaskSerializer(many=True, required=False, default=list)
     repeat_weekdays = serializers.ListField(
         child=serializers.IntegerField(min_value=0, max_value=6),
@@ -32,7 +40,9 @@ class TaskSerializer(serializers.ModelSerializer):
         child=serializers.CharField(), required=False, allow_null=True, default=None,
     )
     priority = serializers.BooleanField(required=False, allow_null=True, default=None)
-    duration_minutes = serializers.IntegerField(required=False, allow_null=True, default=None)
+    duration_minutes = serializers.IntegerField(
+        required=False, allow_null=True, default=None, min_value=0,
+    )
     background = serializers.BooleanField(required=False, allow_null=True, default=None)
 
     class Meta:

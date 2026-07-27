@@ -314,3 +314,38 @@ class TaskApiTests(TestCase):
         response = client.get("/api/tasks/")
 
         self.assertEqual([t["title"] for t in response.data], ["first", "second"])
+
+    def test_create_rejects_values_that_violate_restored_field_constraints(self):
+        owner, client = auth_client()
+
+        self.assertEqual(
+            client.post("/api/tasks/", make_task_payload(rolled_from_value="x" * 21), format="json").status_code,
+            400,
+        )
+        self.assertEqual(
+            client.post("/api/tasks/", make_task_payload(time="123456"), format="json").status_code,
+            400,
+        )
+        self.assertEqual(
+            client.post("/api/tasks/", make_task_payload(due_date="x" * 11), format="json").status_code,
+            400,
+        )
+        self.assertEqual(
+            client.post("/api/tasks/", make_task_payload(completed_at="x" * 33), format="json").status_code,
+            400,
+        )
+        self.assertEqual(
+            client.post("/api/tasks/", make_task_payload(duration_minutes=-5), format="json").status_code,
+            400,
+        )
+
+    def test_create_rejects_a_subtask_missing_a_required_key(self):
+        owner, client = auth_client()
+
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(subtasks=[{"id": "s1", "title": "x"}]),  # missing "done"
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
