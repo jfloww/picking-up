@@ -1,7 +1,7 @@
 import { isValidTime } from "../lib/times";
 import type { Subtask, Task } from "../types";
 
-const STORAGE_KEY = "picking-up.tasks.v1";
+export const STORAGE_KEY = "picking-up.tasks.v1";
 
 const SCOPE_FIELDS = {
   day: "date",
