@@ -11,10 +11,10 @@ describe("tasksReducer", () => {
   it("handles loaded/added/updated/removed", () => {
     const task = makeTask({ id: "a" });
     let state = tasksReducer(
-      { loaded: false, tasks: [] },
+      { loaded: false, tasks: [], syncError: null },
       { type: "loaded", tasks: [task] },
     );
-    expect(state).toEqual({ loaded: true, tasks: [task] });
+    expect(state).toEqual({ loaded: true, tasks: [task], syncError: null });
 
     const other = makeTask({ id: "b" });
     state = tasksReducer(state, { type: "added", task: other });
@@ -464,6 +464,92 @@ describe("TasksProvider", () => {
 
       act(() => result.current.setRepeatWeekdays("a", []));
       expect(result.current.tasks[0].dueDate).toBe("2026-07-31");
+    });
+  });
+
+  describe("sync failure handling", () => {
+    it("setMemo: on a repo.update rejection, sets syncError and resyncs tasks from a fresh list()", async () => {
+      const task = makeTask({ id: "a", memo: "old", scope: { kind: "day", date: todayKey() } });
+      const repo = fakeRepository([task]);
+      const updateSpy = vi.spyOn(repo, "update").mockRejectedValueOnce(new Error("network down"));
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setMemo("a", "new"));
+      await waitFor(() => expect(result.current.syncError).not.toBeNull());
+
+      // resynced from the server, which never actually received the update
+      await waitFor(() => expect(result.current.tasks[0].memo).toBe("old"));
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("dismissSyncError clears the error without touching tasks", async () => {
+      const task = makeTask({ id: "a" });
+      const repo = fakeRepository([task]);
+      vi.spyOn(repo, "update").mockRejectedValueOnce(new Error("network down"));
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setPriority("a", true));
+      await waitFor(() => expect(result.current.syncError).not.toBeNull());
+
+      act(() => result.current.dismissSyncError());
+      expect(result.current.syncError).toBeNull();
+    });
+
+    it("coalesces concurrent failures into a single in-flight resync", async () => {
+      const a = makeTask({ id: "a", scope: { kind: "day", date: todayKey() } });
+      const b = makeTask({ id: "b", scope: { kind: "day", date: todayKey() } });
+      const repo = fakeRepository([a, b]);
+
+      let releaseResync: ((tasks: Task[]) => void) | undefined;
+      const listSpy = vi
+        .spyOn(repo, "list")
+        .mockResolvedValueOnce([a, b]) // initial load
+        .mockImplementationOnce(
+          () => new Promise<Task[]>((resolve) => (releaseResync = resolve)), // resync, held open
+        );
+      const updateSpy = vi.spyOn(repo, "update").mockRejectedValue(new Error("network down"));
+
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      expect(listSpy).toHaveBeenCalledTimes(1);
+
+      // Two writes fail back-to-back, as they would during a real outage.
+      await act(async () => {
+        result.current.setPriority("a", true);
+        result.current.setPriority("b", true);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(updateSpy).toHaveBeenCalledTimes(2);
+      expect(result.current.syncError).not.toBeNull();
+      // Both failures surfaced the banner, but only one resync went out.
+      expect(listSpy).toHaveBeenCalledTimes(2);
+
+      // Once the in-flight resync settles, the guard releases for the next one.
+      await act(async () => {
+        releaseResync?.([a, b]);
+        await Promise.resolve();
+      });
+      await act(async () => {
+        result.current.setPriority("a", true);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(listSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it("initial list() rejection sets syncError and still reaches loaded:true with an empty list", async () => {
+      const repo = fakeRepository();
+      vi.spyOn(repo, "list").mockRejectedValueOnce(new Error("offline"));
+
+      const { result } = setup(repo);
+
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      expect(result.current.tasks).toEqual([]);
+      expect(result.current.syncError).not.toBeNull();
     });
   });
 });
