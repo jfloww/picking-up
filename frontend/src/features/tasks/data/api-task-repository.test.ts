@@ -25,7 +25,7 @@ describe("createApiTaskRepository", () => {
 
     expect(tasks).toEqual([]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy).toHaveBeenCalledWith("/api/tasks/");
+    expect(fetchSpy).toHaveBeenCalledWith("/api/tasks");
   });
 
   it("list() uploads every local task once, then clears localStorage, when there's something to migrate", async () => {
@@ -90,7 +90,7 @@ describe("createApiTaskRepository", () => {
 
     await createApiTaskRepository().update(task);
 
-    expect(fetchSpy).toHaveBeenCalledWith("/api/tasks/x/", expect.objectContaining({ method: "PUT" }));
+    expect(fetchSpy).toHaveBeenCalledWith("/api/tasks/x", expect.objectContaining({ method: "PUT" }));
   });
 
   it("remove() deletes at the id's url and throws on failure", async () => {
@@ -99,6 +99,6 @@ describe("createApiTaskRepository", () => {
 
     await createApiTaskRepository().remove("x");
 
-    expect(fetchSpy).toHaveBeenCalledWith("/api/tasks/x/", expect.objectContaining({ method: "DELETE" }));
+    expect(fetchSpy).toHaveBeenCalledWith("/api/tasks/x", expect.objectContaining({ method: "DELETE" }));
   });
 });
