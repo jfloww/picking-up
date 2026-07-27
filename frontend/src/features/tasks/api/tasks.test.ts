@@ -63,9 +63,9 @@ describe("requestListTasks", () => {
     expect((init.headers as Headers).get("Authorization")).toBe("Bearer test-token");
   });
 
-  it("throws when the response is not ok", async () => {
+  it("throws when the response is not ok, preserving Django's own error text", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ detail: "nope" }, 500)));
-    await expect(requestListTasks()).rejects.toThrow();
+    await expect(requestListTasks()).rejects.toThrow("nope");
   });
 });
 
@@ -118,9 +118,12 @@ describe("requestUpdateTask", () => {
     expect(init.method).toBe("PUT");
   });
 
-  it("throws when the response is not ok", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 400)));
-    await expect(requestUpdateTask(task)).rejects.toThrow();
+  it("throws when the response is not ok, preserving Django's own error text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ detail: "repeat_source does not exist" }, 400)),
+    );
+    await expect(requestUpdateTask(task)).rejects.toThrow("repeat_source does not exist");
   });
 });
 

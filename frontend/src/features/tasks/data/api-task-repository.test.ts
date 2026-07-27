@@ -64,18 +64,35 @@ describe("createApiTaskRepository", () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it("list() leaves localStorage intact and throws when a real upload failure occurs", async () => {
+  it("list() leaves localStorage intact but still returns the server list when a real upload failure occurs", async () => {
     const local = [makeTask({ id: "a" }), makeTask({ id: "b" })];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(local));
+    const server = [makeTask({ id: "from-another-device" })];
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const fetchSpy = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ error: "Server error" }, 500)); // fails on task a
+      .mockResolvedValueOnce(jsonResponse({ error: "Server error" }, 500)) // fails on task a
+      .mockResolvedValueOnce(jsonResponse(server)); // list() still runs
     vi.stubGlobal("fetch", fetchSpy);
 
-    await expect(createApiTaskRepository().list()).rejects.toThrow();
+    // A stuck migration must not brick the app: list() resolves with the real
+    // server list rather than rejecting.
+    await expect(createApiTaskRepository().list()).resolves.toEqual(server);
+    // localStorage is deliberately left intact so a later load can retry.
     expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
-    expect(fetchSpy).toHaveBeenCalledTimes(1); // stopped after the first failure, never reached b
+    expect(fetchSpy).toHaveBeenCalledTimes(2); // stopped after the first failure (never reached b), then listed
+    expect(fetchSpy.mock.calls[1]).toEqual(["/api/tasks"]);
+    expect(consoleSpy).toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+  });
+
+  it("list() still rejects when the list fetch itself fails", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(jsonResponse({ error: "boom" }, 500));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(createApiTaskRepository().list()).rejects.toThrow("Failed to load tasks.");
   });
 
   it("create() posts to /api/tasks/ and throws on failure", async () => {

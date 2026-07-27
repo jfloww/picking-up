@@ -28,7 +28,16 @@ async function migrateLegacyLocalStorageTasks(): Promise<void> {
 export function createApiTaskRepository(): TaskRepository {
   return {
     async list() {
-      await migrateLegacyLocalStorageTasks();
+      try {
+        await migrateLegacyLocalStorageTasks();
+      } catch (error) {
+        // Migration failed for a reason other than "already exists" (a
+        // dangling repeatSourceId from a deleted anchor, an over-length
+        // title, etc). localStorage is left intact so a later attempt can
+        // retry, but the app must stay usable in the meantime rather than
+        // permanently blocking on a stuck migration.
+        console.error("Failed to migrate legacy local tasks; will retry on next load.", error);
+      }
       const response = await fetch("/api/tasks");
       if (!response.ok) throw new Error("Failed to load tasks.");
       return (await response.json()) as Task[];

@@ -1,21 +1,10 @@
+import { apiRequest } from "@/lib/api/server";
 import { getAccessToken } from "@/lib/auth/cookies";
 
 import { fromApiPayload, toApiPayload, type ApiTask } from "./mapping";
 import type { Task } from "../types";
 
 const API_BASE_URL = process.env.DJANGO_API_BASE_URL ?? "http://localhost:8000";
-
-async function djangoFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const accessToken = await getAccessToken();
-  const headers = new Headers(init.headers);
-  if (!headers.has("Content-Type") && init.body) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (accessToken) {
-    headers.set("Authorization", `Bearer ${accessToken}`);
-  }
-  return fetch(`${API_BASE_URL}/api/tasks${path}`, { ...init, headers, cache: "no-store" });
-}
 
 function isDuplicateIdError(body: unknown): boolean {
   const idErrors = (body as { id?: unknown } | null)?.id;
@@ -26,18 +15,25 @@ function isDuplicateIdError(body: unknown): boolean {
 }
 
 export async function requestListTasks(): Promise<Task[]> {
-  const response = await djangoFetch("/");
-  if (!response.ok) throw new Error("Failed to load tasks.");
-  const payloads: ApiTask[] = await response.json();
+  const payloads = await apiRequest<ApiTask[]>("/api/tasks/", { authenticated: true });
   return payloads.map(fromApiPayload);
 }
 
 export async function requestCreateTask(
   task: Task,
 ): Promise<{ status: number; task?: Task; duplicateId: boolean }> {
-  const response = await djangoFetch("/", {
+  // apiRequest throws on a non-ok response and only preserves a flattened
+  // message string — this call needs the raw status and body to
+  // distinguish a tolerable duplicate-id 400 from a real validation
+  // failure, so it does its own fetch instead of going through apiRequest.
+  const accessToken = await getAccessToken();
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  const response = await fetch(`${API_BASE_URL}/api/tasks/`, {
     method: "POST",
+    headers,
     body: JSON.stringify(toApiPayload(task)),
+    cache: "no-store",
   });
   if (response.ok) {
     return { status: response.status, task: fromApiPayload(await response.json()), duplicateId: false };
@@ -47,15 +43,14 @@ export async function requestCreateTask(
 }
 
 export async function requestUpdateTask(task: Task): Promise<Task> {
-  const response = await djangoFetch(`/${task.id}/`, {
+  const payload = await apiRequest<ApiTask>(`/api/tasks/${task.id}/`, {
     method: "PUT",
     body: JSON.stringify(toApiPayload(task)),
+    authenticated: true,
   });
-  if (!response.ok) throw new Error("Failed to save task.");
-  return fromApiPayload(await response.json());
+  return fromApiPayload(payload);
 }
 
 export async function requestDeleteTask(id: string): Promise<void> {
-  const response = await djangoFetch(`/${id}/`, { method: "DELETE" });
-  if (!response.ok) throw new Error("Failed to delete task.");
+  await apiRequest(`/api/tasks/${id}/`, { method: "DELETE", authenticated: true });
 }

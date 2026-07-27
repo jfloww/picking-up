@@ -96,8 +96,19 @@ export function TasksProvider({
     [repository],
   );
 
+  const tasksRef = useRef(state.tasks);
+  tasksRef.current = state.tasks;
+  const appliedDayRef = useRef<string | null>(null);
+  const resyncingRef = useRef(false);
+
   function handleSyncFailure() {
     dispatch({ type: "syncErrorOccurred" });
+    // A single outage typically fails several writes at once (every rolled
+    // and spawned task on load); without this guard each one would kick off
+    // its own full resync — and for the API repository every resync re-runs
+    // the entire legacy-migration upload loop.
+    if (resyncingRef.current) return;
+    resyncingRef.current = true;
     void repo
       .list()
       .then((tasks) => dispatch({ type: "loaded", tasks }))
@@ -105,12 +116,11 @@ export function TasksProvider({
         // Already surfaced via syncErrorOccurred above; a second
         // consecutive failure just leaves the banner up rather than
         // compounding into an unhandled rejection.
+      })
+      .finally(() => {
+        resyncingRef.current = false;
       });
   }
-
-  const tasksRef = useRef(state.tasks);
-  tasksRef.current = state.tasks;
-  const appliedDayRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
