@@ -7,7 +7,7 @@ export function SiteFooter() {
     <footer className="flex items-center justify-between border-t border-border px-6 py-6 sm:px-10">
       <Wordmark className="opacity-60" />
       <div className="flex items-center gap-3">
-        <p className="text-xs text-muted-foreground">© 2026 Picking Up</p>
+        <p className="text-xs text-muted-foreground">© 2026 JFLOWW</p>
         <a
           href="https://github.com/jfloww"
           target="_blank"
