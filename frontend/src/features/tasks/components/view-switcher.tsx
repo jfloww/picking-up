@@ -9,6 +9,13 @@ import { cn } from "@/lib/utils";
 export const VIEWS = ["daily", "weekly", "monthly", "yearly"] as const;
 export type ViewKind = (typeof VIEWS)[number];
 
+// Monthly and Yearly are temporarily hidden from the tab bar while they're
+// still being worked on. The view kinds, their components, and routing
+// (shiftAnchor, dateLabelFor, drill-down navigation) are all untouched —
+// only the tab buttons themselves are hidden. Add "monthly"/"yearly" back
+// here to re-enable them.
+const VISIBLE_VIEWS: readonly ViewKind[] = ["daily", "weekly"];
+
 const VIEW_LABELS: Record<ViewKind, string> = {
   daily: "Daily",
   weekly: "Weekly",
@@ -40,7 +47,7 @@ export function ViewSwitcher({
           aria-label="Calendar scale"
           className="flex rounded-lg border border-border bg-card p-1"
         >
-          {VIEWS.map((v) => (
+          {VISIBLE_VIEWS.map((v) => (
             <button
               key={v}
               type="button"

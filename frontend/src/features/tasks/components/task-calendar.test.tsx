@@ -33,8 +33,13 @@ describe("TaskCalendar", () => {
     );
     expect(screen.getByText("Focus Agenda")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Yearly" }));
-    await waitFor(() => expect(screen.getByText("January")).toBeTruthy());
+    fireEvent.click(screen.getByRole("tab", { name: "Weekly" }));
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Weekly", selected: true })).toBeTruthy(),
+    );
+    // Yearly is temporarily hidden from the tab bar (view-switcher.tsx's
+    // VISIBLE_VIEWS) — it isn't reachable via a tab click right now, so
+    // this test only exercises the tabs that still are.
   });
 
   describe("fixed sub-header", () => {
@@ -59,8 +64,11 @@ describe("TaskCalendar", () => {
 
       expect(screen.getByText("Thursday, July 16")).toBeTruthy();
 
-      fireEvent.click(screen.getByRole("tab", { name: "Monthly" }));
-      await waitFor(() => expect(screen.getByText("2026")).toBeTruthy());
+      fireEvent.click(screen.getByRole("tab", { name: "Weekly" }));
+      await waitFor(() => expect(screen.getByText("Jul 12 – Jul 18")).toBeTruthy());
+      // Monthly is temporarily hidden from the tab bar (view-switcher.tsx's
+      // VISIBLE_VIEWS) — it isn't reachable via a tab click right now, so
+      // this test only exercises the tabs that still are.
     });
   });
 });
@@ -86,7 +94,11 @@ describe("drill-down navigation", () => {
     expect(screen.getByText("Tuesday, July 14")).toBeTruthy();
   });
 
-  it("double-clicking a Monthly month cell switches to Weekly anchored on that month's first week", async () => {
+  // Monthly is temporarily hidden from the tab bar (view-switcher.tsx's
+  // VISIBLE_VIEWS), so it can't be reached via a tab click right now — the
+  // drill-down behavior itself is untouched and still fully implemented;
+  // re-enable this test alongside restoring the tab.
+  it.skip("double-clicking a Monthly month cell switches to Weekly anchored on that month's first week", async () => {
     render(<TaskCalendar repository={fakeRepository()} />);
     await waitFor(() => expect(screen.getByRole("tab", { name: "Monthly" })).toBeTruthy());
     fireEvent.click(screen.getByRole("tab", { name: "Monthly" }));

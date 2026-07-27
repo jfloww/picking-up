@@ -66,7 +66,7 @@ function CalendarInner() {
         <ViewSwitcher
           view={view}
           leading={
-            <div className="flex min-w-max flex-col">
+            <div className="flex min-w-[320px] flex-col">
               <h1 className="text-[20px] leading-7 font-bold tracking-tight">
                 {dateLabel}
               </h1>
