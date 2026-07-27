@@ -33,6 +33,7 @@ def make_task_payload(**overrides):
         "created_at": "2026-07-27T00:00:00.000Z",
         "completed_at": None,
         "time": None,
+        "due_date": None,
         "subtasks": [],
         "repeat_weekdays": None,
         "repeat_source": None,
@@ -86,6 +87,7 @@ class TaskApiTests(TestCase):
                 rolled_from_value="2026-07-20",
                 completed_at="2026-07-27T09:00:00.000Z",
                 time="09:30",
+                due_date="2026-08-01",
                 subtasks=[{"id": "s1", "title": "buy wood", "done": False}],
                 repeat_source=anchor_id,
                 excluded_dates=["2026-07-13"],
@@ -105,6 +107,7 @@ class TaskApiTests(TestCase):
         self.assertEqual(stored.rolled_from_value, "2026-07-20")
         self.assertEqual(stored.completed_at, "2026-07-27T09:00:00.000Z")
         self.assertEqual(stored.time, "09:30")
+        self.assertEqual(stored.due_date, "2026-08-01")
         self.assertEqual(stored.subtasks, [{"id": "s1", "title": "buy wood", "done": False}])
         self.assertEqual(str(stored.repeat_source_id), anchor_id)
         self.assertEqual(stored.excluded_dates, ["2026-07-13"])
@@ -253,3 +256,61 @@ class TaskApiTests(TestCase):
         owner_task = Task.objects.get(id=owner_task_id)
         self.assertEqual(owner_task.title, "hijacked")
         self.assertEqual(owner_task.user, owner)
+
+    def test_update_omitting_optional_fields_clears_them_instead_of_preserving_them(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        client.post(
+            "/api/tasks/",
+            make_task_payload(
+                id=task_id,
+                memo="keep me?",
+                priority=True,
+                subtasks=[{"id": "s1", "title": "x", "done": False}],
+            ),
+            format="json",
+        )
+
+        minimal_payload = {
+            "id": task_id,
+            "title": "replaced",
+            "done": False,
+            "scope_kind": "day",
+            "scope_value": "2026-07-27",
+            "created_at": "2026-07-27T00:00:00.000Z",
+        }
+        response = client.put(f"/api/tasks/{task_id}/", minimal_payload, format="json")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertIsNone(stored.memo)
+        self.assertIsNone(stored.priority)
+        self.assertEqual(stored.subtasks, [])
+
+    def test_create_rejects_non_array_subtasks_repeat_weekdays_and_excluded_dates(self):
+        owner, client = auth_client()
+
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(subtasks="nope", repeat_weekdays=5, excluded_dates="oops"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_list_is_ordered_by_created_at(self):
+        owner, client = auth_client()
+        client.post(
+            "/api/tasks/",
+            make_task_payload(id=str(uuid.uuid4()), title="second", created_at="2026-07-27T10:00:00.000Z"),
+            format="json",
+        )
+        client.post(
+            "/api/tasks/",
+            make_task_payload(id=str(uuid.uuid4()), title="first", created_at="2026-07-27T09:00:00.000Z"),
+            format="json",
+        )
+
+        response = client.get("/api/tasks/")
+
+        self.assertEqual([t["title"] for t in response.data], ["first", "second"])

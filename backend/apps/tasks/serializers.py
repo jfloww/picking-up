@@ -1,13 +1,39 @@
 from rest_framework import serializers
 
-from .models import Task
+from .models import SCOPE_KIND_CHOICES, Task
+
+
+class SubtaskSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    title = serializers.CharField()
+    done = serializers.BooleanField()
 
 
 class TaskSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField()
-    repeat_source = serializers.PrimaryKeyRelatedField(
-        queryset=Task.objects.none(), allow_null=True, required=False
+    memo = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    done = serializers.BooleanField(required=False, default=False)
+    rolled_from_kind = serializers.ChoiceField(
+        choices=SCOPE_KIND_CHOICES, required=False, allow_null=True, default=None,
     )
+    rolled_from_value = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    completed_at = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    time = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    due_date = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    subtasks = SubtaskSerializer(many=True, required=False, default=list)
+    repeat_weekdays = serializers.ListField(
+        child=serializers.IntegerField(min_value=0, max_value=6),
+        required=False, allow_null=True, default=None,
+    )
+    repeat_source = serializers.PrimaryKeyRelatedField(
+        queryset=Task.objects.none(), allow_null=True, required=False, default=None,
+    )
+    excluded_dates = serializers.ListField(
+        child=serializers.CharField(), required=False, allow_null=True, default=None,
+    )
+    priority = serializers.BooleanField(required=False, allow_null=True, default=None)
+    duration_minutes = serializers.IntegerField(required=False, allow_null=True, default=None)
+    background = serializers.BooleanField(required=False, allow_null=True, default=None)
 
     class Meta:
         model = Task
@@ -23,6 +49,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "created_at",
             "completed_at",
             "time",
+            "due_date",
             "subtasks",
             "repeat_weekdays",
             "repeat_source",
@@ -45,7 +72,7 @@ class TaskSerializer(serializers.ModelSerializer):
         # whenever the body happens to carry someone else's id — exactly the
         # attack `update()` already neutralizes by ignoring it outright.
         if self.instance is None and Task.objects.filter(id=value).exists():
-            raise serializers.ValidationError("This field must be unique.")
+            raise serializers.ValidationError("A task with this id already exists.")
         return value
 
     def update(self, instance, validated_data):

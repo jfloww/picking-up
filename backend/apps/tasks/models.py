@@ -27,6 +27,7 @@ class Task(models.Model):
     created_at = models.CharField(max_length=32)
     completed_at = models.CharField(max_length=32, blank=True, null=True)
     time = models.CharField(max_length=5, blank=True, null=True)
+    due_date = models.CharField(max_length=10, blank=True, null=True)
     subtasks = models.JSONField(default=list, blank=True)
     repeat_weekdays = models.JSONField(blank=True, null=True)
     repeat_source = models.ForeignKey(
@@ -43,6 +44,7 @@ class Task(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        ordering = ["created_at"]
         indexes = [models.Index(fields=["user"])]
 
     def __str__(self):
