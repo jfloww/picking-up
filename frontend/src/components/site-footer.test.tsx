@@ -6,7 +6,7 @@ import { SiteFooter } from "./site-footer";
 describe("SiteFooter", () => {
   it("shows the copyright text and the wordmark linking to /", () => {
     render(<SiteFooter />);
-    expect(screen.getByText("© 2026 Picking Up")).toBeTruthy();
+    expect(screen.getByText("© 2026 JFLOWW")).toBeTruthy();
     // Wordmark renders "PICKING" and "UP" joined by &nbsp; (U+00A0), which a
     // plain space in a regex won't match — \s+ does.
     const wordmarkLink = screen.getByRole("link", { name: /picking\s+up/i });
