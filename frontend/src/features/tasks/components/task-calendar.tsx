@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { Alert, AlertAction, AlertTitle } from "@/components/ui/alert";
+import type { TaskRepository } from "../data/repository";
 import { addDays, dayLabel, todayKey, weekRangeLabel, weekStartOf, yearOf } from "../lib/dates";
 import { TasksProvider, useTasks } from "../store";
 import { ViewSwitcher, type ViewKind } from "./view-switcher";
@@ -46,7 +48,7 @@ function dateLabelFor(view: ViewKind, anchor: string): string {
 }
 
 function CalendarInner() {
-  const { loaded } = useTasks();
+  const { loaded, syncError, dismissSyncError } = useTasks();
   const [view, setView] = useState<ViewKind>("daily");
   const [anchor, setAnchor] = useState(() => todayKey());
 
@@ -79,6 +81,22 @@ function CalendarInner() {
           onNext={() => setAnchor((a) => shiftAnchor(view, a, 1))}
         />
       </header>
+      {syncError && (
+        <div className="shrink-0 px-10 pt-3">
+          <Alert variant="destructive">
+            <AlertTitle>{syncError}</AlertTitle>
+            <AlertAction>
+              <button
+                type="button"
+                onClick={dismissSyncError}
+                className="text-xs text-destructive/70 underline hover:text-destructive"
+              >
+                Dismiss
+              </button>
+            </AlertAction>
+          </Alert>
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-hidden">
         <View
           anchor={anchor}
@@ -93,9 +111,9 @@ function CalendarInner() {
   );
 }
 
-export function TaskCalendar() {
+export function TaskCalendar({ repository }: { repository?: TaskRepository } = {}) {
   return (
-    <TasksProvider>
+    <TasksProvider repository={repository}>
       <CalendarInner />
     </TasksProvider>
   );

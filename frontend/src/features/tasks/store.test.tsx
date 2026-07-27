@@ -466,4 +466,46 @@ describe("TasksProvider", () => {
       expect(result.current.tasks[0].dueDate).toBe("2026-07-31");
     });
   });
+
+  describe("sync failure handling", () => {
+    it("setMemo: on a repo.update rejection, sets syncError and resyncs tasks from a fresh list()", async () => {
+      const task = makeTask({ id: "a", memo: "old", scope: { kind: "day", date: todayKey() } });
+      const repo = fakeRepository([task]);
+      const updateSpy = vi.spyOn(repo, "update").mockRejectedValueOnce(new Error("network down"));
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setMemo("a", "new"));
+      await waitFor(() => expect(result.current.syncError).not.toBeNull());
+
+      // resynced from the server, which never actually received the update
+      await waitFor(() => expect(result.current.tasks[0].memo).toBe("old"));
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("dismissSyncError clears the error without touching tasks", async () => {
+      const task = makeTask({ id: "a" });
+      const repo = fakeRepository([task]);
+      vi.spyOn(repo, "update").mockRejectedValueOnce(new Error("network down"));
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setPriority("a", true));
+      await waitFor(() => expect(result.current.syncError).not.toBeNull());
+
+      act(() => result.current.dismissSyncError());
+      expect(result.current.syncError).toBeNull();
+    });
+
+    it("initial list() rejection sets syncError and still reaches loaded:true with an empty list", async () => {
+      const repo = fakeRepository();
+      vi.spyOn(repo, "list").mockRejectedValueOnce(new Error("offline"));
+
+      const { result } = setup(repo);
+
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      expect(result.current.tasks).toEqual([]);
+      expect(result.current.syncError).not.toBeNull();
+    });
+  });
 });
