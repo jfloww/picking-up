@@ -73,7 +73,7 @@ class Task(models.Model):
     time = models.CharField(max_length=5, blank=True, null=True)
     subtasks = models.JSONField(default=list, blank=True)
     repeat_weekdays = models.JSONField(blank=True, null=True)
-    repeat_source_id = models.ForeignKey(
+    repeat_source = models.ForeignKey(
         "self",
         null=True,
         blank=True,
@@ -110,12 +110,17 @@ Notable choices:
   round-trip (different fractional-second precision, timezone
   normalization) in a way that could break an exact-string round-trip
   test for no benefit.
-- **`repeat_source_id` is a real self-referential `ForeignKey`, not a
+- **`repeat_source` is a real self-referential `ForeignKey`, not a
   loose `UUIDField`.** It models a genuine relationship (an occurrence
   really does reference its anchor) and Django gives referential
-  integrity for free — a repeat_source_id can't point at a nonexistent
-  task or another user's task. `on_delete=SET_NULL` because deleting an
-  anchor shouldn't cascade-delete every occurrence it ever spawned.
+  integrity for free — it can't point at a nonexistent task or another
+  user's task. `on_delete=SET_NULL` because deleting an anchor shouldn't
+  cascade-delete every occurrence it ever spawned. Named `repeat_source`,
+  not `repeat_source_id` — Django auto-appends `_id` to a FK field's own
+  name for its DB column and its raw-value accessor (`instance.repeat_source_id`
+  already works for free on a field named `repeat_source`), so naming the
+  field itself with a trailing `_id` would double up into a confusing
+  `repeat_source_id_id` column.
 - **`scope`/`rolledFrom` are flattened to a `_kind`/`_value` pair**,
   mirroring the frontend's own `scopeKey()` concept (`types.ts`) — one
   column for which kind of scope, one for its single associated string
@@ -144,15 +149,17 @@ Two DRF generic views, following `apps/accounts`'s existing style (plain
 - `GET /api/tasks/` — list the authenticated user's tasks.
 - `POST /api/tasks/` — create a task. Client sends the complete object,
   including its own `id`.
-- `GET /api/tasks/<uuid:id>/` — retrieve one (unused by the frontend
+- `GET /api/tasks/<uuid:pk>/` — retrieve one (unused by the frontend
   today, but comes free with the generic view and costs nothing to
   expose).
-- `PUT /api/tasks/<uuid:id>/` — full replace. The frontend's `update()`
+- `PUT /api/tasks/<uuid:pk>/` — full replace. The frontend's `update()`
   always rebuilds and sends the *entire* task object (never a partial
   diff), so `PUT` is the right verb, not `PATCH` — though DRF's
   `RetrieveUpdateDestroyAPIView` supports `PATCH` too as a side effect of
   the generic view; nothing will call it yet.
-- `DELETE /api/tasks/<uuid:id>/` — remove.
+- `DELETE /api/tasks/<uuid:pk>/` — remove. The URL kwarg is `pk`, DRF's
+  own default lookup, since the model's primary key is already `id` —
+  no need to override `lookup_field`.
 
 **Permissions:** `IsAuthenticated` is already this project's
 `DEFAULT_PERMISSION_CLASSES` (`config/settings.py`), so this is free, but
@@ -187,15 +194,15 @@ for auth. Cover:
 - List returns only the authenticated user's own tasks, not another
   user's.
 - Create round-trips every field, including nested `subtasks` and a
-  `repeat_source_id` pointing at another of the same user's tasks.
+  `repeat_source` pointing at another of the same user's tasks.
 - Update fully replaces a task's fields (send a changed object, confirm
   the stored row matches exactly, not merged with the old values).
-- Delete removes the row; a repeat occurrence's `repeat_source_id`
+- Delete removes the row; a repeat occurrence's `repeat_source`
   becomes `null` (not the occurrence itself deleted) when its anchor is
   deleted, per `on_delete=SET_NULL`.
 - Unauthenticated requests to any endpoint get 401.
 - GET/PUT/DELETE on another user's task id returns 404.
-- Creating a task whose `repeat_source_id` points at a nonexistent id, or
+- Creating a task whose `repeat_source` points at a nonexistent id, or
   at another user's task id, is rejected with a validation error (DRF's
   default FK-existence check already does the "nonexistent id" half;
   the "another user's task" half needs the serializer/view to scope the
