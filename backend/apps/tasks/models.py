@@ -45,7 +45,11 @@ class Task(models.Model):
 
     class Meta:
         ordering = ["created_at"]
-        indexes = [models.Index(fields=["user"])]
+        # No explicit index on `user` — a ForeignKey already implies
+        # db_index=True, so an additional models.Index(fields=["user"])
+        # here would be redundant. Harmless on SQLite (silently allowed),
+        # but Oracle rejects creating a second index on an identical
+        # column list with ORA-01408.
 
     def __str__(self):
         return self.title

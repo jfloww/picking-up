@@ -38,8 +38,5 @@ class Migration(migrations.Migration):
                 ('repeat_source', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='occurrences', to='tasks.task')),
                 ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='tasks', to=settings.AUTH_USER_MODEL)),
             ],
-            options={
-                'indexes': [models.Index(fields=['user'], name='tasks_task_user_id_0b1849_idx')],
-            },
         ),
     ]
