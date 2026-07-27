@@ -209,3 +209,47 @@ class TaskApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+    def test_create_rejects_a_duplicate_id(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=task_id, title="first"), format="json")
+
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(id=task_id, title="second"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Task.objects.get(id=task_id).title, "first")
+
+    def test_put_cannot_reassign_id_to_hijack_another_users_task(self):
+        owner, owner_client = auth_client("owner@example.com")
+        other, other_client = auth_client("other@example.com")
+        owner_task_id = str(uuid.uuid4())
+        other_task_id = str(uuid.uuid4())
+        owner_client.post(
+            "/api/tasks/",
+            make_task_payload(id=owner_task_id, title="owner's task"),
+            format="json",
+        )
+        other_client.post(
+            "/api/tasks/",
+            make_task_payload(id=other_task_id, title="other's task"),
+            format="json",
+        )
+
+        response = owner_client.put(
+            f"/api/tasks/{owner_task_id}/",
+            make_task_payload(id=other_task_id, title="hijacked"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        other_task = Task.objects.get(id=other_task_id)
+        self.assertEqual(other_task.title, "other's task")
+        self.assertEqual(other_task.user, other)
+        owner_task = Task.objects.get(id=owner_task_id)
+        self.assertEqual(owner_task.title, "hijacked")
+        self.assertEqual(owner_task.user, owner)
