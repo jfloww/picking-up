@@ -855,4 +855,41 @@ describe("ScopeTasks day box (Weekly view props)", () => {
     await waitFor(() => expect(screen.getByText("gym")).toBeTruthy());
     expect(screen.queryByText("Weekdays")).toBeNull();
   });
+
+  it("without getDragHandlers, task rows render without a drag wrapper", async () => {
+    const day = todayKey();
+    const t = makeTask({ title: "plain task", scope: { kind: "day", date: day } });
+    render(
+      <TasksProvider repository={fakeRepository([t])}>
+        <ScopeTasks scope={{ kind: "day", date: day }} />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("plain task")).toBeTruthy());
+    expect(screen.getByText("plain task").closest(".touch-none")).toBeNull();
+  });
+
+  it("with getDragHandlers, wires the returned handlers onto each task row", async () => {
+    const day = todayKey();
+    const t = makeTask({ id: "a", title: "draggable task", scope: { kind: "day", date: day } });
+    const onPointerDown = vi.fn();
+    const getDragHandlers = vi.fn().mockReturnValue({
+      onPointerDown,
+      onPointerMove: vi.fn(),
+      onPointerUp: vi.fn(),
+      onPointerCancel: vi.fn(),
+      onClickCapture: vi.fn(),
+    });
+    render(
+      <TasksProvider repository={fakeRepository([t])}>
+        <ScopeTasks scope={{ kind: "day", date: day }} getDragHandlers={getDragHandlers} />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("draggable task")).toBeTruthy());
+
+    expect(getDragHandlers).toHaveBeenCalledWith("a", "draggable task");
+    const wrapper = screen.getByText("draggable task").closest(".touch-none");
+    expect(wrapper).not.toBeNull();
+    fireEvent.pointerDown(wrapper!, { pointerId: 1 });
+    expect(onPointerDown).toHaveBeenCalled();
+  });
 });

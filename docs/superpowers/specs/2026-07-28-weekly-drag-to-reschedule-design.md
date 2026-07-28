@@ -58,13 +58,13 @@ action.
 - **While dragging**, the day column currently under the pointer gets a
   visual highlight (ring/background tint), analogous to Daily's dashed
   preview line but at column granularity instead of a time position. The
-  dragged card itself gets the existing drag-ghost treatment
-  (`shadow-lg`, per `.superdesign/design-system.md`) applied in place —
-  matching Daily's existing drag-to-schedule, the source card does **not**
-  follow the pointer as a floating ghost; it stays where it is, and the
-  column highlight alone communicates the destination. This keeps the
-  interaction consistent with Daily and avoids adding floating-element
-  positioning logic that doesn't exist anywhere else in this codebase.
+  dragged card also gets a small floating ghost that follows the pointer,
+  matching Daily's actual existing drag-to-schedule behavior (a
+  `data-testid="drag-ghost"` chip with `shadow-lg`, per
+  `.superdesign/design-system.md`, positioned near the pointer). The column
+  highlight is an additional cue layered on top of the ghost — not a
+  substitute for one — so the drop target is unambiguous even though the
+  ghost itself doesn't indicate which column it's over.
 - **On drop over a valid day column**, the task's `scope.date` updates
   immediately — optimistic UI update via the existing reducer/dispatch
   pattern, followed by the existing `repo.update(...).catch(handleSyncFailure)`

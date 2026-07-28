@@ -66,6 +66,7 @@ interface TasksContextValue extends TasksState {
   setTime: (id: string, time: string | undefined) => void;
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
   detachFromRoutine: (id: string, weekdays?: number[]) => void;
+  rescheduleTaskToDay: (id: string, date: string) => void;
   setPriority: (id: string, priority: boolean) => void;
   setDuration: (id: string, durationMinutes: number | undefined) => void;
   setBackground: (id: string, background: boolean) => void;
@@ -243,6 +244,37 @@ export function TasksProvider({
           const anchor = state.tasks.find((t) => t.id === current.repeatSourceId);
           if (anchor) {
             const excludedDates = [...(anchor.excludedDates ?? []), current.scope.date];
+            const updatedAnchor: Task = { ...anchor, excludedDates };
+            dispatch({ type: "updated", task: updatedAnchor });
+            repo.update(updatedAnchor).catch(handleSyncFailure);
+          }
+        }
+      },
+      rescheduleTaskToDay(id, date) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current) return;
+
+        let originalDate: string;
+        if (current.scope.kind === "day") {
+          originalDate = current.scope.date;
+        } else if (current.scope.kind === "week" && current.rolledFrom?.kind === "day") {
+          originalDate = current.rolledFrom.date;
+        } else {
+          return;
+        }
+        if (originalDate === date) return;
+
+        const task: Task = { ...current, scope: { kind: "day", date }, rolledFrom: undefined };
+        if (current.repeatSourceId !== undefined) {
+          task.repeatSourceId = undefined;
+        }
+        dispatch({ type: "updated", task });
+        repo.update(task).catch(handleSyncFailure);
+
+        if (current.repeatSourceId !== undefined) {
+          const anchor = state.tasks.find((t) => t.id === current.repeatSourceId);
+          if (anchor) {
+            const excludedDates = [...(anchor.excludedDates ?? []), originalDate];
             const updatedAnchor: Task = { ...anchor, excludedDates };
             dispatch({ type: "updated", task: updatedAnchor });
             repo.update(updatedAnchor).catch(handleSyncFailure);

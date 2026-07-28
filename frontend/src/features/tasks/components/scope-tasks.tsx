@@ -9,6 +9,17 @@ import { scopeKey, type Scope, type Task } from "../types";
 import { QuickAdd } from "./quick-add";
 import { TaskItem, taskItemHandlers } from "./task-item";
 
+type GetDragHandlers = (
+  id: string,
+  title: string,
+) => {
+  onPointerDown: (e: React.PointerEvent) => void;
+  onPointerMove: (e: React.PointerEvent) => void;
+  onPointerUp: (e: React.PointerEvent) => void;
+  onPointerCancel: (e: React.PointerEvent) => void;
+  onClickCapture: (e: React.MouseEvent) => void;
+};
+
 export function ScopeTasks({
   scope,
   quickAdd = false,
@@ -16,6 +27,7 @@ export function ScopeTasks({
   onSelectTask,
   highlightOverdue = false,
   showRepeatLabel = false,
+  getDragHandlers,
 }: {
   scope: Scope;
   quickAdd?: boolean;
@@ -23,6 +35,7 @@ export function ScopeTasks({
   onSelectTask?: (id: string) => void;
   highlightOverdue?: boolean;
   showRepeatLabel?: boolean;
+  getDragHandlers?: GetDragHandlers;
 }) {
   const actions = useTasks();
   const { tasks, addTask } = actions;
@@ -79,7 +92,7 @@ export function ScopeTasks({
             if (dayDate < today) highlight = "overdue";
             else if (dayDate === today) highlight = "pending";
           }
-          return (
+          const taskItem = (
             <TaskItem
               key={t.id}
               task={t}
@@ -89,6 +102,12 @@ export function ScopeTasks({
               onSelect={onSelectTask ? () => onSelectTask(t.id) : undefined}
               {...taskItemHandlers(t.id, actions)}
             />
+          );
+          if (!getDragHandlers) return taskItem;
+          return (
+            <li key={t.id} className="touch-none" {...getDragHandlers(t.id, t.title)}>
+              <ul>{taskItem}</ul>
+            </li>
           );
         })}
       </ul>
