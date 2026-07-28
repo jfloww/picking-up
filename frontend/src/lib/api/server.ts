@@ -35,7 +35,9 @@ export async function apiRequest<TResponse>(
     throw new Error(message);
   }
 
-  if (response.status === 204) {
+  // 204: standard no-content. 205: Django's logout endpoint returns this on
+  // success and also sends no body.
+  if (response.status === 204 || response.status === 205) {
     return undefined as TResponse;
   }
 

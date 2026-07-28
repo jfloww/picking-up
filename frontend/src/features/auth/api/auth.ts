@@ -17,6 +17,13 @@ export function requestRegister(credentials: { email: string; password: string }
   });
 }
 
+export function requestLogout(refreshToken: string) {
+  return apiRequest<void>("/api/auth/logout/", {
+    method: "POST",
+    body: JSON.stringify({ refresh: refreshToken }),
+  });
+}
+
 export function requestCurrentUser() {
   return apiRequest<CurrentUser>("/api/auth/me/", {
     authenticated: true,

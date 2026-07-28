@@ -1,18 +1,15 @@
 import { NextResponse } from "next/server";
 
+import { requestLogout } from "@/features/auth/api/auth";
 import { clearAuthCookies, getRefreshToken } from "@/lib/auth/cookies";
-
-const API_BASE_URL = process.env.DJANGO_API_BASE_URL ?? "http://localhost:8000";
 
 export async function POST() {
   const refreshToken = await getRefreshToken();
 
   if (refreshToken) {
-    await fetch(`${API_BASE_URL}/api/auth/logout/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh: refreshToken }),
-    }).catch(() => undefined);
+    // Best-effort: the user is logged out client-side regardless of whether
+    // the backend call to blacklist the refresh token succeeds.
+    await requestLogout(refreshToken).catch(() => undefined);
   }
 
   const response = NextResponse.json({ ok: true });
