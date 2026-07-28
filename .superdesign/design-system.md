@@ -7,7 +7,7 @@ Picking Up is a calm, desktop-first task planner built around Daily, Weekly, Mon
 ## Visual direction
 
 - Quiet, high-density productivity UI with restrained hierarchy.
-- Default dark theme uses near-black canvas and charcoal surfaces with warm gold as the focus/brand accent.
+- Default dark theme uses near-black canvas and charcoal surfaces with steel-blue as the focus/brand accent (matching light theme's blue, not the earlier gold exploration — see Color below).
 - Light theme remains neutral white and cool gray with muted blue brand/focus.
 - Use borders and 1px rings for separation. Reserve large shadows for overlays such as the task drawer.
 - Avoid decorative gradients, new font families, saturated novelty colors, glass effects, or marketing-style ornament inside the planner.
@@ -22,14 +22,24 @@ Picking Up is a calm, desktop-first task planner built around Daily, Weekly, Mon
 - Use tabular numerals for times, counts, and durations.
 
 ### Color
+
+Source of truth: `frontend/src/app/globals.css`. If this doc and that file
+ever disagree, `globals.css` wins — update this section to match, not the
+other way around.
+
 - Dark canvas: `#0a0b0c` (`background`).
 - Dark raised surface: `#121518` (`card`, `sidebar`, `popover`).
 - Dark secondary surface: `#181c20` (`muted`, `secondary`, `accent`, `input`).
 - Dark foreground: `#f4f5f6`; muted foreground `#a3adb7`; subtle `#697681`.
-- Dark brand/focus: `#d4a85f`.
+- Dark brand/focus: `#6f9cc4` (steel-blue — matches light theme's blue; an
+  earlier "Neural Noir" exploration used a warm gold, `#d4a85f`, but that
+  was reverted and is no longer current anywhere in the app).
 - Dark border: `rgb(255 255 255 / 9%)`.
-- Dark destructive: `#ff8a7a`; warning: `#fbbf24`.
-- Light canvas/surface: `#ffffff`; foreground `#171a1c`; secondary `#f2f3f4`; muted text `#5f6a72`; border `#e5e7e6`; brand/focus `#3b6b96`.
+- Dark destructive: `#ff8a7a`; warning: `#fbbf24` (pending/overdue
+  highlighting only — not the brand accent); success: `#4ade80`.
+- Light canvas/surface: `#ffffff`; foreground `#171a1c`; secondary `#f2f3f4`;
+  muted text `#5f6a72`; border `#e5e7e6`; brand/focus `#3b6b96`; subtle
+  `#8b9299`; destructive `#b42318`; warning `#b45309`; success `#15803d`.
 - Use semantic Tailwind aliases (`bg-background`, `bg-card`, `bg-muted`, `text-foreground`, `text-muted-foreground`, `text-subtle`, `text-brand`, `border-border`, `ring-ring`) instead of duplicating literal values in application code.
 
 ### Shape and spacing
