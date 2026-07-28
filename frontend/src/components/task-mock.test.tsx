@@ -20,4 +20,10 @@ describe("TaskMock", () => {
     render(<TaskMock />);
     expect(screen.queryByText("Inbox")).toBeNull();
   });
+
+  it("is aria-hidden, since it is decorative", () => {
+    const { container } = render(<TaskMock />);
+    expect(container.firstChild).toBeInstanceOf(HTMLElement);
+    expect((container.firstChild as HTMLElement).getAttribute("aria-hidden")).toBe("true");
+  });
 });

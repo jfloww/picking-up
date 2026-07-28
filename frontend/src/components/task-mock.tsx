@@ -12,10 +12,10 @@ export function TaskMock() {
       aria-hidden
       className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
     >
-      <div className="flex items-center justify-between border-b border-border px-5 py-4">
-        <h2 className="text-[15px] font-bold tracking-tight text-foreground">
+      <div className="border-b border-border px-5 py-4">
+        <p className="text-[15px] font-bold tracking-tight text-foreground">
           Tuesday, March 10
-        </h2>
+        </p>
       </div>
       <div className="flex">
         <div className="flex-[3] space-y-3 border-r border-border p-4">
@@ -38,19 +38,19 @@ export function TaskMock() {
         </div>
         <div className="flex-[2] p-4">
           <section>
-            <h3 className="text-[10px] font-semibold tracking-wider text-subtle uppercase">
+            <span className="text-[10px] font-semibold tracking-wider text-subtle uppercase">
               All Day To-Do
-            </h3>
-            <div className="mt-2 flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-2">
+            </span>
+            <div className="mt-2 flex items-center gap-2 rounded-md bg-muted ring-1 ring-border px-2.5 py-2">
               <span className="size-3.5 shrink-0 rounded-[4px] border-2 border-border" />
               <span className="truncate text-[11px] text-foreground">Grocery pickup</span>
             </div>
           </section>
           <section className="mt-4">
-            <h3 className="text-[10px] font-semibold tracking-wider text-subtle uppercase">
+            <span className="text-[10px] font-semibold tracking-wider text-subtle uppercase">
               Next Up
-            </h3>
-            <div className="mt-2 flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-2">
+            </span>
+            <div className="mt-2 flex items-center gap-2 rounded-md bg-muted ring-1 ring-border px-2.5 py-2">
               <span className="size-3.5 shrink-0 rounded-[4px] border-2 border-brand" />
               <span className="truncate text-[11px] text-foreground">Finalize API notes</span>
             </div>
