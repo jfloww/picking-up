@@ -239,4 +239,89 @@ describe("WeeklyView", () => {
 
     expect(screen.getByTestId("day-column-2026-07-14").textContent).toContain("task a");
   });
+
+  it("drags a future-dated, never-rolled-over task from one day into another, updating its scope and moving it in the UI", async () => {
+    // Unlike the drag tests above (whose "2026-07-14" fixture is before the
+    // frozen "today" of 2026-07-16 and therefore gets converted to a
+    // week-scoped, rolled-over task by rollover logic on mount), this task's
+    // date is on/after "today", so it stays a plain day-scoped task and this
+    // test exercises the plain scope.kind === "day" drag path.
+    const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: "2026-07-17" } });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "task a" })).toBeTruthy());
+
+    const sourceColumn = screen.getByTestId("day-column-2026-07-17");
+    const targetColumn = screen.getByTestId("day-column-2026-07-18");
+    vi.spyOn(sourceColumn, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      bottom: 300,
+      left: 0,
+      right: 100,
+      width: 100,
+      height: 300,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    } as DOMRect);
+    vi.spyOn(targetColumn, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      bottom: 300,
+      left: 200,
+      right: 300,
+      width: 100,
+      height: 300,
+      x: 200,
+      y: 0,
+      toJSON: () => {},
+    } as DOMRect);
+
+    const chip = screen.getByText("task a").closest(".touch-none")!;
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 250, clientY: 50 });
+    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 250, clientY: 50 });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("day-column-2026-07-18").textContent).toContain("task a"),
+    );
+    expect(screen.getByTestId("day-column-2026-07-17").textContent).not.toContain("task a");
+  });
+
+  it("drags an explicitly rolled-over task (week scope with a day rolledFrom), moving it to the dropped column", async () => {
+    // Constructed directly with scope.kind "week" + rolledFrom, rather than
+    // relying on the rollover mechanism to produce this shape implicitly
+    // (as the "2026-07-14" fixtures above incidentally do). This deliberately
+    // targets the rolled-over branch of rescheduleTaskToDay. Fixture style
+    // follows the "rescheduleTaskToDay moves a rolled-over task..." test in
+    // store.test.tsx.
+    const a = makeTask({
+      id: "a",
+      title: "task a",
+      scope: { kind: "week", weekStart: "2026-07-12" },
+      rolledFrom: { kind: "day", date: "2026-07-14" },
+    });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "task a" })).toBeTruthy());
+
+    const targetColumn = screen.getByTestId("day-column-2026-07-16");
+    vi.spyOn(targetColumn, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      bottom: 300,
+      left: 200,
+      right: 300,
+      width: 100,
+      height: 300,
+      x: 200,
+      y: 0,
+      toJSON: () => {},
+    } as DOMRect);
+
+    const chip = screen.getByText("task a").closest(".touch-none")!;
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 250, clientY: 50 });
+    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 250, clientY: 50 });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("day-column-2026-07-16").textContent).toContain("task a"),
+    );
+  });
 });

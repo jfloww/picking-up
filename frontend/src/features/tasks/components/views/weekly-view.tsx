@@ -142,6 +142,19 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
           );
         })}
       </div>
+
+      {dragState && (
+        <div
+          data-testid="drag-ghost"
+          className="pointer-events-none fixed z-50 rounded-md bg-card px-2 py-1 text-xs shadow-lg ring-1 ring-brand/40"
+          style={{
+            top: dragState.pointerY + 12,
+            left: dragState.pointerX + 12,
+          }}
+        >
+          {dragState.title}
+        </div>
+      )}
     </div>
   );
 }

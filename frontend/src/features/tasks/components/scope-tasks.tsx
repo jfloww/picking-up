@@ -105,9 +105,9 @@ export function ScopeTasks({
           );
           if (!getDragHandlers) return taskItem;
           return (
-            <div key={t.id} className="touch-none" {...getDragHandlers(t.id, t.title)}>
+            <li key={t.id} className="touch-none" {...getDragHandlers(t.id, t.title)}>
               <ul>{taskItem}</ul>
-            </div>
+            </li>
           );
         })}
       </ul>

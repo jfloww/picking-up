@@ -7,6 +7,8 @@ const DRAG_THRESHOLD_PX = 10;
 export interface RescheduleDragState {
   id: string;
   title: string;
+  pointerX: number;
+  pointerY: number;
   targetDate: string | null;
 }
 
@@ -78,7 +80,13 @@ export function useDragToRescheduleDay(options: {
         }
 
         const targetDate = resolve(e.clientX, e.clientY);
-        setDragState({ id: gesture.id, title: gesture.title, targetDate });
+        setDragState({
+          id: gesture.id,
+          title: gesture.title,
+          pointerX: e.clientX,
+          pointerY: e.clientY,
+          targetDate,
+        });
       },
       onPointerUp: (e: React.PointerEvent) => {
         const gesture = gestureRef.current;
