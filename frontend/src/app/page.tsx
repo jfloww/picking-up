@@ -15,47 +15,46 @@ export default async function HomePage() {
       <SiteHeader user={user} />
 
       <main className="flex flex-1 flex-col">
-        <section className="mx-auto flex w-full max-w-4xl flex-col items-center px-6 pt-[12vh] text-center">
-          <h1 className="text-4xl font-extralight tracking-tight text-foreground sm:text-6xl">
-            Everything you need to do.
-            <br />
-            Nothing else.
-          </h1>
-          <p className="mt-4 text-base text-muted-foreground">
-            The calm home for your tasks.
-          </p>
-          <div className="mt-8 flex gap-3">
-            {user ? (
-              <Link
-                href="/app"
-                className={cn(buttonVariants({ size: "lg" }), "rounded-full px-6")}
-              >
-                Open app
-              </Link>
-            ) : (
-              <>
+        <section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-12 px-6 pt-[10vh] pb-16 lg:flex-row lg:items-center lg:pt-[14vh]">
+          <div className="flex flex-col items-center text-center lg:flex-1 lg:items-start lg:text-left">
+            <h1 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
+              Pick up your day.
+            </h1>
+            <p className="mt-4 max-w-md text-base text-muted-foreground">
+              Plan what matters today, and see your whole week at a glance.
+            </p>
+            <div className="mt-8 flex gap-3">
+              {user ? (
                 <Link
-                  href="/signup"
+                  href="/app"
                   className={cn(buttonVariants({ size: "lg" }), "rounded-full px-6")}
                 >
-                  Get started
+                  Open app
                 </Link>
-                <Link
-                  href="/login"
-                  className={cn(
-                    buttonVariants({ variant: "outline", size: "lg" }),
-                    "rounded-full px-6",
-                  )}
-                >
-                  Sign in
-                </Link>
-              </>
-            )}
+              ) : (
+                <>
+                  <Link
+                    href="/signup"
+                    className={cn(buttonVariants({ size: "lg" }), "rounded-full px-6")}
+                  >
+                    Get started
+                  </Link>
+                  <Link
+                    href="/login"
+                    className={cn(
+                      buttonVariants({ variant: "outline", size: "lg" }),
+                      "rounded-full px-6",
+                    )}
+                  >
+                    Sign in
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
-        </section>
-
-        <section className="mx-auto mt-14 w-full max-w-4xl px-6">
-          <TaskMock />
+          <div className="w-full lg:flex-[1.1]">
+            <TaskMock />
+          </div>
         </section>
       </main>
 
