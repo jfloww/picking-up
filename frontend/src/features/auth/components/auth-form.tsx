@@ -51,7 +51,7 @@ export function AuthForm({ mode }: AuthFormProps) {
       }
 
       if (isLogin) {
-        router.replace(searchParams.get("next") ?? "/app");
+        router.replace(searchParams.get("next") ?? "/planner");
       } else {
         router.replace("/login");
       }

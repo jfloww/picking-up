@@ -7,7 +7,7 @@ import {
   setAuthCookies,
 } from "@/lib/auth/cookies";
 
-const protectedRoutes = ["/app"];
+const protectedRoutes = ["/planner"];
 const authRoutes = ["/login", "/signup"];
 // Not protected and not an auth form — but still needs a fresh access
 // token so the header can show the correct signed-in state. Never redirects.
@@ -78,11 +78,11 @@ export async function middleware(request: NextRequest) {
   }
 
   if (isAuthRoute && isAuthenticated) {
-    const appUrl = request.nextUrl.clone();
-    appUrl.pathname = "/app";
-    appUrl.search = "";
+    const plannerUrl = request.nextUrl.clone();
+    plannerUrl.pathname = "/planner";
+    plannerUrl.search = "";
 
-    const response = NextResponse.redirect(appUrl);
+    const response = NextResponse.redirect(plannerUrl);
     if (refreshedTokens) setAuthCookies(response, refreshedTokens);
     return response;
   }

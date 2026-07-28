@@ -3,7 +3,7 @@ import { SiteHeader } from "@/components/site-header";
 import { getCurrentUserOrNull } from "@/features/auth/api/auth";
 import { TaskCalendar } from "@/features/tasks/components/task-calendar";
 
-export default async function AppPage() {
+export default async function PlannerPage() {
   const user = await getCurrentUserOrNull();
 
   return (

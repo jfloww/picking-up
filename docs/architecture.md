@@ -171,7 +171,7 @@ jumps unexpectedly.
 flowchart LR
     B[Browser] --> MW["middleware.ts (edge)"]
     MW -->|"expired access + valid refresh"| DJ["Django /api/auth/token/refresh/"]
-    MW -->|"no session on /app"| L["redirect /login?next=…"]
+    MW -->|"no session on /planner"| L["redirect /login?next=…"]
     B --> RH["app/api/auth/* route handlers"]
     RH --> AC["lib/api/server.ts apiRequest()"]
     AC --> DJAPI["Django REST (Simple JWT)"]
@@ -180,7 +180,7 @@ flowchart LR
 
 - JWTs live in **HTTP-only cookies** (`lib/auth/cookies.ts`); the browser JS never
   sees tokens.
-- `middleware.ts` guards `/app`, redirects authenticated users away from
+- `middleware.ts` guards `/planner`, redirects authenticated users away from
   `/login`/`/signup`, and transparently refreshes expired access tokens. It only
   *decodes* the token expiry — Django remains the verification authority on every
   API request.

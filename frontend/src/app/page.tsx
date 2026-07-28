@@ -26,7 +26,7 @@ export default async function HomePage() {
             <div className="animate-fade-up mt-8 flex gap-3 [animation-delay:240ms]">
               {user ? (
                 <Link
-                  href="/app"
+                  href="/planner"
                   className={cn(buttonVariants({ size: "lg" }), "rounded-full px-6")}
                 >
                   Open app

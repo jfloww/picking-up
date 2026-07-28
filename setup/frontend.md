@@ -1,6 +1,6 @@
 # Frontend Setup
 
-Next.js 15 (App Router) + React 19 + TypeScript + Tailwind 4. The backend ([backend.md](backend.md)) should be running first — the auth flow (login/signup, `/app`) proxies to it.
+Next.js 15 (App Router) + React 19 + TypeScript + Tailwind 4. The backend ([backend.md](backend.md)) should be running first — the auth flow (login/signup, `/planner`) proxies to it.
 
 ## 1. Install dependencies
 
@@ -41,5 +41,5 @@ npm run build    # production build, 9 routes expected
 |---|---|
 | `/` | Landing page — public, shows "Sign in" or your name depending on auth state |
 | `/login`, `/signup` | Auth forms |
-| `/app` | Protected task workspace — redirects to `/login` if not authenticated |
+| `/planner` | Protected task workspace — redirects to `/login` if not authenticated |
 | `/api/auth/*` | Route handlers proxying to the Django backend |
