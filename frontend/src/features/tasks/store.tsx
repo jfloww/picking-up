@@ -252,11 +252,19 @@ export function TasksProvider({
       },
       rescheduleTaskToDay(id, date) {
         const current = state.tasks.find((t) => t.id === id);
-        if (!current || current.scope.kind !== "day") return;
-        if (current.scope.date === date) return;
+        if (!current) return;
 
-        const originalDate = current.scope.date;
-        const task: Task = { ...current, scope: { kind: "day", date } };
+        let originalDate: string;
+        if (current.scope.kind === "day") {
+          originalDate = current.scope.date;
+        } else if (current.scope.kind === "week" && current.rolledFrom?.kind === "day") {
+          originalDate = current.rolledFrom.date;
+        } else {
+          return;
+        }
+        if (originalDate === date) return;
+
+        const task: Task = { ...current, scope: { kind: "day", date }, rolledFrom: undefined };
         if (current.repeatSourceId !== undefined) {
           task.repeatSourceId = undefined;
         }

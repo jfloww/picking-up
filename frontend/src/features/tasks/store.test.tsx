@@ -404,6 +404,45 @@ describe("TasksProvider", () => {
 
       expect(result.current.tasks[0]).toBe(task);
     });
+
+    it("rescheduleTaskToDay moves a rolled-over task (week scope with a day rolledFrom), clearing rolledFrom", async () => {
+      const today = todayKey();
+      const target = addDays(today, 2);
+      const rolledOver = makeTask({
+        id: "a",
+        title: "old task",
+        scope: { kind: "week", weekStart: weekStartOf(today) },
+        rolledFrom: { kind: "day", date: addDays(today, -2) },
+      });
+      const { repo, result } = setup(fakeRepository([rolledOver]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.rescheduleTaskToDay("a", target));
+
+      const moved = result.current.tasks.find((t) => t.id === "a");
+      expect(moved?.scope).toEqual({ kind: "day", date: target });
+      expect(moved?.rolledFrom).toBeUndefined();
+      await waitFor(() =>
+        expect(repo.tasks.find((t) => t.id === "a")?.scope).toEqual({ kind: "day", date: target }),
+      );
+    });
+
+    it("rescheduleTaskToDay is a no-op for a rolled-over task dropped back on its own original date", async () => {
+      const today = todayKey();
+      const originalDate = addDays(today, -2);
+      const rolledOver = makeTask({
+        id: "a",
+        title: "old task",
+        scope: { kind: "week", weekStart: weekStartOf(today) },
+        rolledFrom: { kind: "day", date: originalDate },
+      });
+      const { result } = setup(fakeRepository([rolledOver]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.rescheduleTaskToDay("a", originalDate));
+
+      expect(result.current.tasks[0]).toBe(rolledOver);
+    });
   });
 
   describe("time and subtask actions", () => {
