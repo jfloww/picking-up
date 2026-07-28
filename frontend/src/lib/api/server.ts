@@ -6,6 +6,18 @@ type ApiRequestOptions = RequestInit & {
   authenticated?: boolean;
 };
 
+// Thrown only for a 401 on an `authenticated: true` call — i.e. the bearer
+// token we sent was rejected as invalid/expired, as opposed to a 401/400 a
+// credential-check endpoint like login returns for a bad password. Callers
+// with access to a NextResponse (route handlers) can catch this specifically
+// to clear the now-stale auth cookies and signal the client to re-authenticate.
+export class ApiUnauthorizedError extends Error {
+  constructor() {
+    super("Unauthorized.");
+    this.name = "ApiUnauthorizedError";
+  }
+}
+
 export async function apiRequest<TResponse>(
   path: string,
   options: ApiRequestOptions = {},
@@ -31,6 +43,9 @@ export async function apiRequest<TResponse>(
   });
 
   if (!response.ok) {
+    if (options.authenticated && response.status === 401) {
+      throw new ApiUnauthorizedError();
+    }
     const message = await readErrorMessage(response);
     throw new Error(message);
   }

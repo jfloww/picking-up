@@ -118,4 +118,61 @@ describe("createApiTaskRepository", () => {
 
     expect(fetchSpy).toHaveBeenCalledWith("/api/tasks/x", expect.objectContaining({ method: "DELETE" }));
   });
+
+  describe("on a 401 (session expired)", () => {
+    it("list() redirects to login instead of surfacing a generic sync failure", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 401)));
+      const redirectToLogin = vi.fn();
+
+      await expect(createApiTaskRepository(redirectToLogin).list()).rejects.toThrow();
+
+      expect(redirectToLogin).toHaveBeenCalledOnce();
+    });
+
+    it("create() redirects to login", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 401)));
+      const redirectToLogin = vi.fn();
+
+      await expect(createApiTaskRepository(redirectToLogin).create(makeTask())).rejects.toThrow();
+
+      expect(redirectToLogin).toHaveBeenCalledOnce();
+    });
+
+    it("update() redirects to login", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 401)));
+      const redirectToLogin = vi.fn();
+
+      await expect(
+        createApiTaskRepository(redirectToLogin).update(makeTask()),
+      ).rejects.toThrow();
+
+      expect(redirectToLogin).toHaveBeenCalledOnce();
+    });
+
+    it("remove() redirects to login", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 401)));
+      const redirectToLogin = vi.fn();
+
+      await expect(createApiTaskRepository(redirectToLogin).remove("x")).rejects.toThrow();
+
+      expect(redirectToLogin).toHaveBeenCalledOnce();
+    });
+
+    it("list() redirects to login when the legacy-migration upload itself hits a 401, without logging a misleading migration-failure message", async () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([makeTask({ id: "a" })]));
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 401)));
+      const redirectToLogin = vi.fn();
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await expect(createApiTaskRepository(redirectToLogin).list()).rejects.toThrow();
+
+      expect(redirectToLogin).toHaveBeenCalledOnce();
+      expect(consoleSpy).not.toHaveBeenCalled();
+      // localStorage is left alone — this wasn't a migration-specific
+      // failure, so there's nothing to retry differently next time.
+      expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
+
+      consoleSpy.mockRestore();
+    });
+  });
 });

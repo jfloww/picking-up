@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/auth/cookies", () => ({
+vi.mock("@/lib/auth/cookies", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/cookies")>()),
   getAccessToken: vi.fn().mockResolvedValue("test-token"),
 }));
 
@@ -173,9 +174,18 @@ describe("client repository -> real route handlers -> mapping (no mocked seams b
     expect(djangoCalls[0].method).toBe("DELETE");
   });
 
-  it("a Django failure propagates through the real route handler as a rejected list()", async () => {
-    installFetchRouter(() => Response.json({ detail: "token expired" }, { status: 401 }));
+  it("a non-auth Django failure propagates through the real route handler as a rejected list()", async () => {
+    installFetchRouter(() => Response.json({ detail: "server exploded" }, { status: 500 }));
 
     await expect(createApiTaskRepository().list()).rejects.toThrow("Failed to load tasks.");
+  });
+
+  it("a Django 401 propagates through the real route handler's own 401, and the client redirects to login instead of a generic sync failure", async () => {
+    installFetchRouter(() => Response.json({ detail: "token expired" }, { status: 401 }));
+    const redirectToLogin = vi.fn();
+
+    await expect(createApiTaskRepository(redirectToLogin).list()).rejects.toThrow();
+
+    expect(redirectToLogin).toHaveBeenCalledOnce();
   });
 });

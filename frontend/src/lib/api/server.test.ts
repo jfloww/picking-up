@@ -4,7 +4,7 @@ vi.mock("@/lib/auth/cookies", () => ({
   getAccessToken: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { apiRequest } from "./server";
+import { ApiUnauthorizedError, apiRequest } from "./server";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -45,5 +45,28 @@ describe("apiRequest", () => {
     await expect(apiRequest("/api/auth/logout/")).rejects.toThrow(
       "Refresh token is required.",
     );
+  });
+
+  it("throws ApiUnauthorizedError, not a generic Error, on a 401 for an authenticated call", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ detail: "expired" }, 401)));
+
+    await expect(
+      apiRequest("/api/tasks/", { authenticated: true }),
+    ).rejects.toBeInstanceOf(ApiUnauthorizedError);
+  });
+
+  it("throws a plain Error, not ApiUnauthorizedError, for a 401 on a non-authenticated call", async () => {
+    // A login attempt with bad credentials is a normal user-facing error, not
+    // a "your session expired" signal — it must not be conflated with the
+    // authenticated-call case above.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ detail: "Invalid credentials." }, 401)),
+    );
+
+    const error = await apiRequest("/api/auth/token/", { method: "POST" }).catch((e) => e);
+    expect(error).not.toBeInstanceOf(ApiUnauthorizedError);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("Invalid credentials.");
   });
 });

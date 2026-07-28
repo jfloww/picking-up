@@ -44,6 +44,16 @@ export function clearAuthCookies(response: NextResponse) {
   });
 }
 
+// Shared by every API route handler that catches ApiUnauthorizedError: the
+// bearer token we sent was rejected, so the stale cookies are cleared here
+// (route handlers are the only place that can — Server Components can only
+// read cookies) and the client is told to re-authenticate.
+export function unauthorizedResponse() {
+  const response = NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  clearAuthCookies(response);
+  return response;
+}
+
 export async function getAccessToken() {
   const cookieStore = await cookies();
   return cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
