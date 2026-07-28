@@ -10,49 +10,53 @@ export function TaskMock() {
   return (
     <div
       aria-hidden
-      className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
+      className="w-full overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
     >
-      <div className="border-b border-border px-5 py-4">
-        <p className="text-[15px] font-bold tracking-tight text-foreground">
-          Tuesday, March 10
-        </p>
+      <div className="border-b border-border px-8 py-6">
+        <p className="text-xl font-bold tracking-tight text-foreground">Tuesday, March 10</p>
       </div>
       <div className="flex">
-        <div className="flex-[3] space-y-3 border-r border-border p-4">
+        <div className="flex-[3] space-y-4 border-r border-border p-8">
           {timelineBlocks.map((block) => (
             <div
               key={block.title}
               className={cn(
-                "rounded-r-md border-l-2 px-2.5 py-1.5",
+                "rounded-r-lg border-l-2 px-4 py-3",
                 block.accent === "brand"
                   ? "border-l-brand bg-brand/10"
                   : "border-l-muted-foreground bg-muted/40",
               )}
             >
-              <span className="block text-[10px] tabular-nums text-muted-foreground">
+              <span className="block text-xs tabular-nums text-muted-foreground">
                 {block.time}
               </span>
-              <span className="text-[11px] font-medium text-foreground">{block.title}</span>
+              <span className="text-sm font-medium text-foreground">{block.title}</span>
             </div>
           ))}
         </div>
-        <div className="flex-[2] p-4">
+        <div className="flex-[2] p-8">
           <section>
-            <span className="text-[10px] font-semibold tracking-wider text-subtle uppercase">
+            <span className="text-xs font-semibold tracking-wider text-subtle uppercase">
               All Day To-Do
             </span>
-            <div className="mt-2 flex items-center gap-2 rounded-md bg-muted ring-1 ring-border px-2.5 py-2">
-              <span className="size-3.5 shrink-0 rounded-[4px] border-2 border-border" />
-              <span className="truncate text-[11px] text-foreground">Grocery pickup</span>
+            <div className="mt-3 flex items-center gap-3 rounded-lg bg-muted ring-1 ring-border px-4 py-3">
+              <span className="size-4 shrink-0 rounded-[5px] border-2 border-border" />
+              <span className="truncate text-sm text-foreground">Grocery pickup</span>
             </div>
           </section>
-          <section className="mt-4">
-            <span className="text-[10px] font-semibold tracking-wider text-subtle uppercase">
+          <section className="mt-6">
+            <span className="text-xs font-semibold tracking-wider text-subtle uppercase">
               Next Up
             </span>
-            <div className="mt-2 flex items-center gap-2 rounded-md bg-muted ring-1 ring-border px-2.5 py-2">
-              <span className="size-3.5 shrink-0 rounded-[4px] border-2 border-brand" />
-              <span className="truncate text-[11px] text-foreground">Finalize API notes</span>
+            <div className="mt-3 flex items-center gap-3 rounded-lg bg-muted ring-1 ring-border px-4 py-3">
+              <span className="size-4 shrink-0 rounded-[5px] border-2 border-brand" />
+              <span className="truncate text-sm text-foreground">Finalize API notes</span>
+            </div>
+            <div className="animate-hero-demo-row mt-2 flex items-center gap-3 rounded-lg bg-muted ring-1 ring-border px-4 py-3">
+              <span className="animate-hero-demo-dot size-4 shrink-0 rounded-[5px] border-2 border-brand" />
+              <span className="animate-hero-demo-title truncate text-sm text-foreground">
+                Prep client agenda
+              </span>
             </div>
           </section>
         </div>
