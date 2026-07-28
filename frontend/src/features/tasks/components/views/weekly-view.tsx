@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,7 @@ import type { ViewKind } from "../view-switcher";
 import { ScopeTasks } from "../scope-tasks";
 import { TaskDetailDrawer } from "../task-detail-drawer";
 import { taskItemHandlers } from "../task-item";
+import { useDragToRescheduleDay } from "../use-drag-to-reschedule-day";
 
 export interface CalendarViewProps {
   anchor: string;
@@ -49,6 +50,12 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
         shortDateLabel(date, today),
       )
     : undefined;
+
+  const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const { dragState, getDragHandlers } = useDragToRescheduleDay({
+    columnRefs,
+    onReschedule: (id, date) => actions.rescheduleTaskToDay(id, date),
+  });
 
   return (
     <div
@@ -86,10 +93,18 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
         {dates.map((date, i) => {
           const dayTasks = dayTasksForWeek(tasks, date, weekStart);
           const dayDone = dayTasks.filter((t) => t.done).length;
+          const isDropTarget = dragState?.targetDate === date;
           return (
             <div
               key={date}
-              className="flex min-h-0 flex-col rounded-md bg-card p-1.5 ring-1 ring-ring/40"
+              data-testid={`day-column-${date}`}
+              ref={(el) => {
+                columnRefs.current[date] = el;
+              }}
+              className={cn(
+                "flex min-h-0 flex-col rounded-md bg-card p-1.5 ring-1 ring-ring/40 transition-colors",
+                isDropTarget && "bg-brand/5 ring-2 ring-brand",
+              )}
             >
               <div className="mb-1 flex shrink-0 items-center justify-between">
                 <button
@@ -120,6 +135,7 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
                   onSelectTask={handleSelectTask}
                   highlightOverdue
                   showRepeatLabel
+                  getDragHandlers={getDragHandlers}
                 />
               </div>
             </div>
