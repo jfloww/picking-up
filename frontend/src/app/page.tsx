@@ -15,15 +15,15 @@ export default async function HomePage() {
       <SiteHeader user={user} />
 
       <main className="flex flex-1 flex-col">
-        <section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-12 px-6 pt-[10vh] pb-16 lg:flex-row lg:items-center lg:pt-[14vh]">
-          <div className="flex flex-col items-center text-center lg:flex-1 lg:items-start lg:text-left">
-            <h1 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
+        <section className="mx-auto w-full max-w-[1200px] px-6 pb-24 pt-[10vh] lg:pt-[14vh]">
+          <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
+            <h1 className="animate-fade-up text-5xl font-semibold tracking-tight text-foreground sm:text-6xl">
               Pick up your day.
             </h1>
-            <p className="mt-4 max-w-md text-base text-muted-foreground">
-              Plan what matters today, and see your whole week at a glance.
+            <p className="animate-fade-up mt-5 max-w-md text-base text-muted-foreground [animation-delay:120ms] sm:text-lg">
+              Turn your to-dos into a clear plan — one day at a time, one week in view.
             </p>
-            <div className="mt-8 flex gap-3">
+            <div className="animate-fade-up mt-8 flex gap-3 [animation-delay:240ms]">
               {user ? (
                 <Link
                   href="/app"
@@ -52,9 +52,41 @@ export default async function HomePage() {
               )}
             </div>
           </div>
-          <div className="w-full lg:flex-[1.1]">
+
+          <div className="animate-fade-up mt-16 [animation-delay:400ms]">
             <TaskMock />
           </div>
+
+          <div className="mt-24 flex flex-col gap-10 border-t border-border pt-12 sm:flex-row sm:gap-0">
+            <div className="flex-1 sm:pr-8">
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                Focus your day
+              </h2>
+              <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
+                Turn tasks into a clear timeline and actionable agenda.
+              </p>
+            </div>
+            <div className="flex-1 sm:border-l sm:border-border sm:px-8">
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                See your week clearly
+              </h2>
+              <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
+                Understand your workload across the week at a glance.
+              </p>
+            </div>
+            <div className="flex-1 sm:border-l sm:border-border sm:pl-8">
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                Keep routines flexible
+              </h2>
+              <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
+                Repeat what matters and adjust one occurrence without breaking the whole series.
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-10 text-center text-xs text-subtle">
+            Your tasks stay synced across devices.
+          </p>
         </section>
       </main>
 
