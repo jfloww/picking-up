@@ -1,61 +1,61 @@
 import { cn } from "@/lib/utils";
 
-const navItems = ["Today", "Inbox", "Done"];
-
-const rows = [
-  { label: "Reply to the design review", done: true, active: false },
-  { label: "Book dentist appointment", done: false, active: true },
-  { label: "Prepare Monday standup notes", done: false, active: false },
-  { label: "Pick up groceries", done: false, active: false },
+const timelineBlocks: { time: string; title: string; accent: "brand" | "muted" }[] = [
+  { time: "9:30 – 10:15", title: "Design review reply", accent: "brand" },
+  { time: "1:00 – 1:45", title: "Book dentist appointment", accent: "muted" },
+  { time: "2:30 – 3:00", title: "Standup notes", accent: "muted" },
 ];
 
 export function TaskMock() {
   return (
     <div
       aria-hidden
-      className="rounded-t-xl border border-b-0 border-border bg-card p-4 shadow-[0_-16px_64px_-24px_rgb(0_0_0/0.4)] sm:p-6"
+      className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
     >
-      <div className="flex gap-5">
-        <div className="hidden w-40 shrink-0 flex-col gap-1 sm:flex">
-          {navItems.map((item, index) => (
+      <div className="flex items-center justify-between border-b border-border px-5 py-4">
+        <h2 className="text-[15px] font-bold tracking-tight text-foreground">
+          Tuesday, March 10
+        </h2>
+      </div>
+      <div className="flex">
+        <div className="flex-[3] space-y-3 border-r border-border p-4">
+          {timelineBlocks.map((block) => (
             <div
-              key={item}
+              key={block.title}
               className={cn(
-                "rounded-md px-3 py-1.5 text-sm",
-                index === 0
-                  ? "bg-muted font-medium text-foreground"
-                  : "text-muted-foreground",
+                "rounded-r-md border-l-2 px-2.5 py-1.5",
+                block.accent === "brand"
+                  ? "border-l-brand bg-brand/10"
+                  : "border-l-muted-foreground bg-muted/40",
               )}
             >
-              {item}
+              <span className="block text-[10px] tabular-nums text-muted-foreground">
+                {block.time}
+              </span>
+              <span className="text-[11px] font-medium text-foreground">{block.title}</span>
             </div>
           ))}
         </div>
-        <ul className="flex min-w-0 flex-1 flex-col gap-2">
-          {rows.map((row) => (
-            <li
-              key={row.label}
-              className="flex items-center gap-3 rounded-lg border border-border bg-background px-4 py-3"
-            >
-              <span
-                className={cn(
-                  "size-4 shrink-0 rounded-full border",
-                  row.done && "border-transparent bg-brand/40",
-                  row.active && "border-brand",
-                  !row.done && !row.active && "border-border",
-                )}
-              />
-              <span
-                className={cn(
-                  "truncate text-sm",
-                  row.done ? "text-muted-foreground line-through" : "text-foreground",
-                )}
-              >
-                {row.label}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="flex-[2] p-4">
+          <section>
+            <h3 className="text-[10px] font-semibold tracking-wider text-subtle uppercase">
+              All Day To-Do
+            </h3>
+            <div className="mt-2 flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-2">
+              <span className="size-3.5 shrink-0 rounded-[4px] border-2 border-border" />
+              <span className="truncate text-[11px] text-foreground">Grocery pickup</span>
+            </div>
+          </section>
+          <section className="mt-4">
+            <h3 className="text-[10px] font-semibold tracking-wider text-subtle uppercase">
+              Next Up
+            </h3>
+            <div className="mt-2 flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-2">
+              <span className="size-3.5 shrink-0 rounded-[4px] border-2 border-brand" />
+              <span className="truncate text-[11px] text-foreground">Finalize API notes</span>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );
