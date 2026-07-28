@@ -66,6 +66,7 @@ interface TasksContextValue extends TasksState {
   setTime: (id: string, time: string | undefined) => void;
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
   detachFromRoutine: (id: string, weekdays?: number[]) => void;
+  rescheduleTaskToDay: (id: string, date: string) => void;
   setPriority: (id: string, priority: boolean) => void;
   setDuration: (id: string, durationMinutes: number | undefined) => void;
   setBackground: (id: string, background: boolean) => void;
@@ -243,6 +244,29 @@ export function TasksProvider({
           const anchor = state.tasks.find((t) => t.id === current.repeatSourceId);
           if (anchor) {
             const excludedDates = [...(anchor.excludedDates ?? []), current.scope.date];
+            const updatedAnchor: Task = { ...anchor, excludedDates };
+            dispatch({ type: "updated", task: updatedAnchor });
+            repo.update(updatedAnchor).catch(handleSyncFailure);
+          }
+        }
+      },
+      rescheduleTaskToDay(id, date) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current || current.scope.kind !== "day") return;
+        if (current.scope.date === date) return;
+
+        const originalDate = current.scope.date;
+        const task: Task = { ...current, scope: { kind: "day", date } };
+        if (current.repeatSourceId !== undefined) {
+          task.repeatSourceId = undefined;
+        }
+        dispatch({ type: "updated", task });
+        repo.update(task).catch(handleSyncFailure);
+
+        if (current.repeatSourceId !== undefined) {
+          const anchor = state.tasks.find((t) => t.id === current.repeatSourceId);
+          if (anchor) {
+            const excludedDates = [...(anchor.excludedDates ?? []), originalDate];
             const updatedAnchor: Task = { ...anchor, excludedDates };
             dispatch({ type: "updated", task: updatedAnchor });
             repo.update(updatedAnchor).catch(handleSyncFailure);

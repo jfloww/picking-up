@@ -317,6 +317,93 @@ describe("TasksProvider", () => {
       );
       expect(duplicates).toHaveLength(0);
     });
+
+    it("rescheduleTaskToDay moves a plain task's scope date", async () => {
+      const today = todayKey();
+      const target = addDays(today, 2);
+      const task = makeTask({ id: "a", scope: { kind: "day", date: today } });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.rescheduleTaskToDay("a", target));
+
+      expect(result.current.tasks[0].scope).toEqual({ kind: "day", date: target });
+      await waitFor(() => expect(repo.tasks[0].scope).toEqual({ kind: "day", date: target }));
+    });
+
+    it("rescheduleTaskToDay is a no-op when the target date matches the current date", async () => {
+      const today = todayKey();
+      const task = makeTask({ id: "a", scope: { kind: "day", date: today } });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.rescheduleTaskToDay("a", today));
+
+      expect(result.current.tasks[0]).toBe(task);
+      expect(repo.tasks[0]).toBe(task);
+    });
+
+    it("rescheduleTaskToDay detaches a repeat instance and excludes its original date on the anchor", async () => {
+      const today = todayKey();
+      const target = addDays(today, 2);
+      const anchor = makeTask({
+        id: "anchor",
+        scope: { kind: "day", date: "2026-07-01" },
+        repeatWeekdays: [4],
+      });
+      const occurrence = makeTask({
+        id: "occ",
+        scope: { kind: "day", date: today },
+        repeatSourceId: "anchor",
+      });
+      const { repo, result } = setup(fakeRepository([anchor, occurrence]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.rescheduleTaskToDay("occ", target));
+
+      const moved = result.current.tasks.find((t) => t.id === "occ");
+      expect(moved?.scope).toEqual({ kind: "day", date: target });
+      expect(moved?.repeatSourceId).toBeUndefined();
+      expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual([today]);
+      await waitFor(() =>
+        expect(repo.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual([today]),
+      );
+    });
+
+    it("rescheduleTaskToDay appends to the anchor's existing excludedDates rather than replacing them", async () => {
+      const today = todayKey();
+      const target = addDays(today, 2);
+      const anchor = makeTask({
+        id: "anchor",
+        scope: { kind: "day", date: "2026-07-01" },
+        repeatWeekdays: [4],
+        excludedDates: ["2026-07-09"],
+      });
+      const occurrence = makeTask({
+        id: "occ",
+        scope: { kind: "day", date: today },
+        repeatSourceId: "anchor",
+      });
+      const { result } = setup(fakeRepository([anchor, occurrence]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.rescheduleTaskToDay("occ", target));
+
+      expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual([
+        "2026-07-09",
+        today,
+      ]);
+    });
+
+    it("rescheduleTaskToDay does nothing for a week-scoped task", async () => {
+      const task = makeTask({ id: "a", scope: { kind: "week", weekStart: weekStartOf(todayKey()) } });
+      const { result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.rescheduleTaskToDay("a", addDays(todayKey(), 2)));
+
+      expect(result.current.tasks[0]).toBe(task);
+    });
   });
 
   describe("time and subtask actions", () => {
