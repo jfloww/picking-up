@@ -12,16 +12,16 @@ export function TaskMock() {
       aria-hidden
       className="w-full overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
     >
-      <div className="border-b border-border px-8 py-6">
+      <div className="border-b border-border px-6 py-4 sm:px-8 sm:py-6">
         <p className="text-xl font-bold tracking-tight text-foreground">Tuesday, March 10</p>
       </div>
-      <div className="flex">
-        <div className="flex-[3] space-y-4 border-r border-border p-8">
+      <div className="flex flex-col sm:flex-row">
+        <div className="flex-[3] space-y-4 border-b border-border p-4 sm:border-r sm:border-b-0 sm:p-6 lg:p-8">
           {timelineBlocks.map((block) => (
             <div
               key={block.title}
               className={cn(
-                "rounded-r-lg border-l-2 px-4 py-3",
+                "rounded-r-lg border-l-2 px-3 py-2 sm:px-4 sm:py-3",
                 block.accent === "brand"
                   ? "border-l-brand bg-brand/10"
                   : "border-l-muted-foreground bg-muted/40",
@@ -30,31 +30,35 @@ export function TaskMock() {
               <span className="block text-xs tabular-nums text-muted-foreground">
                 {block.time}
               </span>
-              <span className="text-sm font-medium text-foreground">{block.title}</span>
+              <span className="text-xs font-medium text-foreground sm:text-sm">
+                {block.title}
+              </span>
             </div>
           ))}
         </div>
-        <div className="flex-[2] p-8">
+        <div className="flex-[2] p-4 sm:p-6 lg:p-8">
           <section>
             <span className="text-xs font-semibold tracking-wider text-subtle uppercase">
               All Day To-Do
             </span>
-            <div className="mt-3 flex items-center gap-3 rounded-lg bg-muted ring-1 ring-border px-4 py-3">
+            <div className="mt-3 flex items-center gap-3 rounded-lg bg-muted ring-1 ring-border px-3 py-2 sm:px-4 sm:py-3">
               <span className="size-4 shrink-0 rounded-[5px] border-2 border-border" />
-              <span className="truncate text-sm text-foreground">Grocery pickup</span>
+              <span className="truncate text-xs text-foreground sm:text-sm">Grocery pickup</span>
             </div>
           </section>
           <section className="mt-6">
             <span className="text-xs font-semibold tracking-wider text-subtle uppercase">
               Next Up
             </span>
-            <div className="mt-3 flex items-center gap-3 rounded-lg bg-muted ring-1 ring-border px-4 py-3">
+            <div className="mt-3 flex items-center gap-3 rounded-lg bg-muted ring-1 ring-border px-3 py-2 sm:px-4 sm:py-3">
               <span className="size-4 shrink-0 rounded-[5px] border-2 border-brand" />
-              <span className="truncate text-sm text-foreground">Finalize API notes</span>
+              <span className="truncate text-xs text-foreground sm:text-sm">
+                Finalize API notes
+              </span>
             </div>
-            <div className="animate-hero-demo-row mt-2 flex items-center gap-3 rounded-lg bg-muted ring-1 ring-border px-4 py-3">
+            <div className="animate-hero-demo-row mt-2 flex items-center gap-3 rounded-lg bg-muted ring-1 ring-border px-3 py-2 sm:px-4 sm:py-3">
               <span className="animate-hero-demo-dot size-4 shrink-0 rounded-[5px] border-2 border-brand" />
-              <span className="animate-hero-demo-title truncate text-sm text-foreground">
+              <span className="animate-hero-demo-title truncate text-xs text-foreground sm:text-sm">
                 Prep client agenda
               </span>
             </div>
