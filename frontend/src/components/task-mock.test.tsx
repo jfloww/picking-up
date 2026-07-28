@@ -26,4 +26,14 @@ describe("TaskMock", () => {
     expect(container.firstChild).toBeInstanceOf(HTMLElement);
     expect((container.firstChild as HTMLElement).getAttribute("aria-hidden")).toBe("true");
   });
+
+  it("includes a demo task wired to the CSS completion-loop animation classes", () => {
+    render(<TaskMock />);
+    const title = screen.getByText("Prep client agenda");
+    expect(title.className).toContain("animate-hero-demo-title");
+    const row = title.closest("div");
+    expect(row?.className).toContain("animate-hero-demo-row");
+    const dot = row?.querySelector("span:first-child");
+    expect(dot?.className).toContain("animate-hero-demo-dot");
+  });
 });

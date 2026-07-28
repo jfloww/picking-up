@@ -111,6 +111,10 @@
   --color-warning: var(--warning);
   --color-success: var(--success);
   --animate-task-complete: task-complete-pop 220ms ease-out;
+  --animate-fade-up: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-hero-demo-row: hero-demo-row 7s ease infinite;
+  --animate-hero-demo-dot: hero-demo-dot 7s ease infinite;
+  --animate-hero-demo-title: hero-demo-title 7s ease infinite;
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -155,6 +159,66 @@
   }
   100% {
     transform: scale(1);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hero-demo-row {
+  0%,
+  55%,
+  100% {
+    background-color: var(--muted);
+  }
+  70%,
+  92% {
+    background-color: var(--card);
+  }
+}
+
+@keyframes hero-demo-dot {
+  0%,
+  55%,
+  100% {
+    background-color: transparent;
+    border-color: var(--brand);
+  }
+  70%,
+  92% {
+    background-color: var(--brand);
+    border-color: var(--brand);
+  }
+}
+
+@keyframes hero-demo-title {
+  0%,
+  55%,
+  100% {
+    color: var(--foreground);
+    text-decoration-line: none;
+  }
+  70%,
+  92% {
+    color: var(--muted-foreground);
+    text-decoration-line: line-through;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-hero-demo-row,
+  .animate-hero-demo-dot,
+  .animate-hero-demo-title {
+    animation: none;
   }
 }
 
