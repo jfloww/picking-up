@@ -69,6 +69,13 @@ export function MonthlyView({ anchor, onDrillDown }: CalendarViewProps) {
         </div>
       </div>
 
+      <div className="shrink-0 rounded-md bg-muted/40 p-3">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">
+          Month Goals
+        </div>
+        <ScopeTasks scope={{ kind: "month", month: monthKey }} quickAdd />
+      </div>
+
       <div className="flex-1">
         <MonthGrid
           monthKey={monthKey}
@@ -95,13 +102,6 @@ export function MonthlyView({ anchor, onDrillDown }: CalendarViewProps) {
           {...taskItemHandlers(selectedTask.id, actions)}
         />
       )}
-
-      <div className="shrink-0 rounded-md bg-muted/40 p-3">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">
-          Month Goals
-        </div>
-        <ScopeTasks scope={{ kind: "month", month: monthKey }} quickAdd />
-      </div>
     </div>
   );
 }
