@@ -76,41 +76,30 @@ export function monthGrid(monthKey: string): string[][] {
   return rows;
 }
 
-// A simple sequential count of Sunday-starting weeks since January 1st of
-// dateKey's year — not strict ISO 8601 week numbering (which starts weeks
-// on Monday and has its own year-boundary rules this app doesn't otherwise
-// follow), matching this app's existing Sunday-start convention.
+// A Sunday-start week counter: returns 1 for the week containing January 1st
+// (of whichever year that week belongs to), then increments for each subsequent
+// week. Handles year boundaries correctly — e.g., a date like Dec 28 that starts
+// a week containing Jan 1 of the following year is counted as week 1 of that
+// following year, not week 53 of its own calendar year. Not ISO 8601 (which uses
+// Monday-start weeks and different year-boundary rules).
 export function weekOfYear(dateKey: string): number {
   const weekStart = weekStartOf(dateKey);
   const year = parseInt(yearOf(dateKey));
 
-  // Check if current year's Jan 1 is in this week
-  let targetJan1 = `${year}-01-01`;
-  if (weekStartOf(targetJan1) === weekStart) {
+  // Check if next year's Jan 1 falls in this week; if so, this is week 1 of the next year
+  if (weekStartOf(`${year + 1}-01-01`) === weekStart) {
     return 1;
   }
 
-  // Check if next year's Jan 1 is in this week
-  targetJan1 = `${year + 1}-01-01`;
-  if (weekStartOf(targetJan1) === weekStart) {
-    return 1;
+  // Anchor to this year's Jan 1 week-start if this week is on-or-after it
+  const thisYearJan1WeekStart = weekStartOf(`${year}-01-01`);
+  if (thisYearJan1WeekStart <= weekStart) {
+    return Math.floor(daysBetween(thisYearJan1WeekStart, weekStart) / 7) + 1;
   }
 
-  // Check if previous year's Jan 1 is in this week
-  targetJan1 = `${year - 1}-01-01`;
-  if (weekStartOf(targetJan1) === weekStart) {
-    return 1;
-  }
-
-  // None of the above, use the most recent January 1st
-  targetJan1 = `${year}-01-01`;
-  const targetJan1WeekStart = weekStartOf(targetJan1);
-  if (weekStart < targetJan1WeekStart) {
-    // Use previous year
-    targetJan1 = `${year - 1}-01-01`;
-  }
-
-  return Math.floor(daysBetween(weekStartOf(targetJan1), weekStart) / 7) + 1;
+  // Otherwise this week predates this year's Jan 1; use previous year's anchor
+  const prevYearJan1WeekStart = weekStartOf(`${year - 1}-01-01`);
+  return Math.floor(daysBetween(prevYearJan1WeekStart, weekStart) / 7) + 1;
 }
 
 export function monthLabel(monthKey: string): string {
