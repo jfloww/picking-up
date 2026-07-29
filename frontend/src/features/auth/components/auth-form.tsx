@@ -7,6 +7,8 @@ import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { GoogleSignInButton } from "./google-sign-in-button";
 
 type AuthFormProps = {
   mode: "login" | "signup";
@@ -132,6 +134,14 @@ export function AuthForm({ mode }: AuthFormProps) {
       >
         {isSubmitting ? "Working..." : isLogin ? "Sign in" : "Create account"}
       </Button>
+
+      <div className="flex items-center gap-3">
+        <Separator className="flex-1" />
+        <span className="text-xs text-muted-foreground">or</span>
+        <Separator className="flex-1" />
+      </div>
+
+      <GoogleSignInButton />
     </form>
   );
 }
