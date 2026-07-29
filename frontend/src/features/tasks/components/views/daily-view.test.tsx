@@ -141,7 +141,8 @@ describe("DailyView task detail drawer", () => {
     fireEvent.click(within(screen.getByTestId("day-agenda")).getByText("task a"));
     await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
 
-    fireEvent.click(screen.getByText("Delete"));
+    fireEvent.click(screen.getByLabelText("Delete task"));
+    fireEvent.click(screen.getByText("Confirm delete"));
     expect(screen.queryByLabelText("Close details")).toBeNull();
   });
 

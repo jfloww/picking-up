@@ -39,10 +39,32 @@ async function uploadForMigration(task: Task, redirectToLogin: () => void): Prom
 async function migrateLegacyLocalStorageTasks(redirectToLogin: () => void): Promise<void> {
   const legacyTasks = await createLocalStorageRepository().list();
   if (legacyTasks.length === 0) return;
+  const stillLegacy: Task[] = [];
   for (const task of legacyTasks) {
-    await uploadForMigration(task, redirectToLogin);
+    try {
+      await uploadForMigration(task, redirectToLogin);
+    } catch (error) {
+      if (error instanceof SessionExpiredError) throw error;
+      // Migration failed for this one task for a reason other than "already
+      // exists" (a dangling repeatSourceId from a deleted anchor, an
+      // over-length title, etc). Keep only this task in localStorage for a
+      // later retry — every other task in the batch still gets cleared
+      // below once it succeeds, so one stuck task can no longer block the
+      // rest from clearing. (It previously could: a single bad task kept
+      // the *entire* batch in localStorage forever, including tasks that
+      // had already migrated successfully and were later deleted from the
+      // server — every subsequent load would silently re-upload and
+      // resurrect them, since a re-POST of an id that no longer exists
+      // succeeds instead of hitting the expected 409.)
+      stillLegacy.push(task);
+      console.error(`Failed to migrate legacy task ${task.id}; will retry on next load.`, error);
+    }
   }
-  window.localStorage.removeItem(STORAGE_KEY);
+  if (stillLegacy.length > 0) {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stillLegacy));
+  } else {
+    window.localStorage.removeItem(STORAGE_KEY);
+  }
 }
 
 export function createApiTaskRepository(
@@ -52,17 +74,10 @@ export function createApiTaskRepository(
 ): TaskRepository {
   return {
     async list() {
-      try {
-        await migrateLegacyLocalStorageTasks(redirectToLogin);
-      } catch (error) {
-        if (error instanceof SessionExpiredError) throw error;
-        // Migration failed for a reason other than "already exists" (a
-        // dangling repeatSourceId from a deleted anchor, an over-length
-        // title, etc). localStorage is left intact so a later attempt can
-        // retry, but the app must stay usable in the meantime rather than
-        // permanently blocking on a stuck migration.
-        console.error("Failed to migrate legacy local tasks; will retry on next load.", error);
-      }
+      // Only a SessionExpiredError can still escape here — a per-task
+      // migration failure is handled inside the function itself and never
+      // throws, so list() stays usable even when one legacy task is stuck.
+      await migrateLegacyLocalStorageTasks(redirectToLogin);
       const response = await fetch("/api/tasks");
       guardUnauthorized(response, redirectToLogin);
       if (!response.ok) throw new Error("Failed to load tasks.");

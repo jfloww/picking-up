@@ -76,6 +76,11 @@ export function TaskDetailDrawer({
   // Edits are buffered here and only committed (via the on*Change props
   // above) when Done is clicked — Cancel/X/Escape discard them untouched.
   const [draft, setDraft] = useState<Draft>(() => draftFromTask(task));
+  // Deleting is immediate (not buffered to Done, like every other action in
+  // this file) but destructive enough to want a confirmation step first —
+  // the trash button swaps the footer to a Cancel/Confirm pair rather than
+  // deleting on the first click.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
     setVisible(true);
@@ -83,16 +88,24 @@ export function TaskDetailDrawer({
 
   useEffect(() => {
     setDraft(draftFromTask(task));
+    setConfirmingDelete(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.id]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      // Back out of the delete confirmation first; a second Escape closes
+      // the drawer, same as if delete had never been clicked.
+      if (confirmingDelete) {
+        setConfirmingDelete(false);
+        return;
+      }
+      onClose();
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [onClose, confirmingDelete]);
 
   const handleDone = () => {
     if (draft.done !== task.done) onToggle();
@@ -195,29 +208,50 @@ export function TaskDetailDrawer({
       </div>
 
       <footer className="flex shrink-0 items-center gap-3 border-t border-border bg-background/20 p-6">
-        <button
-          type="button"
-          onClick={onClose}
-          className="h-10 flex-1 rounded-lg border border-border bg-transparent px-4 text-sm font-medium text-subtle transition-colors hover:bg-muted/70 hover:text-foreground"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={handleDone}
-          className="h-10 flex-1 rounded-lg border border-border bg-muted px-4 text-sm font-medium transition-colors hover:bg-muted/70"
-        >
-          Done
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          aria-label="Delete task"
-          className="flex size-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive transition-colors hover:bg-destructive/20"
-        >
-          <Trash2 className="size-4" />
-          <span className="sr-only">Delete</span>
-        </button>
+        {confirmingDelete ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+              className="h-10 flex-1 rounded-lg border border-border bg-transparent px-4 text-sm font-medium text-subtle transition-colors hover:bg-muted/70 hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              className="h-10 flex-1 rounded-lg border border-destructive/40 bg-destructive/10 px-4 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20"
+            >
+              Confirm delete
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-10 flex-1 rounded-lg border border-border bg-transparent px-4 text-sm font-medium text-subtle transition-colors hover:bg-muted/70 hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDone}
+              className="h-10 flex-1 rounded-lg border border-border bg-muted px-4 text-sm font-medium transition-colors hover:bg-muted/70"
+            >
+              Done
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              aria-label="Delete task"
+              className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive transition-colors hover:bg-destructive/20"
+            >
+              <Trash2 className="size-4" />
+              <span className="sr-only">Delete</span>
+            </button>
+          </>
+        )}
       </footer>
     </aside>
   );

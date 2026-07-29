@@ -389,14 +389,61 @@ describe("TaskDetailDrawer", () => {
     });
   });
 
-  describe("actions that stay immediate, not deferred to Done", () => {
-    it("calls onDelete immediately from the delete button", () => {
+  describe("deleting (immediate once confirmed, not deferred to Done)", () => {
+    it("does not call onDelete on the first click — it asks for confirmation instead", () => {
       const onDelete = vi.fn();
       render(<TaskDetailDrawer task={task} {...noopHandlers} onDelete={onDelete} />);
       fireEvent.click(screen.getByLabelText("Delete task"));
+      expect(onDelete).not.toHaveBeenCalled();
+      expect(screen.getByText("Confirm delete")).toBeTruthy();
+    });
+
+    it("calls onDelete once the confirmation button is clicked", () => {
+      const onDelete = vi.fn();
+      render(<TaskDetailDrawer task={task} {...noopHandlers} onDelete={onDelete} />);
+      fireEvent.click(screen.getByLabelText("Delete task"));
+      fireEvent.click(screen.getByText("Confirm delete"));
       expect(onDelete).toHaveBeenCalledTimes(1);
     });
 
+    it("Cancel on the confirmation step backs out without deleting, restoring Done/Cancel/trash", () => {
+      const onDelete = vi.fn();
+      render(<TaskDetailDrawer task={task} {...noopHandlers} onDelete={onDelete} />);
+      fireEvent.click(screen.getByLabelText("Delete task"));
+      fireEvent.click(screen.getByText("Cancel"));
+      expect(onDelete).not.toHaveBeenCalled();
+      expect(screen.getByText("Done")).toBeTruthy();
+      expect(screen.getByLabelText("Delete task")).toBeTruthy();
+    });
+
+    it("Escape backs out of the confirmation step first, without closing the drawer", () => {
+      const onDelete = vi.fn();
+      const onClose = vi.fn();
+      render(<TaskDetailDrawer task={task} {...noopHandlers} onDelete={onDelete} onClose={onClose} />);
+      fireEvent.click(screen.getByLabelText("Delete task"));
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByText("Done")).toBeTruthy();
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("switching to a different task resets a pending delete confirmation", () => {
+      const taskA = makeTask({ id: "a", title: "task a" });
+      const taskB = makeTask({ id: "b", title: "task b" });
+      const { rerender } = render(<TaskDetailDrawer task={taskA} {...noopHandlers} />);
+      fireEvent.click(screen.getByLabelText("Delete task"));
+      expect(screen.getByText("Confirm delete")).toBeTruthy();
+
+      rerender(<TaskDetailDrawer task={taskB} {...noopHandlers} />);
+      expect(screen.queryByText("Confirm delete")).toBeNull();
+      expect(screen.getByText("Done")).toBeTruthy();
+    });
+  });
+
+  describe("actions that stay immediate, not deferred to Done", () => {
     it("calls onAddSubtask immediately, not deferred to Done", () => {
       const onAddSubtask = vi.fn();
       render(<TaskDetailDrawer task={task} {...noopHandlers} onAddSubtask={onAddSubtask} />);

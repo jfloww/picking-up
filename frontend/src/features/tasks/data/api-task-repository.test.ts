@@ -64,25 +64,31 @@ describe("createApiTaskRepository", () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it("list() leaves localStorage intact but still returns the server list when a real upload failure occurs", async () => {
-    const local = [makeTask({ id: "a" }), makeTask({ id: "b" })];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(local));
+  it("list() retries only the tasks that failed to migrate, clearing the ones that succeeded", async () => {
+    const a = makeTask({ id: "a" });
+    const b = makeTask({ id: "b" });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([a, b]));
     const server = [makeTask({ id: "from-another-device" })];
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const fetchSpy = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ error: "Server error" }, 500)) // fails on task a
+      .mockResolvedValueOnce(jsonResponse({ id: "b" }, 201)) // b still gets attempted, and succeeds
       .mockResolvedValueOnce(jsonResponse(server)); // list() still runs
     vi.stubGlobal("fetch", fetchSpy);
 
-    // A stuck migration must not brick the app: list() resolves with the real
-    // server list rather than rejecting.
+    // A stuck task must not brick the app, and must not block the rest of
+    // the batch: list() resolves with the real server list, and b still
+    // gets migrated even though a failed.
     await expect(createApiTaskRepository().list()).resolves.toEqual(server);
-    // localStorage is deliberately left intact so a later load can retry.
-    expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
-    expect(fetchSpy).toHaveBeenCalledTimes(2); // stopped after the first failure (never reached b), then listed
-    expect(fetchSpy.mock.calls[1]).toEqual(["/api/tasks"]);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(fetchSpy.mock.calls[1][1]).toMatchObject({ method: "POST" });
+    // Only the task that actually failed is kept for a later retry — b,
+    // which succeeded, must be cleared so it's never re-uploaded on a later
+    // load (which could otherwise resurrect a task the user has since
+    // deleted from the server).
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual([a]);
     expect(consoleSpy).toHaveBeenCalled();
 
     consoleSpy.mockRestore();

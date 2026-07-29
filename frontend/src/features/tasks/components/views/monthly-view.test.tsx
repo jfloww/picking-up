@@ -154,6 +154,7 @@ describe("MonthlyView", () => {
     await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeTruthy());
 
     fireEvent.click(screen.getByLabelText("Delete task"));
+    fireEvent.click(screen.getByText("Confirm delete"));
 
     await waitFor(() => expect(screen.getByTestId("day-agenda-drawer")).toBeTruthy());
     expect(screen.queryByTestId("task-detail-drawer")).toBeNull();
