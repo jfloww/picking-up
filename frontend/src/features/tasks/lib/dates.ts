@@ -91,15 +91,11 @@ export function weekOfYear(dateKey: string): number {
     return 1;
   }
 
-  // Anchor to this year's Jan 1 week-start if this week is on-or-after it
+  // weekStartOf is monotonic and dateKey is always within its own year, so
+  // this week's start is always on-or-after this year's Jan 1 week-start
+  // once the next-year check above has ruled out the one case where it isn't.
   const thisYearJan1WeekStart = weekStartOf(`${year}-01-01`);
-  if (thisYearJan1WeekStart <= weekStart) {
-    return Math.floor(daysBetween(thisYearJan1WeekStart, weekStart) / 7) + 1;
-  }
-
-  // Otherwise this week predates this year's Jan 1; use previous year's anchor
-  const prevYearJan1WeekStart = weekStartOf(`${year - 1}-01-01`);
-  return Math.floor(daysBetween(prevYearJan1WeekStart, weekStart) / 7) + 1;
+  return Math.floor(daysBetween(thisYearJan1WeekStart, weekStart) / 7) + 1;
 }
 
 export function monthLabel(monthKey: string): string {
