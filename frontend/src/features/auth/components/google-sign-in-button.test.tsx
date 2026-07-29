@@ -99,4 +99,12 @@ describe("GoogleSignInButton", () => {
     await screen.findByText("Invalid Google credential.");
     expect(replaceMock).not.toHaveBeenCalled();
   });
+
+  it("renders nothing when NEXT_PUBLIC_GOOGLE_CLIENT_ID is not configured", () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_CLIENT_ID", "");
+
+    const { container } = render(<GoogleSignInButton />);
+
+    expect(container.firstChild).toBeNull();
+  });
 });

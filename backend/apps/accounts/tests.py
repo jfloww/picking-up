@@ -3,7 +3,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.accounts.models import GoogleIdentity
@@ -95,6 +95,7 @@ class GoogleIdentityModelTests(TestCase):
                 User.objects.create_user(username="b@example.com", email="dup@example.com")
 
 
+@override_settings(GOOGLE_OAUTH_CLIENT_ID="test-client-id.apps.googleusercontent.com")
 class GoogleAuthApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -220,4 +221,14 @@ class GoogleAuthApiTests(TestCase):
         response = self.client.post("/api/auth/google/", {}, format="json")
 
         self.assertEqual(response.status_code, 400)
+        mock_verify.assert_not_called()
+
+    @override_settings(GOOGLE_OAUTH_CLIENT_ID=None)
+    @patch("apps.accounts.views.google_id_token.verify_oauth2_token")
+    def test_refuses_to_serve_when_client_id_is_not_configured(self, mock_verify):
+        response = self.client.post("/api/auth/google/", {"credential": "token"}, format="json")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data, {"error": "Google sign-in is not configured."})
+        self.assertEqual(User.objects.count(), 0)
         mock_verify.assert_not_called()

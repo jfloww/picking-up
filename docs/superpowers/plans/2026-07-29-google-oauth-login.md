@@ -916,5 +916,6 @@ These are Google Cloud Console steps, not code — call them out to your human p
 1. Create an OAuth 2.0 Client ID (Web application type) in Google Cloud Console.
 2. Restrict "Authorized JavaScript origins" to this app's real origins (local dev port, and the production Vercel domain once deployed) — this is the actual security boundary discussed in the design spec's Origin-check section, not the backend's `Origin`-header check, which is defense-in-depth on top of it.
 3. Set `GOOGLE_OAUTH_CLIENT_ID` in `backend/.env`/`.env.development` and `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in `frontend/.env.development` (or Vercel's project env vars for production) to that client ID.
+4. Before running the `accounts.0002_unique_user_email` migration against a real (non-dev) database, audit `auth_user` for duplicate or blank emails first, e.g. `SELECT LOWER(email), COUNT(*) FROM auth_user GROUP BY LOWER(email) HAVING COUNT(*) > 1` plus a count of blank/null emails, since the unique index can fail to apply against dirty data and blank-email semantics differ across SQLite/Postgres/Oracle. Resolve any hits before migrating.
 
 Without this, all four tasks above are still fully buildable and testable (every test mocks the verification/GIS calls directly), but the button won't do anything real in a live browser until the client ID exists.

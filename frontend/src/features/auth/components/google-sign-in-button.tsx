@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 
 declare global {
   interface Window {
@@ -78,19 +79,29 @@ export function GoogleSignInButton() {
     });
   }, [scriptLoaded, router, searchParams]);
 
+  if (!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) return null;
+
   return (
-    <div className="flex flex-col items-center gap-2">
-      <Script
-        src="https://accounts.google.com/gsi/client"
-        strategy="afterInteractive"
-        onLoad={() => setScriptLoaded(true)}
-      />
-      <div ref={containerRef} />
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>{error}</AlertTitle>
-        </Alert>
-      ) : null}
-    </div>
+    <>
+      <div className="flex items-center gap-3">
+        <Separator className="flex-1" />
+        <span className="text-xs text-muted-foreground">or</span>
+        <Separator className="flex-1" />
+      </div>
+
+      <div className="flex flex-col items-center gap-2">
+        <Script
+          src="https://accounts.google.com/gsi/client"
+          strategy="afterInteractive"
+          onLoad={() => setScriptLoaded(true)}
+        />
+        <div ref={containerRef} />
+        {error ? (
+          <Alert variant="destructive">
+            <AlertTitle>{error}</AlertTitle>
+          </Alert>
+        ) : null}
+      </div>
+    </>
   );
 }
