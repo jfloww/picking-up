@@ -10,6 +10,13 @@ export function requestLogin(credentials: { email: string; password: string }) {
   });
 }
 
+export function requestGoogleLogin(credential: string) {
+  return apiRequest<TokenPair>("/api/auth/google/", {
+    method: "POST",
+    body: JSON.stringify({ credential }),
+  });
+}
+
 export function requestRegister(credentials: { email: string; password: string }) {
   return apiRequest<CurrentUser>("/api/auth/register/", {
     method: "POST",

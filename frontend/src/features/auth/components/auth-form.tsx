@@ -7,6 +7,7 @@ import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GoogleSignInButton } from "./google-sign-in-button";
 
 type AuthFormProps = {
   mode: "login" | "signup";
@@ -132,6 +133,8 @@ export function AuthForm({ mode }: AuthFormProps) {
       >
         {isSubmitting ? "Working..." : isLogin ? "Sign in" : "Create account"}
       </Button>
+
+      <GoogleSignInButton />
     </form>
   );
 }
