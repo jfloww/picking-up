@@ -63,22 +63,39 @@ export function monthKeys(year: string): string[] {
   );
 }
 
-export function monthGrid(monthKey: string): (string | null)[][] {
+export function monthGrid(monthKey: string): string[][] {
   const [y, m] = monthKey.split("-").map(Number);
   const daysInMonth = new Date(y, m, 0).getDate();
-  const rows: (string | null)[][] = [];
-  let row: (string | null)[] = Array(new Date(y, m - 1, 1).getDay()).fill(null);
-  for (let day = 1; day <= daysInMonth; day++) {
-    row.push(toKey(new Date(y, m - 1, day)));
-    if (row.length === 7) {
-      rows.push(row);
-      row = [];
-    }
-  }
-  if (row.length > 0) {
-    rows.push([...row, ...Array(7 - row.length).fill(null)]);
+  const firstWeekday = new Date(y, m - 1, 1).getDay();
+  const firstCell = addDays(`${monthKey}-01`, -firstWeekday);
+  const totalCells = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
+  const rows: string[][] = [];
+  for (let i = 0; i < totalCells; i += 7) {
+    rows.push(Array.from({ length: 7 }, (_, j) => addDays(firstCell, i + j)));
   }
   return rows;
+}
+
+// A Sunday-start week counter: returns 1 for the week containing January 1st
+// (of whichever year that week belongs to), then increments for each subsequent
+// week. Handles year boundaries correctly — e.g., a date like Dec 28 that starts
+// a week containing Jan 1 of the following year is counted as week 1 of that
+// following year, not week 53 of its own calendar year. Not ISO 8601 (which uses
+// Monday-start weeks and different year-boundary rules).
+export function weekOfYear(dateKey: string): number {
+  const weekStart = weekStartOf(dateKey);
+  const year = parseInt(yearOf(dateKey));
+
+  // Check if next year's Jan 1 falls in this week; if so, this is week 1 of the next year
+  if (weekStartOf(`${year + 1}-01-01`) === weekStart) {
+    return 1;
+  }
+
+  // weekStartOf is monotonic and dateKey is always within its own year, so
+  // this week's start is always on-or-after this year's Jan 1 week-start
+  // once the next-year check above has ruled out the one case where it isn't.
+  const thisYearJan1WeekStart = weekStartOf(`${year}-01-01`);
+  return Math.floor(daysBetween(thisYearJan1WeekStart, weekStart) / 7) + 1;
 }
 
 export function monthLabel(monthKey: string): string {

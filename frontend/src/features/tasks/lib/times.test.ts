@@ -8,6 +8,7 @@ import {
   isPastToday,
   isValidTime,
   layoutTimedTasks,
+  monthStats,
   nowTime,
   repeatCadenceLabel,
   repeatLabelForTask,
@@ -419,5 +420,42 @@ describe("isPastToday", () => {
 
   it("is false at the exact current minute (not past yet)", () => {
     expect(isPastToday("14:05", "2026-07-16", "2026-07-16", "14:05")).toBe(false);
+  });
+});
+
+describe("monthStats", () => {
+  const monthKey = "2026-07";
+
+  it("counts day-scoped tasks within the month and week-scoped rollover tasks whose rolledFrom date is within it", () => {
+    const dayTask = task({ scope: { kind: "day", date: "2026-07-14" } });
+    const rolled = task({
+      scope: { kind: "week", weekStart: "2026-07-12" },
+      rolledFrom: { kind: "day", date: "2026-07-13" },
+    });
+    const outside = task({ scope: { kind: "day", date: "2026-08-02" } });
+    const result = monthStats([dayTask, rolled, outside], monthKey);
+    expect(result).toEqual({ done: 0, total: 2 });
+  });
+
+  it("counts done tasks separately from total", () => {
+    const done = task({ scope: { kind: "day", date: "2026-07-14" }, done: true });
+    const undone = task({ scope: { kind: "day", date: "2026-07-15" }, done: false });
+    expect(monthStats([done, undone], monthKey)).toEqual({ done: 1, total: 2 });
+  });
+
+  it("does not count a task from an adjacent month even if it appears in the grid's padding", () => {
+    const juneTask = task({ scope: { kind: "day", date: "2026-06-28" } });
+    const augustTask = task({ scope: { kind: "day", date: "2026-08-01" } });
+    expect(monthStats([juneTask, augustTask], monthKey)).toEqual({ done: 0, total: 0 });
+  });
+
+  it("counts a month-scoped task for the target month", () => {
+    const goal = task({ scope: { kind: "month", month: monthKey } });
+    expect(monthStats([goal], monthKey)).toEqual({ done: 0, total: 1 });
+  });
+
+  it("does not count a month-scoped task belonging to a different month", () => {
+    const otherMonthGoal = task({ scope: { kind: "month", month: "2026-08" } });
+    expect(monthStats([otherMonthGoal], monthKey)).toEqual({ done: 0, total: 0 });
   });
 });
