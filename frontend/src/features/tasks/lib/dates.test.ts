@@ -18,6 +18,7 @@ import {
   weekDates,
   weekdayOf,
   upcomingRepeatDates,
+  weekOfYear,
   weekRangeLabel,
   weekStartOf,
   yearOf,
@@ -82,13 +83,13 @@ describe("dates", () => {
     expect(keys[11]).toBe("2026-12");
   });
 
-  it("monthGrid builds Su-Sa rows with null padding", () => {
+  it("monthGrid builds Su-Sa rows with real adjacent-month dates, no nulls", () => {
     const grid = monthGrid("2026-07"); // 2026-07-01 is a Wednesday
     expect(grid).toHaveLength(5);
     expect(grid[0]).toEqual([
-      null,
-      null,
-      null,
+      "2026-06-28",
+      "2026-06-29",
+      "2026-06-30",
       "2026-07-01",
       "2026-07-02",
       "2026-07-03",
@@ -102,9 +103,17 @@ describe("dates", () => {
       "2026-07-29",
       "2026-07-30",
       "2026-07-31",
-      null,
+      "2026-08-01",
     ]);
     for (const row of grid) expect(row).toHaveLength(7);
+  });
+
+  it("weekOfYear returns 1 for the week containing January 1st, incrementing each week after", () => {
+    // 2026-01-01 is a Thursday, so its Sunday-start week begins 2025-12-28.
+    expect(weekOfYear("2026-01-01")).toBe(1);
+    expect(weekOfYear("2025-12-28")).toBe(1);
+    expect(weekOfYear("2026-01-04")).toBe(2); // the following Sunday's week
+    expect(weekOfYear("2026-01-11")).toBe(3);
   });
 
   it("monthLabel and monthName format for display", () => {

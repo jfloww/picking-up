@@ -194,6 +194,21 @@ export function weekStats(tasks: Task[], weekStart: string): WeekStats {
   };
 }
 
+export function monthStats(tasks: Task[], monthKey: string): WeekStats {
+  const [y, m] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  let total = 0;
+  let done = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = `${monthKey}-${String(day).padStart(2, "0")}`;
+    for (const t of dayTasksForWeek(tasks, date, weekStartOf(date))) {
+      total += 1;
+      if (t.done) done += 1;
+    }
+  }
+  return { total, done };
+}
+
 export function dayTasksForWeek(
   tasks: Task[],
   date: string,
