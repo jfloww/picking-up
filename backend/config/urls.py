@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from apps.accounts.views import EmailTokenObtainPairView, LogoutView, MeView, RegisterView
+from apps.accounts.views import EmailTokenObtainPairView, GoogleTokenObtainView, LogoutView, MeView, RegisterView
 from apps.tasks.views import TaskDetailView, TaskListCreateView
 
 
@@ -10,6 +10,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/auth/register/", RegisterView.as_view(), name="register"),
     path("api/auth/token/", EmailTokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/auth/google/", GoogleTokenObtainView.as_view(), name="google_token_obtain"),
     path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/logout/", LogoutView.as_view(), name="logout"),
     path("api/auth/me/", MeView.as_view(), name="me"),
