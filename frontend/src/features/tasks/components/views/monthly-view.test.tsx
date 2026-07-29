@@ -137,4 +137,45 @@ describe("MonthlyView", () => {
 
     expect(onDrillDown).toHaveBeenCalledWith("daily", "2026-07-14");
   });
+
+  it("deleting a task while its detail drawer is open falls back to the day-agenda drawer instead of vanishing", async () => {
+    const a = makeTask({
+      id: "a",
+      title: "task a",
+      done: true,
+      scope: { kind: "day", date: "2026-07-14" },
+    });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(desktopGrid().getByLabelText("Open 2026-07-14")).toBeTruthy());
+    fireEvent.click(desktopGrid().getByLabelText("Open 2026-07-14"));
+    const drawer = within(screen.getByTestId("day-agenda-drawer"));
+    await waitFor(() => expect(drawer.getByText("task a")).toBeTruthy());
+    fireEvent.click(drawer.getByText("task a"));
+    await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText("Delete task"));
+
+    await waitFor(() => expect(screen.getByTestId("day-agenda-drawer")).toBeTruthy());
+    expect(screen.queryByTestId("task-detail-drawer")).toBeNull();
+  });
+
+  describe("Month Goals section", () => {
+    it("shows a month-scoped task's title", async () => {
+      const goal = makeTask({
+        title: "ship the redesign",
+        scope: { kind: "month", month: "2026-07" },
+      });
+      renderView(vi.fn(), [goal]);
+      await waitFor(() => expect(screen.getByText("Month Goals")).toBeTruthy());
+      expect(screen.getByText("ship the redesign")).toBeTruthy();
+    });
+
+    it("has a quick-add input for adding a new month-scoped task", async () => {
+      renderView();
+      await waitFor(() => expect(screen.getByText("Month Goals")).toBeTruthy());
+      // No day-agenda drawer is open at this point, so this is the only
+      // quick-add input on the page.
+      expect(screen.getByLabelText("Add task")).toBeTruthy();
+    });
+  });
 });

@@ -206,6 +206,12 @@ export function monthStats(tasks: Task[], monthKey: string): WeekStats {
       if (t.done) done += 1;
     }
   }
+  for (const t of tasks) {
+    if (t.scope.kind === "month" && t.scope.month === monthKey) {
+      total += 1;
+      if (t.done) done += 1;
+    }
+  }
   return { total, done };
 }
 

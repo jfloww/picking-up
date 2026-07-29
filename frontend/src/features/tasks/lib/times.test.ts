@@ -448,4 +448,14 @@ describe("monthStats", () => {
     const augustTask = task({ scope: { kind: "day", date: "2026-08-01" } });
     expect(monthStats([juneTask, augustTask], monthKey)).toEqual({ done: 0, total: 0 });
   });
+
+  it("counts a month-scoped task for the target month", () => {
+    const goal = task({ scope: { kind: "month", month: monthKey } });
+    expect(monthStats([goal], monthKey)).toEqual({ done: 0, total: 1 });
+  });
+
+  it("does not count a month-scoped task belonging to a different month", () => {
+    const otherMonthGoal = task({ scope: { kind: "month", month: "2026-08" } });
+    expect(monthStats([otherMonthGoal], monthKey)).toEqual({ done: 0, total: 0 });
+  });
 });

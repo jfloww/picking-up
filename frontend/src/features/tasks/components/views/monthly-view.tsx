@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 
-import { monthKeyOf } from "../../lib/dates";
-import { monthStats } from "../../lib/times";
+import { cn } from "@/lib/utils";
+
+import { monthKeyOf, shortDateLabel, todayKey, upcomingRepeatDates } from "../../lib/dates";
+import { monthStats, resolveRepeatWeekdays } from "../../lib/times";
 import { useTasks } from "../../store";
+import { ScopeTasks } from "../scope-tasks";
 import { DayAgendaDrawer } from "../day-agenda-drawer";
 import { TaskDetailDrawer } from "../task-detail-drawer";
 import { taskItemHandlers } from "../task-item";
@@ -13,10 +16,13 @@ import type { CalendarViewProps } from "./weekly-view";
 
 type Overlay = { type: "day"; date: string } | { type: "task"; taskId: string; fromDate: string };
 
+const UPCOMING_REPEAT_COUNT = 3;
+
 export function MonthlyView({ anchor, onDrillDown }: CalendarViewProps) {
   const actions = useTasks();
   const { tasks } = actions;
   const monthKey = monthKeyOf(anchor);
+  const today = todayKey();
   const { done, total } = monthStats(tasks, monthKey);
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
@@ -25,9 +31,29 @@ export function MonthlyView({ anchor, onDrillDown }: CalendarViewProps) {
     overlay?.type === "day" ? overlay.date : overlay?.type === "task" ? overlay.fromDate : null;
   const selectedTask =
     overlay?.type === "task" ? (tasks.find((t) => t.id === overlay.taskId) ?? null) : null;
+  const selectedTaskRepeatWeekdays = selectedTask
+    ? resolveRepeatWeekdays(selectedTask, tasks)
+    : undefined;
+  const selectedTaskUpcomingRepeatDates = selectedTaskRepeatWeekdays
+    ? upcomingRepeatDates(selectedTaskRepeatWeekdays, today, UPCOMING_REPEAT_COUNT).map((date) =>
+        shortDateLabel(date, today),
+      )
+    : undefined;
+
+  // When a task is deleted while its TaskDetailDrawer is open, `selectedTask`
+  // resolves to null but `overlay` is still `{ type: "task" }` — fall back to
+  // showing the day-agenda drawer for that task's date instead of no overlay.
+  const showDayAgenda =
+    overlay?.type === "day" || (overlay?.type === "task" && !selectedTask);
+  const dayAgendaDate = overlay?.type === "day" ? overlay.date : overlay?.type === "task" ? overlay.fromDate : null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
+    <div
+      className={cn(
+        "flex h-full min-h-0 flex-col gap-2 overflow-y-auto transition-[padding-right] duration-200 ease-out",
+        overlay && "pr-[400px]",
+      )}
+    >
       <div className="shrink-0 rounded-md bg-muted/40 p-3">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">
           This Month
@@ -52,22 +78,30 @@ export function MonthlyView({ anchor, onDrillDown }: CalendarViewProps) {
         />
       </div>
 
-      {overlay?.type === "day" && (
+      {showDayAgenda && dayAgendaDate && (
         <DayAgendaDrawer
-          date={overlay.date}
+          date={dayAgendaDate}
           onClose={() => setOverlay(null)}
-          onOpenDaily={() => onDrillDown?.("daily", overlay.date)}
-          onSelectTask={(taskId) => setOverlay({ type: "task", taskId, fromDate: overlay.date })}
+          onOpenDaily={() => onDrillDown?.("daily", dayAgendaDate)}
+          onSelectTask={(taskId) => setOverlay({ type: "task", taskId, fromDate: dayAgendaDate })}
         />
       )}
 
       {selectedTask && overlay?.type === "task" && (
         <TaskDetailDrawer
           task={selectedTask}
+          upcomingRepeatDates={selectedTaskUpcomingRepeatDates}
           onClose={() => setOverlay({ type: "day", date: overlay.fromDate })}
           {...taskItemHandlers(selectedTask.id, actions)}
         />
       )}
+
+      <div className="shrink-0 rounded-md bg-muted/40 p-3">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">
+          Month Goals
+        </div>
+        <ScopeTasks scope={{ kind: "month", month: monthKey }} quickAdd />
+      </div>
     </div>
   );
 }
