@@ -66,9 +66,8 @@ describe("TaskCalendar", () => {
 
       fireEvent.click(screen.getByRole("tab", { name: "Weekly" }));
       await waitFor(() => expect(screen.getByText("Jul 12 – Jul 18")).toBeTruthy());
-      // Monthly is temporarily hidden from the tab bar (view-switcher.tsx's
-      // VISIBLE_VIEWS) — it isn't reachable via a tab click right now, so
-      // this test only exercises the tabs that still are.
+      // This test only exercises Daily and Weekly; Monthly's own
+      // fixed-sub-header behavior is covered separately, in monthly-view.test.tsx.
     });
   });
 });
@@ -92,25 +91,6 @@ describe("drill-down navigation", () => {
       expect(screen.getByRole("tab", { name: "Daily", selected: true })).toBeTruthy(),
     );
     expect(screen.getByText("Tuesday, July 14")).toBeTruthy();
-  });
-
-  // Monthly is temporarily hidden from the tab bar (view-switcher.tsx's
-  // VISIBLE_VIEWS), so it can't be reached via a tab click right now — the
-  // drill-down behavior itself is untouched and still fully implemented;
-  // re-enable this test alongside restoring the tab.
-  it.skip("double-clicking a Monthly month cell switches to Weekly anchored on that month's first week", async () => {
-    render(<TaskCalendar repository={fakeRepository()} />);
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Monthly" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("tab", { name: "Monthly" }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Focus March" })).toBeTruthy(),
-    );
-    fireEvent.doubleClick(screen.getByRole("button", { name: "Focus March" }));
-    await waitFor(() =>
-      expect(screen.getByRole("tab", { name: "Weekly", selected: true })).toBeTruthy(),
-    );
-    // 2026-03-01 is a Sunday, so its own week starts on itself.
-    expect(screen.getByText("Mar 1 – Mar 7")).toBeTruthy();
   });
 });
 

@@ -9,12 +9,11 @@ import { cn } from "@/lib/utils";
 export const VIEWS = ["daily", "weekly", "monthly", "yearly"] as const;
 export type ViewKind = (typeof VIEWS)[number];
 
-// Monthly and Yearly are temporarily hidden from the tab bar while they're
-// still being worked on. The view kinds, their components, and routing
-// (shiftAnchor, dateLabelFor, drill-down navigation) are all untouched —
-// only the tab buttons themselves are hidden. Add "monthly"/"yearly" back
-// here to re-enable them.
-const VISIBLE_VIEWS: readonly ViewKind[] = ["daily", "weekly"];
+// Yearly is temporarily hidden from the tab bar while it's still being
+// worked on. The view kind, its component, and routing (shiftAnchor,
+// dateLabelFor, drill-down navigation) are all untouched — only the tab
+// button itself is hidden. Add "yearly" back here to re-enable it.
+const VISIBLE_VIEWS: readonly ViewKind[] = ["daily", "weekly", "monthly"];
 
 const VIEW_LABELS: Record<ViewKind, string> = {
   daily: "Daily",
