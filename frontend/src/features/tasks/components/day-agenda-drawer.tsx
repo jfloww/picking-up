@@ -44,7 +44,7 @@ export function DayAgendaDrawer({
       )}
     >
       <header className="flex h-[72px] shrink-0 items-center justify-between border-b border-border px-6">
-        <span className="min-w-0 truncate text-[15px] font-semibold">{dayLabel(date)}</span>
+        <h2 className="min-w-0 truncate text-[15px] font-semibold">{dayLabel(date)}</h2>
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
@@ -64,7 +64,13 @@ export function DayAgendaDrawer({
         </div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <ScopeTasks scope={{ kind: "day", date }} quickAdd onSelectTask={onSelectTask} />
+        <ScopeTasks
+          scope={{ kind: "day", date }}
+          quickAdd
+          highlightOverdue
+          showRepeatLabel
+          onSelectTask={onSelectTask}
+        />
       </div>
     </aside>
   );

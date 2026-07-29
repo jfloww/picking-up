@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider } from "../../store";
@@ -14,6 +14,13 @@ function renderView(onDrillDown = vi.fn(), tasks = [] as Parameters<typeof fakeR
     </TasksProvider>,
   );
   return onDrillDown;
+}
+
+// MonthGrid renders both a desktop and a mobile agenda branch simultaneously
+// (the split is CSS-only), so date-cell queries are scoped to the desktop
+// branch to avoid ambiguous matches.
+function desktopGrid() {
+  return within(screen.getByTestId("month-grid"));
 }
 
 describe("MonthlyView", () => {
@@ -40,8 +47,8 @@ describe("MonthlyView", () => {
 
   it("clicking a day cell opens the day-agenda drawer for that date, no task-detail drawer yet", async () => {
     renderView();
-    await waitFor(() => expect(screen.getByLabelText("Open 2026-07-14")).toBeTruthy());
-    fireEvent.click(screen.getByLabelText("Open 2026-07-14"));
+    await waitFor(() => expect(desktopGrid().getByLabelText("Open 2026-07-14")).toBeTruthy());
+    fireEvent.click(desktopGrid().getByLabelText("Open 2026-07-14"));
     await waitFor(() => expect(screen.getByTestId("day-agenda-drawer")).toBeTruthy());
     expect(screen.queryByTestId("task-detail-drawer")).toBeNull();
   });
@@ -73,11 +80,13 @@ describe("MonthlyView", () => {
       scope: { kind: "day", date: "2026-07-14" },
     });
     renderView(vi.fn(), [a]);
-    await waitFor(() => expect(screen.getByLabelText("Open 2026-07-14")).toBeTruthy());
-    fireEvent.click(screen.getByLabelText("Open 2026-07-14"));
-    await waitFor(() => expect(screen.getByText("task a")).toBeTruthy());
+    await waitFor(() => expect(desktopGrid().getByLabelText("Open 2026-07-14")).toBeTruthy());
+    fireEvent.click(desktopGrid().getByLabelText("Open 2026-07-14"));
+    await waitFor(() => expect(screen.getByTestId("day-agenda-drawer")).toBeTruthy());
+    const drawer = within(screen.getByTestId("day-agenda-drawer"));
+    await waitFor(() => expect(drawer.getByText("task a")).toBeTruthy());
 
-    fireEvent.click(screen.getByText("task a"));
+    fireEvent.click(drawer.getByText("task a"));
 
     await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeTruthy());
     expect(screen.queryByTestId("day-agenda-drawer")).toBeNull();
@@ -92,10 +101,12 @@ describe("MonthlyView", () => {
       scope: { kind: "day", date: "2026-07-14" },
     });
     renderView(vi.fn(), [a]);
-    await waitFor(() => expect(screen.getByLabelText("Open 2026-07-14")).toBeTruthy());
-    fireEvent.click(screen.getByLabelText("Open 2026-07-14"));
-    await waitFor(() => expect(screen.getByText("task a")).toBeTruthy());
-    fireEvent.click(screen.getByText("task a"));
+    await waitFor(() => expect(desktopGrid().getByLabelText("Open 2026-07-14")).toBeTruthy());
+    fireEvent.click(desktopGrid().getByLabelText("Open 2026-07-14"));
+    await waitFor(() => expect(screen.getByTestId("day-agenda-drawer")).toBeTruthy());
+    const drawer = within(screen.getByTestId("day-agenda-drawer"));
+    await waitFor(() => expect(drawer.getByText("task a")).toBeTruthy());
+    fireEvent.click(drawer.getByText("task a"));
     await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeTruthy());
 
     fireEvent.click(screen.getByLabelText("Close details"));
@@ -106,8 +117,8 @@ describe("MonthlyView", () => {
 
   it("closing the day-agenda drawer returns to the plain grid", async () => {
     renderView();
-    await waitFor(() => expect(screen.getByLabelText("Open 2026-07-14")).toBeTruthy());
-    fireEvent.click(screen.getByLabelText("Open 2026-07-14"));
+    await waitFor(() => expect(desktopGrid().getByLabelText("Open 2026-07-14")).toBeTruthy());
+    fireEvent.click(desktopGrid().getByLabelText("Open 2026-07-14"));
     await waitFor(() => expect(screen.getByLabelText("Close day")).toBeTruthy());
 
     fireEvent.click(screen.getByLabelText("Close day"));
@@ -118,8 +129,8 @@ describe("MonthlyView", () => {
 
   it("the day-agenda drawer's Open Daily button calls onDrillDown('daily', date)", async () => {
     const onDrillDown = renderView();
-    await waitFor(() => expect(screen.getByLabelText("Open 2026-07-14")).toBeTruthy());
-    fireEvent.click(screen.getByLabelText("Open 2026-07-14"));
+    await waitFor(() => expect(desktopGrid().getByLabelText("Open 2026-07-14")).toBeTruthy());
+    fireEvent.click(desktopGrid().getByLabelText("Open 2026-07-14"));
     await waitFor(() => expect(screen.getByText("Open Daily")).toBeTruthy());
 
     fireEvent.click(screen.getByText("Open Daily"));

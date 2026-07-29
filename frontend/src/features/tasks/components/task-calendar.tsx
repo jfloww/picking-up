@@ -4,7 +4,18 @@ import { useState } from "react";
 
 import { Alert, AlertAction, AlertTitle } from "@/components/ui/alert";
 import type { TaskRepository } from "../data/repository";
-import { addDays, dayLabel, todayKey, weekRangeLabel, weekStartOf, yearOf } from "../lib/dates";
+import {
+  addDays,
+  dayLabel,
+  monthKeyOf,
+  monthLabel,
+  nextMonthKey,
+  prevMonthKey,
+  todayKey,
+  weekRangeLabel,
+  weekStartOf,
+  yearOf,
+} from "../lib/dates";
 import { TasksProvider, useTasks } from "../store";
 import { ViewSwitcher, type ViewKind } from "./view-switcher";
 import { DailyView } from "./views/daily-view";
@@ -23,6 +34,7 @@ export function shiftAnchor(
     case "weekly":
       return addDays(anchor, 7 * dir);
     case "monthly":
+      return `${dir > 0 ? nextMonthKey(monthKeyOf(anchor)) : prevMonthKey(monthKeyOf(anchor))}-01`;
     case "yearly":
       return `${Number(yearOf(anchor)) + dir}-${anchor.slice(5, 7)}-01`;
   }
@@ -42,6 +54,7 @@ function dateLabelFor(view: ViewKind, anchor: string): string {
     case "weekly":
       return weekRangeLabel(weekStartOf(anchor));
     case "monthly":
+      return monthLabel(monthKeyOf(anchor));
     case "yearly":
       return yearOf(anchor);
   }

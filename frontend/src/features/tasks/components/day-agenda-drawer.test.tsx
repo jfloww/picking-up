@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { todayKey } from "../lib/dates";
+import { todayKey, weekStartOf } from "../lib/dates";
 import { TasksProvider } from "../store";
 import { fakeRepository, makeTask } from "../test-utils";
 import { DayAgendaDrawer } from "./day-agenda-drawer";
@@ -32,6 +32,30 @@ describe("DayAgendaDrawer", () => {
     const t = makeTask({ title: "write plan", scope: { kind: "day", date: day } });
     renderDrawer({ date: day, tasks: [t] });
     await waitFor(() => expect(screen.getByText("write plan")).toBeTruthy());
+  });
+
+  describe("with a rolled-over task", () => {
+    // Freeze "today" so the store's own rollover-on-load logic (which forwards
+    // any week-scoped task whose weekStart predates the current week) doesn't
+    // re-roll this already-rolled-over fixture out of the week we're testing.
+    beforeAll(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 6, 16)); // 2026-07-16, Thursday
+    });
+    afterAll(() => {
+      vi.useRealTimers();
+    });
+
+    it("shows a rolled-over task (converted to week-scope by the rollover mechanism) for a past day", async () => {
+      const day = "2026-07-14"; // a past day within the current week
+      const t = makeTask({
+        title: "overdue rollover task",
+        scope: { kind: "week", weekStart: weekStartOf(day) },
+        rolledFrom: { kind: "day", date: day },
+      });
+      renderDrawer({ date: day, tasks: [t] });
+      await waitFor(() => expect(screen.getByText("overdue rollover task")).toBeTruthy());
+    });
   });
 
   it("has a readable date heading", () => {

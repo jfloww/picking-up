@@ -17,8 +17,12 @@ describe("shiftAnchor", () => {
     expect(shiftAnchor("weekly", "2026-07-31", 1)).toBe("2026-08-07"); // crosses a month
   });
 
-  it("monthly and yearly page by year, keeping the month", () => {
-    expect(shiftAnchor("monthly", "2026-07-16", 1)).toBe("2027-07-01");
+  it("monthly pages by exactly one month", () => {
+    expect(shiftAnchor("monthly", "2026-07-16", 1)).toBe("2026-08-01");
+    expect(shiftAnchor("monthly", "2026-01-16", -1)).toBe("2025-12-01"); // crosses a year boundary
+  });
+
+  it("yearly pages by year, keeping the month", () => {
     expect(shiftAnchor("yearly", "2026-07-16", -1)).toBe("2025-07-01");
   });
 });
@@ -68,6 +72,13 @@ describe("TaskCalendar", () => {
       await waitFor(() => expect(screen.getByText("Jul 12 – Jul 18")).toBeTruthy());
       // This test only exercises Daily and Weekly; Monthly's own
       // fixed-sub-header behavior is covered separately, in monthly-view.test.tsx.
+    });
+
+    it("shows the month name and year as the header label when Monthly is the active view", async () => {
+      render(<TaskCalendar repository={fakeRepository()} />);
+      await waitFor(() => expect(screen.getByRole("tab", { name: "Monthly" })).toBeTruthy());
+      fireEvent.click(screen.getByRole("tab", { name: "Monthly" }));
+      await waitFor(() => expect(screen.getByText("July 2026")).toBeTruthy());
     });
   });
 });

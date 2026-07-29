@@ -43,7 +43,7 @@ export function MonthlyView({ anchor, onDrillDown }: CalendarViewProps) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="flex-1">
         <MonthGrid
           monthKey={monthKey}
           selectedDate={selectedDate}
