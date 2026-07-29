@@ -892,4 +892,30 @@ describe("ScopeTasks day box (Weekly view props)", () => {
     fireEvent.pointerDown(wrapper!, { pointerId: 1 });
     expect(onPointerDown).toHaveBeenCalled();
   });
+
+  it("with getDragHandlers, a done task is not wrapped for dragging", async () => {
+    const day = todayKey();
+    const t = makeTask({
+      id: "a",
+      title: "finished task",
+      done: true,
+      scope: { kind: "day", date: day },
+    });
+    const getDragHandlers = vi.fn().mockReturnValue({
+      onPointerDown: vi.fn(),
+      onPointerMove: vi.fn(),
+      onPointerUp: vi.fn(),
+      onPointerCancel: vi.fn(),
+      onClickCapture: vi.fn(),
+    });
+    render(
+      <TasksProvider repository={fakeRepository([t])}>
+        <ScopeTasks scope={{ kind: "day", date: day }} getDragHandlers={getDragHandlers} />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("finished task")).toBeTruthy());
+
+    expect(getDragHandlers).not.toHaveBeenCalled();
+    expect(screen.getByText("finished task").closest(".touch-none")).toBeNull();
+  });
 });

@@ -103,7 +103,7 @@ export function ScopeTasks({
               {...taskItemHandlers(t.id, actions)}
             />
           );
-          if (!getDragHandlers) return taskItem;
+          if (!getDragHandlers || t.done) return taskItem;
           return (
             <li key={t.id} className="touch-none" {...getDragHandlers(t.id, t.title)}>
               <ul>{taskItem}</ul>
