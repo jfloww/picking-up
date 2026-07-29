@@ -318,6 +318,61 @@ describe("TasksProvider", () => {
       expect(duplicates).toHaveLength(0);
     });
 
+    it("removeTask records the occurrence's date in the anchor's excludedDates", async () => {
+      const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
+      const occurrence = makeTask({
+        id: "occ",
+        scope: { kind: "day", date: "2026-07-16" },
+        repeatSourceId: "anchor",
+      });
+      const { repo, result } = setup(fakeRepository([anchor, occurrence]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.removeTask("occ"));
+
+      expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual(["2026-07-16"]);
+      await waitFor(() =>
+        expect(repo.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual(["2026-07-16"]),
+      );
+    });
+
+    it("removing a task that was already standalone (no repeatSourceId) does not touch any anchor", async () => {
+      const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
+      const standalone = makeTask({ id: "solo", scope: { kind: "day", date: "2026-07-16" } });
+      const { result } = setup(fakeRepository([anchor, standalone]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.removeTask("solo"));
+
+      expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toBeUndefined();
+    });
+
+    it("deleting today's occurrence, then reloading from the repository, does not resurrect it", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 6, 16)); // Thursday, weekday 4
+      const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
+      const { repo, result } = setup(fakeRepository([anchor]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const spawned = result.current.tasks.find((t) => t.repeatSourceId === "anchor");
+      expect(spawned).toBeTruthy();
+
+      act(() => result.current.removeTask(spawned!.id));
+      await waitFor(() => expect(repo.tasks.some((t) => t.id === spawned!.id)).toBe(false));
+      await waitFor(() =>
+        expect(repo.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual(["2026-07-16"]),
+      );
+
+      const { result: reloaded } = setup(repo);
+      await waitFor(() => expect(reloaded.current.loaded).toBe(true));
+      const resurrected = reloaded.current.tasks.filter(
+        (t) =>
+          t.repeatSourceId === "anchor" &&
+          t.scope.kind === "day" &&
+          t.scope.date === "2026-07-16",
+      );
+      expect(resurrected).toHaveLength(0);
+    });
+
     it("rescheduleTaskToDay moves a plain task's scope date", async () => {
       const today = todayKey();
       const target = addDays(today, 2);

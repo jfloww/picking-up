@@ -347,8 +347,24 @@ export function TasksProvider({
         repo.update(task).catch(handleSyncFailure);
       },
       removeTask(id) {
+        const current = state.tasks.find((t) => t.id === id);
         dispatch({ type: "removed", id });
         repo.remove(id).catch(handleSyncFailure);
+
+        // Deleting a spawned occurrence must tell its anchor not to
+        // re-spawn it — otherwise the next load's materializeRoutines()
+        // sees no same-day occurrence and recreates it, "resurrecting" a
+        // task the user just deleted. Same excludedDates handling as
+        // detachFromRoutine/rescheduleTaskToDay above.
+        if (current?.repeatSourceId !== undefined && current.scope.kind === "day") {
+          const anchor = state.tasks.find((t) => t.id === current.repeatSourceId);
+          if (anchor) {
+            const excludedDates = [...(anchor.excludedDates ?? []), current.scope.date];
+            const updatedAnchor: Task = { ...anchor, excludedDates };
+            dispatch({ type: "updated", task: updatedAnchor });
+            repo.update(updatedAnchor).catch(handleSyncFailure);
+          }
+        }
       },
       dismissSyncError() {
         dispatch({ type: "syncErrorDismissed" });
