@@ -1,6 +1,9 @@
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from rest_framework.test import APIClient
+
+from apps.accounts.models import GoogleIdentity
 
 
 User = get_user_model()
@@ -69,3 +72,21 @@ class AuthApiTests(TestCase):
             format="json",
         )
         self.assertEqual(retry_response.status_code, 401)
+
+
+class GoogleIdentityModelTests(TestCase):
+    def test_sub_must_be_unique(self):
+        user_a = User.objects.create_user(username="a@example.com", email="a@example.com")
+        user_b = User.objects.create_user(username="b@example.com", email="b@example.com")
+        GoogleIdentity.objects.create(user=user_a, sub="dup-sub", email="a@example.com")
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                GoogleIdentity.objects.create(user=user_b, sub="dup-sub", email="b@example.com")
+
+    def test_user_email_must_be_unique_at_the_database_level(self):
+        User.objects.create_user(username="a@example.com", email="dup@example.com")
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                User.objects.create_user(username="b@example.com", email="dup@example.com")
