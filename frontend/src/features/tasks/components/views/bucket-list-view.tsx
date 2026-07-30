@@ -110,6 +110,7 @@ export function BucketListView(_props: CalendarViewProps) {
             list="bucket-list-category-suggestions"
             placeholder="Category"
             aria-label="Category"
+            maxLength={60}
             className="w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           />
           <datalist id="bucket-list-category-suggestions">

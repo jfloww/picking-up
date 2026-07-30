@@ -119,6 +119,13 @@ describe("BucketListView", () => {
     expect(screen.queryByText("climb Fuji")).toBeNull();
   });
 
+  it("caps the composer's category input at 60 characters, matching the backend's scope_value limit", async () => {
+    renderView();
+    await waitFor(() => expect(screen.getByRole("button", { name: /add item/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /add item/i }));
+    expect((screen.getByLabelText("Category") as HTMLInputElement).maxLength).toBe(60);
+  });
+
   it("includes a submit button in the general composer form, so a real browser's implicit Enter-to-submit isn't suppressed", async () => {
     // The composer form has two text fields (title, category) and previously
     // had no submit button. Per the HTML Standard's implicit-submission

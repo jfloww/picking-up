@@ -27,6 +27,11 @@ describe("TaskCategoryEditor", () => {
     expect(onCategoryChange).toHaveBeenCalledWith("To Read");
   });
 
+  it("caps the input at 60 characters, matching the backend's scope_value limit", () => {
+    render(<TaskCategoryEditor category="To Eat" categories={[]} onCategoryChange={() => {}} />);
+    expect((screen.getByLabelText("Category") as HTMLInputElement).maxLength).toBe(60);
+  });
+
   it("does not call onCategoryChange on blur when the value is unchanged", () => {
     const onCategoryChange = vi.fn();
     render(<TaskCategoryEditor category="To Eat" categories={[]} onCategoryChange={onCategoryChange} />);

@@ -19,6 +19,7 @@ export function TaskCategoryEditor({
         type="text"
         list={listId}
         defaultValue={category}
+        maxLength={60}
         onBlur={(e) => {
           const trimmed = e.target.value.trim();
           if (trimmed && trimmed !== category) onCategoryChange(trimmed);
