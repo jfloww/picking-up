@@ -163,20 +163,29 @@ LOGGING = {
         },
         # Rotates at local midnight: today's log is backend.log, and each
         # previous day is kept as backend.log.YYYY-MM-DD (up to a year back).
+        # Uses WindowsSafeTimedRotatingFileHandler, not the stdlib class
+        # directly: on Windows, the dev autoreloader's watcher process keeps
+        # this file open for the whole `runserver` session, so a plain
+        # TimedRotatingFileHandler's rename-based rollover fails with
+        # PermissionError every time it's due — and since doRollover() and
+        # the actual write share a try block, that silently drops every log
+        # record from then on, not just the rotation.
         "file": {
-            "class": "logging.handlers.TimedRotatingFileHandler",
+            "class": "config.logging_handlers.WindowsSafeTimedRotatingFileHandler",
             "filename": LOG_DIR / "backend.log",
             "when": "midnight",
             "backupCount": 365,
             "formatter": "verbose",
+            "encoding": "utf-8",
         },
         "error_file": {
-            "class": "logging.handlers.TimedRotatingFileHandler",
+            "class": "config.logging_handlers.WindowsSafeTimedRotatingFileHandler",
             "filename": LOG_DIR / "backend-error.log",
             "when": "midnight",
             "backupCount": 365,
             "level": "ERROR",
             "formatter": "verbose",
+            "encoding": "utf-8",
         },
     },
     "root": {
