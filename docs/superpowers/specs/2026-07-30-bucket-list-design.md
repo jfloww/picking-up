@@ -152,13 +152,15 @@ addBucketItem(title: string, category: string): Task | undefined {
     scope: { kind: "bucket", category: normalizedCategory },
     createdAt: new Date().toISOString(),
   };
-  dispatch({ type: "created", task });
+  dispatch({ type: "added", task }); // confirmed against addTask's actual dispatch — not "created"
   repo.create(task).catch(handleSyncFailure);
   return task;
 },
 ```
 
 `setCategory(id, category)` mirrors `setDueDate` exactly (read current task, replace `scope`, dispatch, `repo.update`) — used by the drawer's new Category field. Both go through `TasksContextValue` the same way every other action does. **No new store, no new repository, no second sync path** — same `repo.create`/`repo.update` used by every existing action.
+
+One more exhaustive-mapping site found while verifying: `data/repository.ts`'s `SCOPE_FIELDS` (used by the legacy-localStorage-migration repository's `isScope` validator) hardcodes `day`/`week`/`month`/`year`. Unreachable in practice for bucket tasks specifically (nothing bucket-scoped could ever have been written to localStorage before this feature exists to migrate it), but add `bucket: "category"` anyway for consistency with every other exhaustive scope mapping in the codebase.
 
 ## Navigation (`view-switcher.tsx`)
 
