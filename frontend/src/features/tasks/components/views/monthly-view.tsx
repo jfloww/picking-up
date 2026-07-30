@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { monthKeyOf, shortDateLabel, todayKey, upcomingRepeatDates } from "../../lib/dates";
 import { monthStats, resolveRepeatWeekdays } from "../../lib/times";
 import { useTasks } from "../../store";
-import { ScopeTasks } from "../scope-tasks";
 import { DayAgendaDrawer } from "../day-agenda-drawer";
 import { TaskDetailDrawer } from "../task-detail-drawer";
 import { taskItemHandlers } from "../task-item";
@@ -67,13 +66,6 @@ export function MonthlyView({ anchor, onDrillDown }: CalendarViewProps) {
             <div className="h-full rounded-full bg-brand" style={{ width: `${pct}%` }} />
           </div>
         </div>
-      </div>
-
-      <div className="shrink-0 rounded-md bg-muted/40 p-3">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">
-          Month Goals
-        </div>
-        <ScopeTasks scope={{ kind: "month", month: monthKey }} quickAdd />
       </div>
 
       <div className="flex-1">
