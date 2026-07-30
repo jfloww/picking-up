@@ -32,6 +32,7 @@ interface TaskItemActions {
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
+  setCategory: (id: string, category: string) => void;
 }
 
 function formatHourMinute(hour: number, minute: number): string {
@@ -80,6 +81,7 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onRemoveSubtask: (subtaskId: string) => actions.removeSubtask(id, subtaskId),
     onEditSubtaskTitle: (subtaskId: string, title: string) =>
       actions.editSubtaskTitle(id, subtaskId, title),
+    onCategoryChange: (category: string) => actions.setCategory(id, category),
   };
 }
 

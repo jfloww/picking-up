@@ -293,3 +293,65 @@ describe("TaskDetailFields due date", () => {
     expect(onDueDateChange).toHaveBeenCalledWith("2026-07-31");
   });
 });
+
+describe("TaskDetailFields bucket category", () => {
+  it("shows the Category field for a bucket-scoped task", () => {
+    render(
+      <TaskDetailFields
+        task={makeTask({ scope: { kind: "bucket", category: "To Eat" } })}
+        {...noopHandlers}
+        bucketCategories={["To Eat", "To Go"]}
+        onCategoryChange={() => {}}
+      />,
+    );
+    expect((screen.getByLabelText("Category") as HTMLInputElement).value).toBe("To Eat");
+  });
+
+  it("hides the Category field for a non-bucket task", () => {
+    render(<TaskDetailFields task={makeTask({})} {...noopHandlers} />);
+    expect(screen.queryByLabelText("Category")).toBeNull();
+  });
+
+  it("hides Start/Duration for a bucket-scoped task even when showTime is true", () => {
+    render(
+      <TaskDetailFields
+        task={makeTask({ scope: { kind: "bucket", category: "To Do" }, time: "09:00" })}
+        {...noopHandlers}
+        showTime
+      />,
+    );
+    expect(screen.queryByLabelText("Task time")).toBeNull();
+  });
+
+  it("hides Repeat for a bucket-scoped task", () => {
+    render(
+      <TaskDetailFields task={makeTask({ scope: { kind: "bucket", category: "To Do" } })} {...noopHandlers} />,
+    );
+    expect(screen.queryByLabelText("Repeat on Monday")).toBeNull();
+  });
+
+  it("still shows Due date, Priority, and Background for a bucket-scoped task", () => {
+    render(
+      <TaskDetailFields task={makeTask({ scope: { kind: "bucket", category: "To Do" } })} {...noopHandlers} />,
+    );
+    expect(screen.getByLabelText("Due date")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Priority" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Background" })).toBeTruthy();
+  });
+
+  it("calls onCategoryChange when the category is edited", () => {
+    const onCategoryChange = vi.fn();
+    render(
+      <TaskDetailFields
+        task={makeTask({ scope: { kind: "bucket", category: "To Eat" } })}
+        {...noopHandlers}
+        bucketCategories={["To Eat"]}
+        onCategoryChange={onCategoryChange}
+      />,
+    );
+    const input = screen.getByLabelText("Category");
+    fireEvent.change(input, { target: { value: "To Read" } });
+    fireEvent.blur(input);
+    expect(onCategoryChange).toHaveBeenCalledWith("To Read");
+  });
+});

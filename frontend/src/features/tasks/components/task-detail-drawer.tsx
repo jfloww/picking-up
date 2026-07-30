@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
 import { completedAtLabel } from "../lib/dates";
-import type { Task } from "../types";
+import type { Scope, Task } from "../types";
 import { DONE_CHECKBOX_CLASS } from "./task-item";
 import { TaskDetailFields } from "./task-detail-fields";
 
@@ -21,6 +21,7 @@ interface Draft {
   repeatWeekdays: number[];
   detached: boolean;
   dueDate?: string;
+  category?: string;
 }
 
 function draftFromTask(task: Task): Draft {
@@ -34,6 +35,7 @@ function draftFromTask(task: Task): Draft {
     repeatWeekdays: task.repeatWeekdays ?? [],
     detached: false,
     dueDate: task.dueDate,
+    category: task.scope.kind === "bucket" ? task.scope.category : undefined,
   };
 }
 
@@ -54,6 +56,8 @@ export function TaskDetailDrawer({
   onToggleSubtask,
   onRemoveSubtask,
   onEditSubtaskTitle,
+  bucketCategories = [],
+  onCategoryChange,
   upcomingRepeatDates,
 }: {
   task: Task;
@@ -72,6 +76,8 @@ export function TaskDetailDrawer({
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
   onEditSubtaskTitle: (subtaskId: string, title: string) => void;
+  bucketCategories?: string[];
+  onCategoryChange?: (category: string) => void;
   upcomingRepeatDates?: string[];
 }) {
   const [visible, setVisible] = useState(false);
@@ -117,6 +123,13 @@ export function TaskDetailDrawer({
     if (draft.priority !== !!task.priority) onPriorityChange(draft.priority);
     if (draft.background !== !!task.background) onBackgroundChange(draft.background);
     if (draft.dueDate !== task.dueDate) onDueDateChange(draft.dueDate);
+    if (
+      task.scope.kind === "bucket" &&
+      draft.category !== undefined &&
+      draft.category !== task.scope.category
+    ) {
+      onCategoryChange?.(draft.category);
+    }
     const original = task.repeatWeekdays ?? [];
     const weekdaysChanged =
       draft.repeatWeekdays.length !== original.length ||
@@ -129,10 +142,15 @@ export function TaskDetailDrawer({
     onClose();
   };
 
-  const { detached, ...draftFields } = draft;
+  const { detached, category: draftCategory, ...draftFields } = draft;
+  const draftScope: Scope =
+    task.scope.kind === "bucket" && draftCategory !== undefined
+      ? { kind: "bucket", category: draftCategory }
+      : task.scope;
   const draftTask: Task = {
     ...task,
     ...draftFields,
+    scope: draftScope,
     repeatSourceId: detached ? undefined : task.repeatSourceId,
   };
 
@@ -198,6 +216,9 @@ export function TaskDetailDrawer({
           onToggleSubtask={onToggleSubtask}
           onRemoveSubtask={onRemoveSubtask}
           onEditSubtaskTitle={onEditSubtaskTitle}
+          bucketCategories={bucketCategories}
+          onCategoryChange={(category) => setDraft((d) => ({ ...d, category }))}
+          showTime={task.scope.kind !== "bucket"}
           showDelete={false}
           variant="drawer"
         />

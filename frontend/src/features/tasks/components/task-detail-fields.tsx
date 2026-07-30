@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 import type { Task } from "../types";
 import { SubtaskList } from "./subtask-list";
+import { TaskCategoryEditor } from "./task-category-editor";
 import { TaskDueDateEditor } from "./task-due-date-editor";
 import { TaskRepeatPicker } from "./task-repeat-picker";
 import { TaskTimeEditor } from "./task-time-editor";
@@ -26,6 +27,8 @@ export function TaskDetailFields({
   onToggleSubtask,
   onRemoveSubtask,
   onEditSubtaskTitle,
+  bucketCategories = [],
+  onCategoryChange,
   showTime = true,
   showDelete = true,
   variant = "default",
@@ -45,6 +48,8 @@ export function TaskDetailFields({
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
   onEditSubtaskTitle: (subtaskId: string, title: string) => void;
+  bucketCategories?: string[];
+  onCategoryChange?: (category: string) => void;
   showTime?: boolean;
   showDelete?: boolean;
   variant?: "default" | "drawer";
@@ -52,7 +57,8 @@ export function TaskDetailFields({
 }) {
   const subtasks = task.subtasks ?? [];
   const drawer = variant === "drawer";
-  const showRepeat = task.repeatWeekdays !== undefined || task.scope.kind === "day";
+  const showRepeat =
+    task.scope.kind !== "bucket" && (task.repeatWeekdays !== undefined || task.scope.kind === "day");
   // Note: checked against length, not `!== undefined` — TaskDetailDrawer's
   // buffered draft always spreads repeatWeekdays as an array (defaulting to
   // []) for a non-routine task, so an emptiness check (not just definedness)
@@ -168,7 +174,7 @@ export function TaskDetailFields({
 
   const schedulingCluster = (
     <div className={cn(drawer ? "space-y-[22px]" : "space-y-1.5")}>
-      {showTime && (
+      {showTime && task.scope.kind !== "bucket" && (
         <TaskTimeEditor
           time={task.time}
           onTimeChange={onTimeChange}
@@ -217,6 +223,16 @@ export function TaskDetailFields({
             dueDate={task.dueDate}
             onDueDateChange={onDueDateChange}
             variant={variant}
+          />
+        </section>
+      )}
+
+      {task.scope.kind === "bucket" && (
+        <section className={cn(drawer && "space-y-2.5")}>
+          <TaskCategoryEditor
+            category={task.scope.category}
+            categories={bucketCategories}
+            onCategoryChange={(category) => onCategoryChange?.(category)}
           />
         </section>
       )}

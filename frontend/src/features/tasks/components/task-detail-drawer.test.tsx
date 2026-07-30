@@ -20,6 +20,7 @@ const noopHandlers = {
   onToggleSubtask: (_id: string) => {},
   onRemoveSubtask: (_id: string) => {},
   onEditSubtaskTitle: (_id: string, _title: string) => {},
+  onCategoryChange: (_category: string) => {},
 };
 
 describe("TaskDetailDrawer", () => {
@@ -712,5 +713,65 @@ describe("TaskDetailDrawer", () => {
     const icon = row.querySelector("svg")!;
     expect(icon.getAttribute("class")).toContain("group-hover:text-amber");
     expect(icon.getAttribute("class")).toContain("group-focus-within:text-amber");
+  });
+});
+
+describe("bucket-scoped task", () => {
+  const bucketTask = makeTask({
+    id: "bk",
+    title: "try that new ramen place",
+    scope: { kind: "bucket", category: "To Eat" },
+  });
+
+  it("hides Start, Duration, and Repeat", () => {
+    render(<TaskDetailDrawer task={bucketTask} {...noopHandlers} />);
+    expect(screen.queryByLabelText("Task time")).toBeNull();
+    expect(screen.queryByLabelText("Task duration")).toBeNull();
+    expect(screen.queryByLabelText("Repeat on Monday")).toBeNull();
+  });
+
+  it("still shows Due date, Priority, Background, Subtasks, and Notes", () => {
+    render(<TaskDetailDrawer task={bucketTask} {...noopHandlers} />);
+    expect(screen.getByLabelText("Due date")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Priority" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Background" })).toBeTruthy();
+    expect(screen.getByText("Subtasks")).toBeTruthy();
+    expect(screen.getByText("Add a note…")).toBeTruthy();
+  });
+
+  it("shows the Category field and buffers edits until Done, like every other field", () => {
+    const onCategoryChange = vi.fn();
+    render(
+      <TaskDetailDrawer
+        task={bucketTask}
+        {...noopHandlers}
+        bucketCategories={["To Eat", "To Go"]}
+        onCategoryChange={onCategoryChange}
+      />,
+    );
+    const input = screen.getByLabelText("Category");
+    fireEvent.change(input, { target: { value: "To Go" } });
+    fireEvent.blur(input);
+    expect(onCategoryChange).not.toHaveBeenCalled(); // buffered, not committed yet
+
+    fireEvent.click(screen.getByText("Done"));
+    expect(onCategoryChange).toHaveBeenCalledWith("To Go");
+  });
+
+  it("Cancel discards an edited category without calling onCategoryChange", () => {
+    const onCategoryChange = vi.fn();
+    render(
+      <TaskDetailDrawer
+        task={bucketTask}
+        {...noopHandlers}
+        bucketCategories={["To Eat", "To Go"]}
+        onCategoryChange={onCategoryChange}
+      />,
+    );
+    const input = screen.getByLabelText("Category");
+    fireEvent.change(input, { target: { value: "To Go" } });
+    fireEvent.blur(input);
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(onCategoryChange).not.toHaveBeenCalled();
   });
 });
