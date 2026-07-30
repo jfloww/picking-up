@@ -421,6 +421,23 @@ describe("isPastToday", () => {
   it("is false at the exact current minute (not past yet)", () => {
     expect(isPastToday("14:05", "2026-07-16", "2026-07-16", "14:05")).toBe(false);
   });
+
+  it("is false once the task has started but its duration hasn't elapsed yet", () => {
+    // Starts 09:00, runs 30 min -> ends 09:30. It's 09:15: started, not overdue.
+    expect(isPastToday("09:00", "2026-07-16", "2026-07-16", "09:15", 30)).toBe(false);
+  });
+
+  it("is true once the task's end time (start + duration) has passed", () => {
+    expect(isPastToday("09:00", "2026-07-16", "2026-07-16", "09:31", 30)).toBe(true);
+  });
+
+  it("is false at the exact end minute (not past yet)", () => {
+    expect(isPastToday("09:00", "2026-07-16", "2026-07-16", "09:30", 30)).toBe(false);
+  });
+
+  it("falls back to the start time alone when no duration is given", () => {
+    expect(isPastToday("09:00", "2026-07-16", "2026-07-16", "09:15")).toBe(true);
+  });
 });
 
 describe("monthStats", () => {
@@ -457,5 +474,25 @@ describe("monthStats", () => {
   it("does not count a month-scoped task belonging to a different month", () => {
     const otherMonthGoal = task({ scope: { kind: "month", month: "2026-08" } });
     expect(monthStats([otherMonthGoal], monthKey)).toEqual({ done: 0, total: 0 });
+  });
+});
+
+describe("bucket-scoped tasks don't leak into day/week/month filters", () => {
+  it("is excluded from weekStats and monthStats", () => {
+    const bucketTask = task({
+      id: "b1",
+      done: false,
+      scope: { kind: "bucket", category: "To Eat" },
+    });
+    expect(weekStats([bucketTask], "2026-07-12")).toEqual({ total: 0, done: 0 });
+    expect(monthStats([bucketTask], "2026-07")).toEqual({ total: 0, done: 0 });
+  });
+
+  it("is excluded from dayTasksForWeek", () => {
+    const bucketTask = task({
+      id: "b1",
+      scope: { kind: "bucket", category: "To Eat" },
+    });
+    expect(dayTasksForWeek([bucketTask], "2026-07-16", "2026-07-12")).toEqual([]);
   });
 });

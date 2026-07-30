@@ -132,4 +132,15 @@ describe("toApiPayload", () => {
 
     expect(fromApiPayload(toApiPayload(yearTask))).toEqual(yearTask);
   });
+
+  it("round-trips a bucket-scoped task", () => {
+    const bucketTask: Task = {
+      id: "b1",
+      title: "try that new ramen place",
+      done: false,
+      scope: { kind: "bucket", category: "To Eat" },
+      createdAt: "2026-07-30T00:00:00.000Z",
+    };
+    expect(fromApiPayload(toApiPayload(bucketTask))).toEqual(bucketTask);
+  });
 });
