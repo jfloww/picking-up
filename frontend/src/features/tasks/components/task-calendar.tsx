@@ -14,14 +14,12 @@ import {
   todayKey,
   weekRangeLabel,
   weekStartOf,
-  yearOf,
 } from "../lib/dates";
 import { TasksProvider, useTasks } from "../store";
 import { ViewSwitcher, type ViewKind } from "./view-switcher";
 import { DailyView } from "./views/daily-view";
 import { MonthlyView } from "./views/monthly-view";
 import { WeeklyView } from "./views/weekly-view";
-import { YearlyView } from "./views/yearly-view";
 
 export function shiftAnchor(
   view: ViewKind,
@@ -35,8 +33,6 @@ export function shiftAnchor(
       return addDays(anchor, 7 * dir);
     case "monthly":
       return `${dir > 0 ? nextMonthKey(monthKeyOf(anchor)) : prevMonthKey(monthKeyOf(anchor))}-01`;
-    case "yearly":
-      return `${Number(yearOf(anchor)) + dir}-${anchor.slice(5, 7)}-01`;
   }
 }
 
@@ -44,7 +40,6 @@ const VIEW_COMPONENTS = {
   daily: DailyView,
   weekly: WeeklyView,
   monthly: MonthlyView,
-  yearly: YearlyView,
 } as const;
 
 function dateLabelFor(view: ViewKind, anchor: string): string {
@@ -55,8 +50,6 @@ function dateLabelFor(view: ViewKind, anchor: string): string {
       return weekRangeLabel(weekStartOf(anchor));
     case "monthly":
       return monthLabel(monthKeyOf(anchor));
-    case "yearly":
-      return yearOf(anchor);
   }
 }
 

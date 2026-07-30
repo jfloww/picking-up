@@ -21,10 +21,6 @@ describe("shiftAnchor", () => {
     expect(shiftAnchor("monthly", "2026-07-16", 1)).toBe("2026-08-01");
     expect(shiftAnchor("monthly", "2026-01-16", -1)).toBe("2025-12-01"); // crosses a year boundary
   });
-
-  it("yearly pages by year, keeping the month", () => {
-    expect(shiftAnchor("yearly", "2026-07-16", -1)).toBe("2025-07-01");
-  });
 });
 
 describe("TaskCalendar", () => {
@@ -41,9 +37,6 @@ describe("TaskCalendar", () => {
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: "Weekly", selected: true })).toBeTruthy(),
     );
-    // Yearly is temporarily hidden from the tab bar (view-switcher.tsx's
-    // VISIBLE_VIEWS) — it isn't reachable via a tab click right now, so
-    // this test only exercises the tabs that still are.
   });
 
   describe("fixed sub-header", () => {

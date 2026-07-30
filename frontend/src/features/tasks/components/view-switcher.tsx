@@ -6,20 +6,13 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export const VIEWS = ["daily", "weekly", "monthly", "yearly"] as const;
+export const VIEWS = ["daily", "weekly", "monthly"] as const;
 export type ViewKind = (typeof VIEWS)[number];
-
-// Yearly is temporarily hidden from the tab bar while it's still being
-// worked on. The view kind, its component, and routing (shiftAnchor,
-// dateLabelFor, drill-down navigation) are all untouched — only the tab
-// button itself is hidden. Add "yearly" back here to re-enable it.
-const VISIBLE_VIEWS: readonly ViewKind[] = ["daily", "weekly", "monthly"];
 
 const VIEW_LABELS: Record<ViewKind, string> = {
   daily: "Daily",
   weekly: "Weekly",
   monthly: "Monthly",
-  yearly: "Yearly",
 };
 
 export function ViewSwitcher({
@@ -46,7 +39,7 @@ export function ViewSwitcher({
           aria-label="Calendar scale"
           className="flex rounded-lg border border-border bg-card p-1"
         >
-          {VISIBLE_VIEWS.map((v) => (
+          {VIEWS.map((v) => (
             <button
               key={v}
               type="button"
