@@ -558,25 +558,6 @@ describe("TasksProvider", () => {
       ]);
       await waitFor(() => expect(repo.tasks[0].subtasks).toHaveLength(1));
     });
-
-    it("editSubtaskTitle trims and updates one subtask's title, persists it, and ignores a blank result", async () => {
-      const task = makeTask({
-        id: "a",
-        scope: { kind: "day", date: todayKey() },
-        subtasks: [{ id: "s1", title: "one", done: false }],
-      });
-      const { repo, result } = setup(fakeRepository([task]));
-      await waitFor(() => expect(result.current.loaded).toBe(true));
-
-      act(() => result.current.editSubtaskTitle("a", "s1", "  updated  "));
-      expect(result.current.tasks[0].subtasks).toEqual([
-        { id: "s1", title: "updated", done: false },
-      ]);
-      await waitFor(() => expect(repo.tasks[0].subtasks![0].title).toBe("updated"));
-
-      act(() => result.current.editSubtaskTitle("a", "s1", "   "));
-      expect(result.current.tasks[0].subtasks![0].title).toBe("updated"); // blank ignored
-    });
   });
 
   describe("bucket list actions", () => {
@@ -604,12 +585,14 @@ describe("TasksProvider", () => {
       expect(result.current.tasks).toHaveLength(2); // blank category rejected
     });
 
-    it("setCategory moves a task to a new category, persisting the change", async () => {
-      const task = makeTask({ id: "a", scope: { kind: "bucket", category: "To Go" } });
-      const { repo, result } = setup(fakeRepository([task]));
+    it("setCategory moves a task to a new category and normalizes casing to match existing categories", async () => {
+      const task1 = makeTask({ id: "a", scope: { kind: "bucket", category: "To Go" } });
+      const task2 = makeTask({ id: "b", scope: { kind: "bucket", category: "To Eat" } });
+      const { repo, result } = setup(fakeRepository([task1, task2]));
       await waitFor(() => expect(result.current.loaded).toBe(true));
 
-      act(() => result.current.setCategory("a", "To Eat"));
+      // Move to a new category with different casing, should match existing "To Eat" and reuse its casing
+      act(() => result.current.setCategory("a", "to eat"));
       expect(result.current.tasks[0].scope).toEqual({ kind: "bucket", category: "To Eat" });
       await waitFor(() => expect(repo.tasks[0].scope).toEqual({ kind: "bucket", category: "To Eat" }));
     });

@@ -76,7 +76,6 @@ interface TasksContextValue extends TasksState {
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
-  editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
   addBucketItem: (title: string, category: string) => Task | undefined;
   setCategory: (id: string, category: string) => void;
   dismissSyncError: () => void;
@@ -331,9 +330,9 @@ export function TasksProvider({
       setCategory(id, category) {
         const current = state.tasks.find((t) => t.id === id);
         if (!current || current.scope.kind !== "bucket") return;
-        const trimmed = category.trim();
-        if (!trimmed) return;
-        const task: Task = { ...current, scope: { kind: "bucket", category: trimmed } };
+        const normalizedCategory = resolveCategoryCasing(category, bucketCategoriesInUse(state.tasks));
+        if (!normalizedCategory) return;
+        const task: Task = { ...current, scope: { kind: "bucket", category: normalizedCategory } };
         dispatch({ type: "updated", task });
         repo.update(task).catch(handleSyncFailure);
       },
@@ -370,20 +369,6 @@ export function TasksProvider({
         const task: Task = {
           ...current,
           subtasks: current.subtasks.filter((s) => s.id !== subtaskId),
-        };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
-      },
-      editSubtaskTitle(id, subtaskId, title) {
-        const current = state.tasks.find((t) => t.id === id);
-        if (!current?.subtasks) return;
-        const trimmed = title.trim();
-        if (!trimmed) return;
-        const task: Task = {
-          ...current,
-          subtasks: current.subtasks.map((s) =>
-            s.id === subtaskId ? { ...s, title: trimmed } : s,
-          ),
         };
         dispatch({ type: "updated", task });
         repo.update(task).catch(handleSyncFailure);
