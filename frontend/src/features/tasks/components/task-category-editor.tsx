@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useState } from "react";
 
 export function TaskCategoryEditor({
   category,
@@ -12,14 +12,25 @@ export function TaskCategoryEditor({
   onCategoryChange: (category: string) => void;
 }) {
   const listId = useId();
+  // Controlled, not defaultValue: the drawer swaps between bucket tasks
+  // in place (no remount), so this local draft must re-sync to `category`
+  // whenever it changes underneath us — otherwise the input keeps showing
+  // the previous task's category, and an unedited blur would silently
+  // recategorize the new task into the old one's value.
+  const [value, setValue] = useState(category);
+  useEffect(() => {
+    setValue(category);
+  }, [category]);
+
   return (
     <label className="flex flex-col gap-1.5">
       <span className="text-[11px] font-medium text-subtle">Category</span>
       <input
         type="text"
         list={listId}
-        defaultValue={category}
+        value={value}
         maxLength={60}
+        onChange={(e) => setValue(e.target.value)}
         onBlur={(e) => {
           const trimmed = e.target.value.trim();
           if (trimmed && trimmed !== category) onCategoryChange(trimmed);

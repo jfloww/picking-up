@@ -339,6 +339,30 @@ describe("TaskDetailFields bucket category", () => {
     expect(screen.getByRole("button", { name: "Background" })).toBeTruthy();
   });
 
+  it("re-syncs the Category input's displayed value when the drawer switches to a different bucket task without unmounting", () => {
+    const { rerender } = render(
+      <TaskDetailFields
+        task={makeTask({ id: "a", scope: { kind: "bucket", category: "To Eat" } })}
+        {...noopHandlers}
+        bucketCategories={["To Eat", "To Go"]}
+        onCategoryChange={() => {}}
+      />,
+    );
+    expect((screen.getByLabelText("Category") as HTMLInputElement).value).toBe("To Eat");
+
+    // Re-render in place (no unmount) with a different bucket task, the way
+    // TaskDetailDrawer swaps tasks while staying open.
+    rerender(
+      <TaskDetailFields
+        task={makeTask({ id: "b", scope: { kind: "bucket", category: "To Go" } })}
+        {...noopHandlers}
+        bucketCategories={["To Eat", "To Go"]}
+        onCategoryChange={() => {}}
+      />,
+    );
+    expect((screen.getByLabelText("Category") as HTMLInputElement).value).toBe("To Go");
+  });
+
   it("calls onCategoryChange when the category is edited", () => {
     const onCategoryChange = vi.fn();
     render(
