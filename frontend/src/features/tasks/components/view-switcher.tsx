@@ -6,13 +6,14 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export const VIEWS = ["daily", "weekly", "monthly"] as const;
+export const VIEWS = ["daily", "weekly", "monthly", "bucket"] as const;
 export type ViewKind = (typeof VIEWS)[number];
 
 const VIEW_LABELS: Record<ViewKind, string> = {
   daily: "Daily",
   weekly: "Weekly",
   monthly: "Monthly",
+  bucket: "Bucket List",
 };
 
 export function ViewSwitcher({
