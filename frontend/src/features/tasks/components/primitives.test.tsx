@@ -24,6 +24,7 @@ const noopHandlers = {
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
   onRemoveSubtask: (_id: string) => {},
+  onEditSubtaskTitle: (_id: string, _title: string) => {},
 };
 
 describe("QuickAdd", () => {
@@ -612,6 +613,7 @@ describe("SubtaskList", () => {
         onAdd={onAdd}
         onToggle={onToggle}
         onRemove={onRemove}
+        onEditTitle={() => {}}
       />,
     );
     fireEvent.click(screen.getByLabelText("Toggle buy wood"));

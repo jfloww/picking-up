@@ -2,7 +2,8 @@ export type Scope =
   | { kind: "day"; date: string }
   | { kind: "week"; weekStart: string }
   | { kind: "month"; month: string }
-  | { kind: "year"; year: string };
+  | { kind: "year"; year: string }
+  | { kind: "bucket"; category: string };
 
 export interface Subtask {
   id: string;
@@ -40,5 +41,7 @@ export function scopeKey(scope: Scope): string {
       return `month:${scope.month}`;
     case "year":
       return `year:${scope.year}`;
+    case "bucket":
+      return `bucket:${scope.category}`;
   }
 }

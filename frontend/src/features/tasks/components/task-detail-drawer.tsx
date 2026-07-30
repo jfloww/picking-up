@@ -6,10 +6,10 @@ import { Trash2, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
-import type { Task } from "../types";
+import { completedAtLabel } from "../lib/dates";
+import type { Scope, Task } from "../types";
 import { DONE_CHECKBOX_CLASS } from "./task-item";
 import { TaskDetailFields } from "./task-detail-fields";
-import { TaskTimeEditor } from "./task-time-editor";
 
 interface Draft {
   done: boolean;
@@ -21,6 +21,7 @@ interface Draft {
   repeatWeekdays: number[];
   detached: boolean;
   dueDate?: string;
+  category?: string;
 }
 
 function draftFromTask(task: Task): Draft {
@@ -34,6 +35,7 @@ function draftFromTask(task: Task): Draft {
     repeatWeekdays: task.repeatWeekdays ?? [],
     detached: false,
     dueDate: task.dueDate,
+    category: task.scope.kind === "bucket" ? task.scope.category : undefined,
   };
 }
 
@@ -53,6 +55,9 @@ export function TaskDetailDrawer({
   onAddSubtask,
   onToggleSubtask,
   onRemoveSubtask,
+  onEditSubtaskTitle,
+  bucketCategories = [],
+  onCategoryChange,
   upcomingRepeatDates,
 }: {
   task: Task;
@@ -70,6 +75,9 @@ export function TaskDetailDrawer({
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
+  onEditSubtaskTitle: (subtaskId: string, title: string) => void;
+  bucketCategories?: string[];
+  onCategoryChange?: (category: string) => void;
   upcomingRepeatDates?: string[];
 }) {
   const [visible, setVisible] = useState(false);
@@ -115,6 +123,13 @@ export function TaskDetailDrawer({
     if (draft.priority !== !!task.priority) onPriorityChange(draft.priority);
     if (draft.background !== !!task.background) onBackgroundChange(draft.background);
     if (draft.dueDate !== task.dueDate) onDueDateChange(draft.dueDate);
+    if (
+      task.scope.kind === "bucket" &&
+      draft.category !== undefined &&
+      draft.category !== task.scope.category
+    ) {
+      onCategoryChange?.(draft.category);
+    }
     const original = task.repeatWeekdays ?? [];
     const weekdaysChanged =
       draft.repeatWeekdays.length !== original.length ||
@@ -127,10 +142,15 @@ export function TaskDetailDrawer({
     onClose();
   };
 
-  const { detached, ...draftFields } = draft;
+  const { detached, category: draftCategory, ...draftFields } = draft;
+  const draftScope: Scope =
+    task.scope.kind === "bucket" && draftCategory !== undefined
+      ? { kind: "bucket", category: draftCategory }
+      : task.scope;
   const draftTask: Task = {
     ...task,
     ...draftFields,
+    scope: draftScope,
     repeatSourceId: detached ? undefined : task.repeatSourceId,
   };
 
@@ -139,7 +159,7 @@ export function TaskDetailDrawer({
       data-testid="task-detail-drawer"
       aria-label="Task details"
       className={cn(
-        "fixed inset-y-0 right-0 z-50 flex w-[400px] max-w-full flex-col border-l border-border bg-card shadow-2xl transition-transform duration-200 ease-out",
+        "fixed inset-y-0 right-0 z-50 flex w-[420px] max-w-full flex-col border-l border-border bg-card shadow-2xl transition-transform duration-200 ease-out",
         visible ? "translate-x-0" : "translate-x-full",
       )}
     >
@@ -157,15 +177,15 @@ export function TaskDetailDrawer({
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 space-y-8 overflow-y-auto p-8">
+      <div className="thin-scrollbar min-h-0 flex-1 space-y-7 overflow-y-auto p-8">
         <div className="flex items-start gap-3" data-testid="task-detail-header">
           <Checkbox
             checked={draft.done}
             onCheckedChange={() => setDraft((d) => ({ ...d, done: !d.done }))}
             aria-label={`Toggle ${task.title}`}
-            className={cn("mt-1 size-[18px]", DONE_CHECKBOX_CLASS)}
+            className={cn("mt-1 size-[18px] border-subtle", DONE_CHECKBOX_CLASS)}
           />
-          <div className="min-w-0 flex-1 space-y-3">
+          <div className="min-w-0 flex-1 space-y-1">
             <h2
               className={cn(
                 "text-[22px] leading-tight font-bold tracking-tight",
@@ -174,15 +194,9 @@ export function TaskDetailDrawer({
             >
               {task.title}
             </h2>
-            <TaskTimeEditor
-              time={draft.time}
-              onTimeChange={(time) => setDraft((d) => ({ ...d, time }))}
-              durationMinutes={draft.durationMinutes}
-              onDurationChange={(durationMinutes) =>
-                setDraft((d) => ({ ...d, durationMinutes }))
-              }
-              variant="drawer"
-            />
+            {task.done && task.completedAt && (
+              <p className="text-xs text-subtle">Completed {completedAtLabel(task.completedAt)}</p>
+            )}
           </div>
         </div>
 
@@ -201,26 +215,29 @@ export function TaskDetailDrawer({
           onAddSubtask={onAddSubtask}
           onToggleSubtask={onToggleSubtask}
           onRemoveSubtask={onRemoveSubtask}
-          showTime={false}
+          onEditSubtaskTitle={onEditSubtaskTitle}
+          bucketCategories={bucketCategories}
+          onCategoryChange={(category) => setDraft((d) => ({ ...d, category }))}
+          showTime={task.scope.kind !== "bucket"}
           showDelete={false}
           variant="drawer"
         />
       </div>
 
-      <footer className="flex shrink-0 items-center gap-3 border-t border-border bg-background/20 p-6">
+      <footer className="flex shrink-0 items-center gap-3 border-t border-border bg-background/20 px-8 py-6">
         {confirmingDelete ? (
           <>
             <button
               type="button"
               onClick={() => setConfirmingDelete(false)}
-              className="h-10 flex-1 rounded-lg border border-border bg-transparent px-4 text-sm font-medium text-subtle transition-colors hover:bg-muted/70 hover:text-foreground"
+              className="h-10 flex-1 rounded-lg border border-border bg-transparent px-4 text-sm font-medium text-subtle transition-colors duration-200 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={onDelete}
-              className="h-10 flex-1 rounded-lg border border-destructive/40 bg-destructive/10 px-4 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20"
+              className="h-10 flex-1 rounded-lg border border-destructive/40 bg-destructive/10 px-4 text-sm font-medium text-destructive transition-colors duration-200 hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/50"
             >
               Confirm delete
             </button>
@@ -230,14 +247,14 @@ export function TaskDetailDrawer({
             <button
               type="button"
               onClick={onClose}
-              className="h-10 flex-1 rounded-lg border border-border bg-transparent px-4 text-sm font-medium text-subtle transition-colors hover:bg-muted/70 hover:text-foreground"
+              className="h-10 flex-1 rounded-lg border border-border bg-transparent px-4 text-sm font-medium text-subtle transition-colors duration-200 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleDone}
-              className="h-10 flex-1 rounded-lg border border-border bg-muted px-4 text-sm font-medium transition-colors hover:bg-muted/70"
+              className="h-10 flex-1 rounded-lg border border-transparent bg-brand px-4 text-sm font-medium text-primary-foreground transition-colors duration-200 hover:bg-brand/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               Done
             </button>
@@ -245,7 +262,7 @@ export function TaskDetailDrawer({
               type="button"
               onClick={() => setConfirmingDelete(true)}
               aria-label="Delete task"
-              className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive transition-colors hover:bg-destructive/20"
+              className="flex size-10 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/50 focus-visible:bg-destructive/10 focus-visible:text-destructive"
             >
               <Trash2 className="size-4" />
               <span className="sr-only">Delete</span>

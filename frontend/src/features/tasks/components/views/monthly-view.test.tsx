@@ -160,23 +160,13 @@ describe("MonthlyView", () => {
     expect(screen.queryByTestId("task-detail-drawer")).toBeNull();
   });
 
-  describe("Month Goals section", () => {
-    it("shows a month-scoped task's title", async () => {
-      const goal = makeTask({
-        title: "ship the redesign",
-        scope: { kind: "month", month: "2026-07" },
-      });
-      renderView(vi.fn(), [goal]);
-      await waitFor(() => expect(screen.getByText("Month Goals")).toBeTruthy());
-      expect(screen.getByText("ship the redesign")).toBeTruthy();
+  it("does not show a Month Goals section", async () => {
+    const goal = makeTask({
+      title: "ship the redesign",
+      scope: { kind: "month", month: "2026-07" },
     });
-
-    it("has a quick-add input for adding a new month-scoped task", async () => {
-      renderView();
-      await waitFor(() => expect(screen.getByText("Month Goals")).toBeTruthy());
-      // No day-agenda drawer is open at this point, so this is the only
-      // quick-add input on the page.
-      expect(screen.getByLabelText("Add task")).toBeTruthy();
-    });
+    renderView(vi.fn(), [goal]);
+    await waitFor(() => expect(screen.getByText("This Month")).toBeTruthy());
+    expect(screen.queryByText("Month Goals")).toBeNull();
   });
 });

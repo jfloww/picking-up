@@ -31,6 +31,8 @@ interface TaskItemActions {
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
+  editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
+  setCategory: (id: string, category: string) => void;
 }
 
 function formatHourMinute(hour: number, minute: number): string {
@@ -77,6 +79,9 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onAddSubtask: (title: string) => actions.addSubtask(id, title),
     onToggleSubtask: (subtaskId: string) => actions.toggleSubtask(id, subtaskId),
     onRemoveSubtask: (subtaskId: string) => actions.removeSubtask(id, subtaskId),
+    onEditSubtaskTitle: (subtaskId: string, title: string) =>
+      actions.editSubtaskTitle(id, subtaskId, title),
+    onCategoryChange: (category: string) => actions.setCategory(id, category),
   };
 }
 
@@ -99,6 +104,7 @@ export function TaskItem({
   onAddSubtask,
   onToggleSubtask,
   onRemoveSubtask,
+  onEditSubtaskTitle,
   onSelect,
 }: {
   task: Task;
@@ -119,6 +125,7 @@ export function TaskItem({
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
+  onEditSubtaskTitle: (subtaskId: string, title: string) => void;
   onSelect?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -320,6 +327,7 @@ export function TaskItem({
             onAddSubtask={onAddSubtask}
             onToggleSubtask={onToggleSubtask}
             onRemoveSubtask={onRemoveSubtask}
+            onEditSubtaskTitle={onEditSubtaskTitle}
           />
         </div>
       )}

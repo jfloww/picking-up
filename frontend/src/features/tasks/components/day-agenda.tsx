@@ -102,7 +102,7 @@ export function DayAgenda({
                 renderCard(
                   t,
                   isViewingToday
-                    ? isPastToday(t.time!, date, today, currentTime)
+                    ? isPastToday(t.time!, date, today, currentTime, t.durationMinutes)
                       ? "overdue"
                       : "pending"
                     : undefined,

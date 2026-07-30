@@ -302,6 +302,7 @@ describe("DailyView drag-to-schedule (cross-column)", () => {
     const originalTop = screen.getByTestId("chip-t").style.top;
 
     fireEvent.click(within(screen.getByTestId("hour-rail")).getByRole("button", { name: "dentist" }));
+    fireEvent.click(await screen.findByText("Add a note…"));
     const memo = await screen.findByPlaceholderText("Memo");
 
     fireEvent.pointerDown(memo, { pointerId: 1, clientX: 10, clientY: 200 });

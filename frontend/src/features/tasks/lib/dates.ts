@@ -159,6 +159,13 @@ export function isOverdue(dueDate: string, today: string): boolean {
   return dueDate < today;
 }
 
+export function completedAtLabel(completedAt: string): string {
+  const d = new Date(completedAt);
+  const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return `${date} at ${time}`;
+}
+
 export function dueDateLabel(dueDate: string, today: string): string {
   const diff = daysBetween(today, dueDate);
   if (diff === 0) return "Due Today";

@@ -19,6 +19,8 @@ const noopHandlers = {
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
   onRemoveSubtask: (_id: string) => {},
+  onEditSubtaskTitle: (_id: string, _title: string) => {},
+  onCategoryChange: (_category: string) => {},
 };
 
 describe("TaskDetailDrawer", () => {
@@ -43,7 +45,7 @@ describe("TaskDetailDrawer", () => {
     render(<TaskDetailDrawer task={task} {...noopHandlers} />);
     const drawer = screen.getByTestId("task-detail-drawer");
     expect(drawer.className).toContain("fixed");
-    expect(drawer.className).toContain("w-[400px]");
+    expect(drawer.className).toContain("w-[420px]");
     expect(screen.getByText("Task Details")).toBeTruthy();
     expect(screen.getByText("Done")).toBeTruthy();
     expect(screen.getByText("Cancel")).toBeTruthy();
@@ -61,6 +63,40 @@ describe("TaskDetailDrawer", () => {
     );
   });
 
+  describe("completion date/time", () => {
+    it("shows when the task was completed, for a done task", () => {
+      const doneTask = makeTask({
+        id: "c",
+        title: "shipped it",
+        done: true,
+        completedAt: "2026-07-16T13:45:00.000Z",
+      });
+      render(<TaskDetailDrawer task={doneTask} {...noopHandlers} />);
+      const expected = new Date("2026-07-16T13:45:00.000Z");
+      const expectedDate = expected.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const expectedTime = expected.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      expect(screen.getByText(`Completed ${expectedDate} at ${expectedTime}`)).toBeTruthy();
+    });
+
+    it("shows nothing for a not-done task, even if it has a stale completedAt", () => {
+      const task = makeTask({ id: "n", title: "not done", done: false, completedAt: "2026-07-16T13:45:00.000Z" });
+      render(<TaskDetailDrawer task={task} {...noopHandlers} />);
+      expect(screen.queryByText(/^Completed/)).toBeNull();
+    });
+
+    it("shows nothing for a done task with no completedAt recorded", () => {
+      const doneTask = makeTask({ id: "d", title: "done, no timestamp", done: true });
+      render(<TaskDetailDrawer task={doneTask} {...noopHandlers} />);
+      expect(screen.queryByText(/^Completed/)).toBeNull();
+    });
+
+    it("does not show a preview based on an uncommitted checkbox toggle in the drawer", () => {
+      render(<TaskDetailDrawer task={task} {...noopHandlers} />);
+      fireEvent.click(screen.getByRole("checkbox"));
+      expect(screen.queryByText(/^Completed/)).toBeNull();
+    });
+  });
+
   it("removes its Escape listener on unmount", () => {
     const onClose = vi.fn();
     const { unmount } = render(
@@ -71,13 +107,13 @@ describe("TaskDetailDrawer", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("shows a time input in the header and doesn't duplicate it below", () => {
+  it("shows exactly one time input, not duplicated", () => {
     const timedTask = makeTask({ id: "a", title: "write tests", time: "14:00" });
     render(<TaskDetailDrawer task={timedTask} {...noopHandlers} />);
     expect(screen.getAllByLabelText("Task time")).toHaveLength(1);
   });
 
-  it("shows a duration select in the header, next to the time, and doesn't duplicate it below", () => {
+  it("shows exactly one duration select, next to the time, not duplicated", () => {
     const timedTask = makeTask({ id: "a", title: "write tests", time: "14:00" });
     render(<TaskDetailDrawer task={timedTask} {...noopHandlers} />);
     expect(screen.getAllByLabelText("Task duration")).toHaveLength(1);
@@ -113,6 +149,7 @@ describe("TaskDetailDrawer", () => {
       fireEvent.click(screen.getByRole("button", { name: "Background" }));
       fireEvent.change(screen.getByLabelText("Task duration"), { target: { value: "45" } });
       fireEvent.change(screen.getByLabelText("Task time"), { target: { value: "10:30" } });
+      fireEvent.click(screen.getByText("Add a note…"));
       fireEvent.change(screen.getByPlaceholderText("Memo"), { target: { value: "updated" } });
       fireEvent.blur(screen.getByPlaceholderText("Memo"));
       fireEvent.click(screen.getByLabelText("Repeat on Monday"));
@@ -447,10 +484,294 @@ describe("TaskDetailDrawer", () => {
     it("calls onAddSubtask immediately, not deferred to Done", () => {
       const onAddSubtask = vi.fn();
       render(<TaskDetailDrawer task={task} {...noopHandlers} onAddSubtask={onAddSubtask} />);
-      const input = screen.getByLabelText("Add subtask");
+      const input = screen.getByLabelText("Add a subtask");
       fireEvent.change(input, { target: { value: "buy wood" } });
       fireEvent.submit(input.closest("form")!);
       expect(onAddSubtask).toHaveBeenCalledWith("buy wood");
     });
+
+    it("keeps the add-subtask input ready for another entry after submitting (does not lose focus/clear the form)", () => {
+      const onAddSubtask = vi.fn();
+      render(<TaskDetailDrawer task={task} {...noopHandlers} onAddSubtask={onAddSubtask} />);
+      const input = screen.getByLabelText("Add a subtask") as HTMLInputElement;
+      fireEvent.change(input, { target: { value: "buy wood" } });
+      fireEvent.submit(input.closest("form")!);
+      expect(input.value).toBe("");
+      expect(screen.getByLabelText("Add a subtask")).toBeTruthy();
+    });
+  });
+
+  describe("subtask rows (compact drawer layout)", () => {
+    const subtasksTask = makeTask({
+      id: "s",
+      title: "build shelf",
+      subtasks: [
+        { id: "s1", title: "measure wall", done: true },
+        { id: "s2", title: "buy wood", done: false },
+        { id: "s3", title: "cut boards", done: false },
+      ],
+    });
+
+    it("shows a completion summary and a progress line sized to it", () => {
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      expect(screen.getByText("1 / 3")).toBeTruthy();
+    });
+
+    it("shows no completion summary when there are no subtasks", () => {
+      render(<TaskDetailDrawer task={task} {...noopHandlers} />);
+      expect(screen.queryByText(/^\d+ \/ \d+$/)).toBeNull();
+    });
+
+    it("groups completed subtasks below active ones regardless of their order in the data", () => {
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      const titles = screen.getAllByText(/measure wall|buy wood|cut boards/).map((el) => el.textContent);
+      expect(titles).toEqual(["buy wood", "cut boards", "measure wall"]);
+    });
+
+    it("shows a completed subtask muted with strikethrough, not hidden", () => {
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      const completed = screen.getByText("measure wall");
+      expect(completed.className).toContain("line-through");
+      expect(completed.className).toContain("text-muted-foreground");
+    });
+
+    it("keeps completion toggling working from the compact row", () => {
+      const onToggleSubtask = vi.fn();
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} onToggleSubtask={onToggleSubtask} />);
+      fireEvent.click(screen.getByLabelText("Toggle buy wood"));
+      expect(onToggleSubtask).toHaveBeenCalledWith("s2");
+    });
+
+    it("does not show a permanent delete control — it's revealed only via hover/focus styling", () => {
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      const deleteButton = screen.getByLabelText("Delete buy wood");
+      expect(deleteButton.className).toContain("opacity-0");
+      expect(deleteButton.className).toContain("group-hover:opacity-100");
+      expect(deleteButton.className).toContain("group-focus-within:opacity-100");
+    });
+
+    it("clicking a subtask's title turns it into an editable input", () => {
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      fireEvent.click(screen.getByText("buy wood"));
+      expect(screen.getByLabelText("Edit buy wood")).toBeTruthy();
+    });
+
+    it("commits the new title via onEditSubtaskTitle when Enter is pressed", () => {
+      const onEditSubtaskTitle = vi.fn();
+      render(
+        <TaskDetailDrawer task={subtasksTask} {...noopHandlers} onEditSubtaskTitle={onEditSubtaskTitle} />,
+      );
+      fireEvent.click(screen.getByText("buy wood"));
+      const input = screen.getByLabelText("Edit buy wood");
+      fireEvent.change(input, { target: { value: "buy pine wood" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(onEditSubtaskTitle).toHaveBeenCalledWith("s2", "buy pine wood");
+      expect(screen.queryByLabelText("Edit buy wood")).toBeNull();
+    });
+
+    it("commits the new title on blur too", () => {
+      const onEditSubtaskTitle = vi.fn();
+      render(
+        <TaskDetailDrawer task={subtasksTask} {...noopHandlers} onEditSubtaskTitle={onEditSubtaskTitle} />,
+      );
+      fireEvent.click(screen.getByText("buy wood"));
+      const input = screen.getByLabelText("Edit buy wood");
+      fireEvent.change(input, { target: { value: "buy pine wood" } });
+      fireEvent.blur(input);
+      expect(onEditSubtaskTitle).toHaveBeenCalledWith("s2", "buy pine wood");
+    });
+
+    it("Escape cancels the edit without calling onEditSubtaskTitle, restoring the original title", () => {
+      const onEditSubtaskTitle = vi.fn();
+      render(
+        <TaskDetailDrawer task={subtasksTask} {...noopHandlers} onEditSubtaskTitle={onEditSubtaskTitle} />,
+      );
+      fireEvent.click(screen.getByText("buy wood"));
+      const input = screen.getByLabelText("Edit buy wood");
+      fireEvent.change(input, { target: { value: "something else entirely" } });
+      fireEvent.keyDown(input, { key: "Escape" });
+      expect(onEditSubtaskTitle).not.toHaveBeenCalled();
+      expect(screen.getByText("buy wood")).toBeTruthy();
+    });
+
+    it("does not call onEditSubtaskTitle when the title is unchanged", () => {
+      const onEditSubtaskTitle = vi.fn();
+      render(
+        <TaskDetailDrawer task={subtasksTask} {...noopHandlers} onEditSubtaskTitle={onEditSubtaskTitle} />,
+      );
+      fireEvent.click(screen.getByText("buy wood"));
+      fireEvent.keyDown(screen.getByLabelText("Edit buy wood"), { key: "Enter" });
+      expect(onEditSubtaskTitle).not.toHaveBeenCalled();
+    });
+
+    it("toggling a completed subtask un-completes it", () => {
+      const onToggleSubtask = vi.fn();
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} onToggleSubtask={onToggleSubtask} />);
+      fireEvent.click(screen.getByLabelText("Toggle measure wall"));
+      expect(onToggleSubtask).toHaveBeenCalledWith("s1");
+    });
+
+    it("deletes a subtask via its hover-revealed delete control", () => {
+      const onRemoveSubtask = vi.fn();
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} onRemoveSubtask={onRemoveSubtask} />);
+      fireEvent.click(screen.getByLabelText("Delete buy wood"));
+      expect(onRemoveSubtask).toHaveBeenCalledWith("s2");
+    });
+
+    it("adds several subtasks in a row with Enter, without losing focus or requiring a re-click", () => {
+      const onAddSubtask = vi.fn();
+      render(<TaskDetailDrawer task={task} {...noopHandlers} onAddSubtask={onAddSubtask} />);
+      const input = screen.getByLabelText("Add a subtask") as HTMLInputElement;
+
+      fireEvent.change(input, { target: { value: "first" } });
+      fireEvent.submit(input.closest("form")!);
+      fireEvent.change(input, { target: { value: "second" } });
+      fireEvent.submit(input.closest("form")!);
+      fireEvent.change(input, { target: { value: "third" } });
+      fireEvent.submit(input.closest("form")!);
+
+      expect(onAddSubtask.mock.calls.map((c) => c[0])).toEqual(["first", "second", "third"]);
+      expect(input.value).toBe("");
+    });
+
+    it("gives the selected weekday and Priority/Background controls a blue-tinted selected state, distinct from their unselected styling", () => {
+      const priorityTask = makeTask({
+        id: "p",
+        title: "priority task",
+        priority: true,
+        scope: { kind: "day", date: "2026-07-16" },
+        repeatWeekdays: [1],
+      });
+      render(<TaskDetailDrawer task={priorityTask} {...noopHandlers} />);
+
+      const priorityButton = screen.getByRole("button", { name: "Priority" });
+      expect(priorityButton.className).toContain("border-brand");
+      expect(priorityButton.className).toContain("text-brand");
+
+      const backgroundButton = screen.getByRole("button", { name: "Background" });
+      expect(backgroundButton.className).not.toContain("border-brand");
+
+      const selectedWeekday = screen.getByLabelText("Repeat on Monday");
+      expect(selectedWeekday.className).toContain("border-brand");
+      const unselectedWeekday = screen.getByLabelText("Repeat on Tuesday");
+      expect(unselectedWeekday.className).not.toContain("border-brand");
+    });
+  });
+
+  describe("notes (collapsed when empty, expandable)", () => {
+    it("shows a compact 'Add a note…' row instead of a textarea when memo is empty", () => {
+      const emptyMemoTask = makeTask({ id: "n", title: "no notes yet" });
+      render(<TaskDetailDrawer task={emptyMemoTask} {...noopHandlers} />);
+      expect(screen.getByText("Add a note…")).toBeTruthy();
+      expect(screen.queryByPlaceholderText("Memo")).toBeNull();
+    });
+
+    it("expands to the textarea when the compact row is clicked", () => {
+      const emptyMemoTask = makeTask({ id: "n", title: "no notes yet" });
+      render(<TaskDetailDrawer task={emptyMemoTask} {...noopHandlers} />);
+      fireEvent.click(screen.getByText("Add a note…"));
+      expect(screen.queryByText("Add a note…")).toBeNull();
+      expect(screen.getByPlaceholderText("Memo")).toBeTruthy();
+    });
+
+    it("saves the note after expanding, typing, and blurring", () => {
+      const onMemoChange = vi.fn();
+      const emptyMemoTask = makeTask({ id: "n", title: "no notes yet" });
+      render(<TaskDetailDrawer task={emptyMemoTask} {...noopHandlers} onMemoChange={onMemoChange} />);
+      fireEvent.click(screen.getByText("Add a note…"));
+      const textarea = screen.getByPlaceholderText("Memo");
+      fireEvent.change(textarea, { target: { value: "remember the receipt" } });
+      fireEvent.blur(textarea);
+      fireEvent.click(screen.getByText("Done"));
+      expect(onMemoChange).toHaveBeenCalledWith("remember the receipt");
+    });
+
+    it("shows the textarea directly, already expanded, when a note already exists", () => {
+      const notedTask = makeTask({ id: "n", title: "has notes", memo: "already written" });
+      render(<TaskDetailDrawer task={notedTask} {...noopHandlers} />);
+      expect(screen.queryByText("Add a note…")).toBeNull();
+      expect((screen.getByPlaceholderText("Memo") as HTMLTextAreaElement).value).toBe(
+        "already written",
+      );
+    });
+
+    it("gives the Add a note icon an amber accent on hover/focus, quiet otherwise (creation semantic)", () => {
+      const emptyMemoTask = makeTask({ id: "n", title: "no notes yet" });
+      render(<TaskDetailDrawer task={emptyMemoTask} {...noopHandlers} />);
+      const row = screen.getByText("Add a note…").closest("button")!;
+      const icon = row.querySelector("svg")!;
+      const classTokens = (icon.getAttribute("class") ?? "").split(/\s+/);
+      expect(classTokens).toContain("group-hover:text-amber");
+      expect(classTokens).not.toContain("text-amber"); // never amber unconditionally, only on hover/focus
+    });
+  });
+
+  it("gives the Add a subtask icon an amber accent on hover/focus, quiet otherwise (creation semantic)", () => {
+    render(<TaskDetailDrawer task={task} {...noopHandlers} />);
+    const input = screen.getByLabelText("Add a subtask");
+    const row = input.closest("div.group")!;
+    const icon = row.querySelector("svg")!;
+    expect(icon.getAttribute("class")).toContain("group-hover:text-amber");
+    expect(icon.getAttribute("class")).toContain("group-focus-within:text-amber");
+  });
+});
+
+describe("bucket-scoped task", () => {
+  const bucketTask = makeTask({
+    id: "bk",
+    title: "try that new ramen place",
+    scope: { kind: "bucket", category: "To Eat" },
+  });
+
+  it("hides Start, Duration, and Repeat", () => {
+    render(<TaskDetailDrawer task={bucketTask} {...noopHandlers} />);
+    expect(screen.queryByLabelText("Task time")).toBeNull();
+    expect(screen.queryByLabelText("Task duration")).toBeNull();
+    expect(screen.queryByLabelText("Repeat on Monday")).toBeNull();
+  });
+
+  it("still shows Due date, Priority, Background, Subtasks, and Notes", () => {
+    render(<TaskDetailDrawer task={bucketTask} {...noopHandlers} />);
+    expect(screen.getByLabelText("Due date")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Priority" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Background" })).toBeTruthy();
+    expect(screen.getByText("Subtasks")).toBeTruthy();
+    expect(screen.getByText("Add a note…")).toBeTruthy();
+  });
+
+  it("shows the Category field and buffers edits until Done, like every other field", () => {
+    const onCategoryChange = vi.fn();
+    render(
+      <TaskDetailDrawer
+        task={bucketTask}
+        {...noopHandlers}
+        bucketCategories={["To Eat", "To Go"]}
+        onCategoryChange={onCategoryChange}
+      />,
+    );
+    const input = screen.getByLabelText("Category");
+    fireEvent.change(input, { target: { value: "To Go" } });
+    fireEvent.blur(input);
+    expect(onCategoryChange).not.toHaveBeenCalled(); // buffered, not committed yet
+
+    fireEvent.click(screen.getByText("Done"));
+    expect(onCategoryChange).toHaveBeenCalledWith("To Go");
+  });
+
+  it("Cancel discards an edited category without calling onCategoryChange", () => {
+    const onCategoryChange = vi.fn();
+    render(
+      <TaskDetailDrawer
+        task={bucketTask}
+        {...noopHandlers}
+        bucketCategories={["To Eat", "To Go"]}
+        onCategoryChange={onCategoryChange}
+      />,
+    );
+    const input = screen.getByLabelText("Category");
+    fireEvent.change(input, { target: { value: "To Go" } });
+    fireEvent.blur(input);
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(onCategoryChange).not.toHaveBeenCalled();
   });
 });

@@ -16,6 +16,7 @@ import { todayKey } from "./lib/dates";
 import { isValidTime } from "./lib/times";
 import { rolloverTasks } from "./lib/rollover";
 import { materializeRoutines } from "./lib/routines";
+import { bucketCategoriesInUse, resolveCategoryCasing } from "./lib/categories";
 import type { Scope, Task } from "./types";
 
 const SYNC_ERROR_MESSAGE = "Something didn't save. Reconnecting to check what's saved…";
@@ -75,6 +76,9 @@ interface TasksContextValue extends TasksState {
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
+  editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
+  addBucketItem: (title: string, category: string) => Task | undefined;
+  setCategory: (id: string, category: string) => void;
   dismissSyncError: () => void;
 }
 
@@ -188,6 +192,21 @@ export function TasksProvider({
           title: trimmed,
           done: false,
           scope,
+          createdAt: new Date().toISOString(),
+        };
+        dispatch({ type: "added", task });
+        repo.create(task).catch(handleSyncFailure);
+        return task;
+      },
+      addBucketItem(title, category) {
+        const trimmed = title.trim();
+        const normalizedCategory = resolveCategoryCasing(category, bucketCategoriesInUse(state.tasks));
+        if (!trimmed || !normalizedCategory) return undefined;
+        const task: Task = {
+          id: crypto.randomUUID(),
+          title: trimmed,
+          done: false,
+          scope: { kind: "bucket", category: normalizedCategory },
           createdAt: new Date().toISOString(),
         };
         dispatch({ type: "added", task });
@@ -309,6 +328,15 @@ export function TasksProvider({
         dispatch({ type: "updated", task });
         repo.update(task).catch(handleSyncFailure);
       },
+      setCategory(id, category) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current || current.scope.kind !== "bucket") return;
+        const normalizedCategory = resolveCategoryCasing(category, bucketCategoriesInUse(state.tasks));
+        if (!normalizedCategory) return;
+        const task: Task = { ...current, scope: { kind: "bucket", category: normalizedCategory } };
+        dispatch({ type: "updated", task });
+        repo.update(task).catch(handleSyncFailure);
+      },
       addSubtask(id, title) {
         const current = state.tasks.find((t) => t.id === id);
         if (!current) return;
@@ -342,6 +370,20 @@ export function TasksProvider({
         const task: Task = {
           ...current,
           subtasks: current.subtasks.filter((s) => s.id !== subtaskId),
+        };
+        dispatch({ type: "updated", task });
+        repo.update(task).catch(handleSyncFailure);
+      },
+      editSubtaskTitle(id, subtaskId, title) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current?.subtasks) return;
+        const trimmed = title.trim();
+        if (!trimmed) return;
+        const task: Task = {
+          ...current,
+          subtasks: current.subtasks.map((s) =>
+            s.id === subtaskId ? { ...s, title: trimmed } : s,
+          ),
         };
         dispatch({ type: "updated", task });
         repo.update(task).catch(handleSyncFailure);

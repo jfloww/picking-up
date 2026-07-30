@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addDays,
+  completedAtLabel,
   dayLabel,
   dayOfMonth,
   dueDateLabel,
@@ -197,6 +198,24 @@ describe("dueDateLabel", () => {
 
   it("returns a short date, not a weekday, for an already-past due date", () => {
     expect(dueDateLabel("2026-07-14", "2026-07-16")).toBe("Due Jul 14"); // 2 days ago
+  });
+});
+
+describe("completedAtLabel", () => {
+  // Built from a local Date, not a hardcoded string, so the expectation
+  // holds regardless of the test runner's timezone.
+  it("formats an ISO timestamp as a short date and time, joined with 'at'", () => {
+    const d = new Date(2026, 6, 30, 13, 45); // local: Jul 30, 2026, 1:45 PM
+    const expectedDate = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const expectedTime = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    expect(completedAtLabel(d.toISOString())).toBe(`${expectedDate} at ${expectedTime}`);
+  });
+
+  it("formats a morning timestamp correctly (AM boundary)", () => {
+    const d = new Date(2026, 0, 5, 9, 5); // local: Jan 5, 2026, 9:05 AM
+    const expectedDate = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const expectedTime = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    expect(completedAtLabel(d.toISOString())).toBe(`${expectedDate} at ${expectedTime}`);
   });
 });
 

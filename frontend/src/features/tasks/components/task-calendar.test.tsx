@@ -22,8 +22,9 @@ describe("shiftAnchor", () => {
     expect(shiftAnchor("monthly", "2026-01-16", -1)).toBe("2025-12-01"); // crosses a year boundary
   });
 
-  it("yearly pages by year, keeping the month", () => {
-    expect(shiftAnchor("yearly", "2026-07-16", -1)).toBe("2025-07-01");
+  it("bucket has no anchor to page through — shiftAnchor is a no-op", () => {
+    expect(shiftAnchor("bucket", "2026-07-16", 1)).toBe("2026-07-16");
+    expect(shiftAnchor("bucket", "2026-07-16", -1)).toBe("2026-07-16");
   });
 });
 
@@ -41,9 +42,6 @@ describe("TaskCalendar", () => {
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: "Weekly", selected: true })).toBeTruthy(),
     );
-    // Yearly is temporarily hidden from the tab bar (view-switcher.tsx's
-    // VISIBLE_VIEWS) — it isn't reachable via a tab click right now, so
-    // this test only exercises the tabs that still are.
   });
 
   describe("fixed sub-header", () => {
@@ -80,6 +78,16 @@ describe("TaskCalendar", () => {
       fireEvent.click(screen.getByRole("tab", { name: "Monthly" }));
       await waitFor(() => expect(screen.getByText("July 2026")).toBeTruthy());
     });
+  });
+
+  it("switches to the Bucket List tab and shows its content", async () => {
+    render(<TaskCalendar repository={fakeRepository()} />);
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Bucket List" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("tab", { name: "Bucket List" }));
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Bucket List", selected: true })).toBeTruthy(),
+    );
+    expect(screen.getByText("Your bucket list is empty")).toBeTruthy();
   });
 });
 

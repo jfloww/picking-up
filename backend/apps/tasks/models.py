@@ -7,6 +7,7 @@ SCOPE_KIND_CHOICES = [
     ("week", "week"),
     ("month", "month"),
     ("year", "year"),
+    ("bucket", "bucket"),
 ]
 
 
@@ -19,7 +20,7 @@ class Task(models.Model):
     memo = models.TextField(blank=True, null=True)
     done = models.BooleanField(default=False)
     scope_kind = models.CharField(max_length=10, choices=SCOPE_KIND_CHOICES)
-    scope_value = models.CharField(max_length=20)
+    scope_value = models.CharField(max_length=60)
     rolled_from_kind = models.CharField(
         max_length=10, blank=True, null=True, choices=SCOPE_KIND_CHOICES
     )

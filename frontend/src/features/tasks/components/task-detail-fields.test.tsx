@@ -16,6 +16,7 @@ const noopHandlers = {
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
   onRemoveSubtask: (_id: string) => {},
+  onEditSubtaskTitle: (_id: string, _title: string) => {},
   onDueDateChange: (_dueDate?: string) => {},
 };
 
@@ -290,5 +291,91 @@ describe("TaskDetailFields due date", () => {
     );
     fireEvent.change(screen.getByLabelText("Due date"), { target: { value: "2026-07-31" } });
     expect(onDueDateChange).toHaveBeenCalledWith("2026-07-31");
+  });
+});
+
+describe("TaskDetailFields bucket category", () => {
+  it("shows the Category field for a bucket-scoped task", () => {
+    render(
+      <TaskDetailFields
+        task={makeTask({ scope: { kind: "bucket", category: "To Eat" } })}
+        {...noopHandlers}
+        bucketCategories={["To Eat", "To Go"]}
+        onCategoryChange={() => {}}
+      />,
+    );
+    expect((screen.getByLabelText("Category") as HTMLInputElement).value).toBe("To Eat");
+  });
+
+  it("hides the Category field for a non-bucket task", () => {
+    render(<TaskDetailFields task={makeTask({})} {...noopHandlers} />);
+    expect(screen.queryByLabelText("Category")).toBeNull();
+  });
+
+  it("hides Start/Duration for a bucket-scoped task even when showTime is true", () => {
+    render(
+      <TaskDetailFields
+        task={makeTask({ scope: { kind: "bucket", category: "To Do" }, time: "09:00" })}
+        {...noopHandlers}
+        showTime
+      />,
+    );
+    expect(screen.queryByLabelText("Task time")).toBeNull();
+  });
+
+  it("hides Repeat for a bucket-scoped task", () => {
+    render(
+      <TaskDetailFields task={makeTask({ scope: { kind: "bucket", category: "To Do" } })} {...noopHandlers} />,
+    );
+    expect(screen.queryByLabelText("Repeat on Monday")).toBeNull();
+  });
+
+  it("still shows Due date, Priority, and Background for a bucket-scoped task", () => {
+    render(
+      <TaskDetailFields task={makeTask({ scope: { kind: "bucket", category: "To Do" } })} {...noopHandlers} />,
+    );
+    expect(screen.getByLabelText("Due date")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Priority" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Background" })).toBeTruthy();
+  });
+
+  it("re-syncs the Category input's displayed value when the drawer switches to a different bucket task without unmounting", () => {
+    const { rerender } = render(
+      <TaskDetailFields
+        task={makeTask({ id: "a", scope: { kind: "bucket", category: "To Eat" } })}
+        {...noopHandlers}
+        bucketCategories={["To Eat", "To Go"]}
+        onCategoryChange={() => {}}
+      />,
+    );
+    expect((screen.getByLabelText("Category") as HTMLInputElement).value).toBe("To Eat");
+
+    // Re-render in place (no unmount) with a different bucket task, the way
+    // TaskDetailDrawer swaps tasks while staying open.
+    rerender(
+      <TaskDetailFields
+        task={makeTask({ id: "b", scope: { kind: "bucket", category: "To Go" } })}
+        {...noopHandlers}
+        bucketCategories={["To Eat", "To Go"]}
+        onCategoryChange={() => {}}
+      />,
+    );
+    expect((screen.getByLabelText("Category") as HTMLInputElement).value).toBe("To Go");
+  });
+
+  it("calls onCategoryChange when the category is edited", () => {
+    const onCategoryChange = vi.fn();
+    render(
+      <TaskDetailFields
+        task={makeTask({ scope: { kind: "bucket", category: "To Eat" } })}
+        {...noopHandlers}
+        bucketCategories={["To Eat"]}
+        onCategoryChange={onCategoryChange}
+      />,
+    );
+    const input = screen.getByLabelText("Category");
+    fireEvent.change(input, { target: { value: "To Read" } });
+    fireEvent.blur(input);
+    expect(onCategoryChange).toHaveBeenCalledWith("To Read");
   });
 });

@@ -34,6 +34,8 @@ function scopeValueOf(scope: Scope): string {
       return scope.month;
     case "year":
       return scope.year;
+    case "bucket":
+      return scope.category;
   }
 }
 
@@ -47,6 +49,8 @@ function scopeFromParts(kind: ScopeKind, value: string): Scope {
       return { kind: "month", month: value };
     case "year":
       return { kind: "year", year: value };
+    case "bucket":
+      return { kind: "bucket", category: value };
   }
 }
 

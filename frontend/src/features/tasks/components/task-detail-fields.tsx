@@ -1,12 +1,13 @@
 "use client";
 
-import { Layers, RotateCw, Star } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { Layers, Plus, RotateCw, Star } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
 import type { Task } from "../types";
 import { SubtaskList } from "./subtask-list";
+import { TaskCategoryEditor } from "./task-category-editor";
 import { TaskDueDateEditor } from "./task-due-date-editor";
 import { TaskRepeatPicker } from "./task-repeat-picker";
 import { TaskTimeEditor } from "./task-time-editor";
@@ -25,6 +26,9 @@ export function TaskDetailFields({
   onAddSubtask,
   onToggleSubtask,
   onRemoveSubtask,
+  onEditSubtaskTitle,
+  bucketCategories = [],
+  onCategoryChange,
   showTime = true,
   showDelete = true,
   variant = "default",
@@ -43,6 +47,9 @@ export function TaskDetailFields({
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
+  onEditSubtaskTitle: (subtaskId: string, title: string) => void;
+  bucketCategories?: string[];
+  onCategoryChange?: (category: string) => void;
   showTime?: boolean;
   showDelete?: boolean;
   variant?: "default" | "drawer";
@@ -50,25 +57,124 @@ export function TaskDetailFields({
 }) {
   const subtasks = task.subtasks ?? [];
   const drawer = variant === "drawer";
-  const showRepeat = task.repeatWeekdays !== undefined || task.scope.kind === "day";
+  const showRepeat =
+    task.scope.kind !== "bucket" && (task.repeatWeekdays !== undefined || task.scope.kind === "day");
   // Note: checked against length, not `!== undefined` — TaskDetailDrawer's
   // buffered draft always spreads repeatWeekdays as an array (defaulting to
   // []) for a non-routine task, so an emptiness check (not just definedness)
   // is required for this to correctly detect non-routine tasks there too.
   const isRoutine = (task.repeatWeekdays?.length ?? 0) > 0 || task.repeatSourceId !== undefined;
   const memoRef = useRef<HTMLTextAreaElement>(null);
+  // Sticky once opened: starts expanded only if there's already a note, so
+  // clearing the text mid-edit never yanks the textarea away from under the
+  // person typing. Reset (not just lazily initialized) on task switch, same
+  // as TaskDetailDrawer's own draft/confirmingDelete state below.
+  const [notesExpanded, setNotesExpanded] = useState(drawer ? !!task.memo : true);
+
+  useEffect(() => {
+    setNotesExpanded(drawer ? !!task.memo : true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task.id]);
 
   useEffect(() => {
     const el = memoRef.current;
-    if (drawer && el) {
+    if (drawer && el && notesExpanded) {
       el.style.height = "auto";
       el.style.height = `${el.scrollHeight}px`;
     }
-  }, [drawer]);
+  }, [drawer, notesExpanded]);
 
-  return (
-    <div className={cn(drawer ? "space-y-7" : "space-y-1.5")}>
-      {showTime && (
+  const subtaskTotal = subtasks.length;
+  const subtaskDone = subtasks.filter((s) => s.done).length;
+
+  const notesSection = (
+    <section className={cn(drawer && "space-y-3")}>
+      {drawer && (
+        <h4 className="text-[11px] font-semibold tracking-[0.14em] text-subtle uppercase">
+          Notes
+        </h4>
+      )}
+      {drawer && !notesExpanded ? (
+        <button
+          type="button"
+          onClick={() => setNotesExpanded(true)}
+          className="group flex h-10 w-full items-center gap-2.5 rounded-md px-1.5 text-left text-sm text-foreground/70 outline-none transition-colors duration-200 hover:bg-muted/40 hover:text-foreground focus-visible:bg-muted/40 focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <Plus
+            className="size-3.5 shrink-0 transition-colors duration-200 group-hover:text-amber group-focus-visible:text-amber"
+            aria-hidden
+          />
+          Add a note…
+        </button>
+      ) : (
+        <textarea
+          ref={memoRef}
+          autoFocus={drawer && !task.memo}
+          defaultValue={task.memo ?? ""}
+          onBlur={(e) => onMemoChange(e.target.value)}
+          onInput={
+            drawer
+              ? (e) => {
+                  const el = e.currentTarget;
+                  el.style.height = "auto";
+                  el.style.height = `${el.scrollHeight}px`;
+                }
+              : undefined
+          }
+          placeholder="Memo"
+          rows={drawer ? 3 : 2}
+          className={cn(
+            "w-full resize-none rounded-md border border-input bg-transparent p-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+            drawer && "overflow-hidden rounded-lg bg-muted/30 p-3 text-sm leading-relaxed",
+          )}
+        />
+      )}
+    </section>
+  );
+
+  const subtasksSection = (
+    <section className={cn(drawer && "space-y-3 border-t border-border pt-7")}>
+      {drawer && (
+        <div className="flex items-center justify-between">
+          <h4 className="text-[11px] font-semibold tracking-[0.14em] text-subtle uppercase">
+            Subtasks
+          </h4>
+          {subtaskTotal > 0 && (
+            <span className="text-[11px] font-medium text-subtle">
+              {subtaskDone} / {subtaskTotal}
+            </span>
+          )}
+        </div>
+      )}
+      {drawer && subtaskTotal > 0 && (
+        <div
+          role="progressbar"
+          aria-label="Subtasks completed"
+          aria-valuenow={subtaskDone}
+          aria-valuemin={0}
+          aria-valuemax={subtaskTotal}
+          className="h-0.5 w-full overflow-hidden rounded-full bg-border"
+        >
+          <div
+            className="h-full rounded-full bg-brand transition-[width] duration-200 ease-out"
+            style={{ width: `${(subtaskDone / subtaskTotal) * 100}%` }}
+          />
+        </div>
+      )}
+      <SubtaskList
+        subtasks={subtasks}
+        onAdd={onAddSubtask}
+        onToggle={onToggleSubtask}
+        onRemove={onRemoveSubtask}
+        onEditTitle={onEditSubtaskTitle}
+        drawer={drawer}
+      />
+    </section>
+  );
+
+  const schedulingCluster = (
+    <div className={cn(drawer ? "space-y-[22px]" : "space-y-1.5")}>
+      {showTime && task.scope.kind !== "bucket" && (
         <TaskTimeEditor
           time={task.time}
           onTimeChange={onTimeChange}
@@ -78,7 +184,7 @@ export function TaskDetailFields({
         />
       )}
       {showRepeat && (
-        <section className={cn(drawer && "space-y-3")}>
+        <section className={cn(drawer && "space-y-2.5")}>
           {drawer && (
             <h4 className="text-[11px] font-semibold tracking-[0.14em] text-subtle uppercase">
               Repeat
@@ -112,11 +218,21 @@ export function TaskDetailFields({
       )}
 
       {!isRoutine && (
-        <section className={cn(drawer && "space-y-3")}>
+        <section className={cn(drawer && "space-y-2.5")}>
           <TaskDueDateEditor
             dueDate={task.dueDate}
             onDueDateChange={onDueDateChange}
             variant={variant}
+          />
+        </section>
+      )}
+
+      {task.scope.kind === "bucket" && (
+        <section className={cn(drawer && "space-y-2.5")}>
+          <TaskCategoryEditor
+            category={task.scope.category}
+            categories={bucketCategories}
+            onCategoryChange={(category) => onCategoryChange?.(category)}
           />
         </section>
       )}
@@ -127,11 +243,18 @@ export function TaskDetailFields({
           onClick={() => onPriorityChange(!task.priority)}
           aria-pressed={!!task.priority}
           className={cn(
-            "flex w-fit items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium transition-colors",
+            "flex w-fit items-center gap-1 rounded-full border font-medium transition-colors",
+            drawer ? "gap-1.5 px-3.5 py-2 text-sm duration-200" : "px-2 py-1 text-xs",
             task.priority
-              ? "border-transparent bg-brand text-primary-foreground"
-              : "border-border bg-transparent text-subtle hover:border-subtle hover:text-foreground",
-            drawer && "px-3.5 py-2 text-sm",
+              ? drawer
+                ? "border-brand bg-brand/15 text-brand"
+                : "border-transparent bg-brand text-primary-foreground"
+              : cn(
+                  "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
+                  drawer
+                    ? "border-border bg-muted/40 text-foreground/80 hover:border-subtle hover:bg-muted/70"
+                    : "border-border bg-transparent text-subtle hover:border-subtle",
+                ),
           )}
         >
           <Star className={cn("size-3", drawer && "size-3.5", task.priority && "fill-current")} />
@@ -142,60 +265,42 @@ export function TaskDetailFields({
           onClick={() => onBackgroundChange(!task.background)}
           aria-pressed={!!task.background}
           className={cn(
-            "flex w-fit items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium transition-colors",
+            "flex w-fit items-center gap-1 rounded-full border font-medium transition-colors",
+            drawer ? "gap-1.5 px-3.5 py-2 text-sm duration-200" : "px-2 py-1 text-xs",
             task.background
-              ? "border-transparent bg-brand text-primary-foreground"
-              : "border-border bg-transparent text-subtle hover:border-subtle hover:text-foreground",
-            drawer && "px-3.5 py-2 text-sm",
+              ? drawer
+                ? "border-brand bg-brand/15 text-brand"
+                : "border-transparent bg-brand text-primary-foreground"
+              : cn(
+                  "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
+                  drawer
+                    ? "border-border bg-muted/40 text-foreground/80 hover:border-subtle hover:bg-muted/70"
+                    : "border-border bg-transparent text-subtle hover:border-subtle",
+                ),
           )}
         >
           <Layers className={cn("size-3", drawer && "size-3.5", task.background && "fill-current")} />
           Background
         </button>
       </div>
+    </div>
+  );
 
-      <section className={cn(drawer && "space-y-3")}>
-        {drawer && (
-          <h4 className="text-[11px] font-semibold tracking-[0.14em] text-subtle uppercase">
-            Notes
-          </h4>
-        )}
-        <textarea
-          ref={memoRef}
-          defaultValue={task.memo ?? ""}
-          onBlur={(e) => onMemoChange(e.target.value)}
-          onInput={
-            drawer
-              ? (e) => {
-                  const el = e.currentTarget;
-                  el.style.height = "auto";
-                  el.style.height = `${el.scrollHeight}px`;
-                }
-              : undefined
-          }
-          placeholder="Memo"
-          rows={drawer ? 3 : 2}
-          className={cn(
-            "w-full resize-none rounded-md border border-input bg-transparent p-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-            drawer && "overflow-hidden rounded-lg bg-muted/30 p-3 text-sm leading-relaxed",
-          )}
-        />
-      </section>
+  return (
+    <div className={cn(drawer ? "space-y-7" : "space-y-1.5")}>
+      {schedulingCluster}
 
-      <section className={cn(drawer && "space-y-3 border-t border-border pt-7")}>
-        {drawer && (
-          <h4 className="text-[11px] font-semibold tracking-[0.14em] text-subtle uppercase">
-            Subtasks
-          </h4>
-        )}
-        <SubtaskList
-          subtasks={subtasks}
-          onAdd={onAddSubtask}
-          onToggle={onToggleSubtask}
-          onRemove={onRemoveSubtask}
-          drawer={drawer}
-        />
-      </section>
+      {drawer ? (
+        <>
+          {subtasksSection}
+          {notesSection}
+        </>
+      ) : (
+        <>
+          {notesSection}
+          {subtasksSection}
+        </>
+      )}
 
       {showDelete && (
         <button

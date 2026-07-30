@@ -12,6 +12,13 @@ const authRoutes = ["/login", "/signup"];
 // Not protected and not an auth form — but still needs a fresh access
 // token so the header can show the correct signed-in state. Never redirects.
 const refreshOnlyRoutes = ["/"];
+// The task API proxy routes: these are hit directly by client-side fetches
+// while the user stays on /planner (no page navigation), so they never
+// otherwise pass through this middleware's refresh check. Without this, an
+// access token that expires mid-session (ACCESS_TOKEN_LIFETIME is 15
+// minutes) makes the next task edit fail with a stale-token 401 instead of
+// silently refreshing.
+const refreshOnlyPrefixes = ["/api/tasks"];
 const API_BASE_URL = process.env.DJANGO_API_BASE_URL ?? "http://localhost:8000";
 
 // Decode-only: the edge does not verify the signature, it just avoids
@@ -49,7 +56,9 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
   const isAuthRoute = authRoutes.includes(pathname);
-  const isRefreshOnlyRoute = refreshOnlyRoutes.includes(pathname);
+  const isRefreshOnlyRoute =
+    refreshOnlyRoutes.includes(pathname) ||
+    refreshOnlyPrefixes.some((prefix) => pathname.startsWith(prefix));
 
   if (!isProtectedRoute && !isAuthRoute && !isRefreshOnlyRoute) {
     return NextResponse.next();

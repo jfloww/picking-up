@@ -560,6 +560,44 @@ describe("TasksProvider", () => {
     });
   });
 
+  describe("bucket list actions", () => {
+    it("addBucketItem trims the title, normalizes category casing, and rejects a blank title or category", async () => {
+      const existing = makeTask({
+        id: "existing",
+        scope: { kind: "bucket", category: "To Eat" },
+      });
+      const { repo, result } = setup(fakeRepository([existing]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => {
+        result.current.addBucketItem("  try the new ramen place  ", "to eat"); // case-insensitive match
+      });
+      await waitFor(() => expect(result.current.tasks).toHaveLength(2));
+      const created = result.current.tasks.find((t) => t.id !== "existing")!;
+      expect(created.title).toBe("try the new ramen place");
+      expect(created.scope).toEqual({ kind: "bucket", category: "To Eat" }); // reused existing casing
+      await waitFor(() => expect(repo.tasks).toHaveLength(2));
+
+      act(() => result.current.addBucketItem("   ", "To Go"));
+      expect(result.current.tasks).toHaveLength(2); // blank title rejected
+
+      act(() => result.current.addBucketItem("valid title", "   "));
+      expect(result.current.tasks).toHaveLength(2); // blank category rejected
+    });
+
+    it("setCategory moves a task to a new category and normalizes casing to match existing categories", async () => {
+      const task1 = makeTask({ id: "a", scope: { kind: "bucket", category: "To Go" } });
+      const task2 = makeTask({ id: "b", scope: { kind: "bucket", category: "To Eat" } });
+      const { repo, result } = setup(fakeRepository([task1, task2]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      // Move to a new category with different casing, should match existing "To Eat" and reuse its casing
+      act(() => result.current.setCategory("a", "to eat"));
+      expect(result.current.tasks[0].scope).toEqual({ kind: "bucket", category: "To Eat" });
+      await waitFor(() => expect(repo.tasks[0].scope).toEqual({ kind: "bucket", category: "To Eat" }));
+    });
+  });
+
   describe("priority action", () => {
     it("setPriority sets and clears the flag", async () => {
       const task = makeTask({ id: "a", scope: { kind: "day", date: todayKey() } });
