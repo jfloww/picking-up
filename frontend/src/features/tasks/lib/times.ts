@@ -235,6 +235,9 @@ export function isPastToday(
   date: string,
   today: string,
   nowTime: string,
+  durationMinutes?: number,
 ): boolean {
-  return date === today && time < nowTime;
+  if (date !== today) return false;
+  const endTime = durationMinutes ? addMinutesToTime(time, durationMinutes) : time;
+  return endTime < nowTime;
 }

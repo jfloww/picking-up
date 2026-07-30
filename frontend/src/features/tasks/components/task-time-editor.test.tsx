@@ -86,4 +86,33 @@ describe("TaskTimeEditor", () => {
     const [first, second] = screen.getAllByLabelText("Task duration") as HTMLInputElement[];
     expect(first.list!.id).not.toBe(second.list!.id);
   });
+
+  describe("drawer variant", () => {
+    it("lays out Start narrower than Duration, roughly 38/62, not an even 50/50 split", () => {
+      render(<TaskTimeEditor time="14:00" {...noopHandlers} variant="drawer" />);
+      const grid = screen.getByLabelText("Task time").closest("div.grid");
+      expect(grid!.className).toContain("grid-cols-[minmax(0,3fr)_minmax(0,5fr)]");
+    });
+
+    it("has no separate 'Clear' text button — clearing lives inside the Duration field", () => {
+      render(<TaskTimeEditor time="14:00" {...noopHandlers} variant="drawer" />);
+      expect(screen.queryByText("Clear")).toBeNull();
+      expect(screen.getByLabelText("Clear duration")).toBeTruthy();
+    });
+
+    it("Clear duration clears the whole scheduled time, same as the old Clear button", () => {
+      const onTimeChange = vi.fn();
+      render(
+        <TaskTimeEditor time="14:00" {...noopHandlers} onTimeChange={onTimeChange} variant="drawer" />,
+      );
+      fireEvent.click(screen.getByLabelText("Clear duration"));
+      expect(onTimeChange).toHaveBeenCalledWith(undefined);
+    });
+
+    it("hides the Duration field and its clear control when no time is set", () => {
+      render(<TaskTimeEditor {...noopHandlers} variant="drawer" />);
+      expect(screen.queryByLabelText("Task duration")).toBeNull();
+      expect(screen.queryByLabelText("Clear duration")).toBeNull();
+    });
+  });
 });

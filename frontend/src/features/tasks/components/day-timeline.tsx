@@ -129,7 +129,7 @@ export function DayTimeline({
                 {backgroundTimed.map((t) => {
                   const highlight =
                     isToday && !t.done
-                      ? isPastToday(t.time!, date, today, currentTime)
+                      ? isPastToday(t.time!, date, today, currentTime, t.durationMinutes)
                         ? "overdue"
                         : "pending"
                       : undefined;
@@ -172,7 +172,7 @@ export function DayTimeline({
               {layoutTimedTasks(regularTimed).map(({ task: t, column, columns }) => {
                 const highlight =
                   isToday && !t.done
-                    ? isPastToday(t.time!, date, today, currentTime)
+                    ? isPastToday(t.time!, date, today, currentTime, t.durationMinutes)
                       ? "overdue"
                       : "pending"
                     : undefined;

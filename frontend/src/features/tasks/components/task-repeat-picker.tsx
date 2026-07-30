@@ -45,13 +45,16 @@ export function TaskRepeatPicker({
             aria-label={`Repeat on ${fullName}`}
             className={cn(
               "flex items-center justify-center rounded-md font-medium transition-colors",
-              drawer ? "size-8 text-xs" : "size-6 text-[10px]",
+              drawer
+                ? "size-8 border border-transparent text-xs duration-200 focus-visible:ring-2 focus-visible:ring-ring/50"
+                : "size-6 text-[10px]",
               active
-                ? "bg-brand font-semibold text-primary-foreground"
-                : cn(
-                    "bg-muted hover:bg-muted/70",
-                    drawer ? "text-muted-foreground" : "text-subtle",
-                  ),
+                ? drawer
+                  ? "border-brand bg-brand/15 font-semibold text-brand"
+                  : "bg-brand font-semibold text-primary-foreground"
+                : drawer
+                  ? "bg-muted/40 text-foreground/80 hover:border-subtle hover:bg-muted/70 hover:text-foreground"
+                  : "bg-muted text-subtle hover:bg-muted/70",
             )}
           >
             {label}

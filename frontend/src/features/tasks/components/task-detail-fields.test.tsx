@@ -16,6 +16,7 @@ const noopHandlers = {
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
   onRemoveSubtask: (_id: string) => {},
+  onEditSubtaskTitle: (_id: string, _title: string) => {},
   onDueDateChange: (_dueDate?: string) => {},
 };
 
