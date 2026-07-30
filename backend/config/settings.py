@@ -150,10 +150,10 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "verbose": {
-            # e.g. "2026-07-20 22:22:17 ERROR apps.accounts [apps.py:23] - Startup check ..."
-            "format": "{asctime} {levelname} {name} [{module}.py:{lineno}] - {message}",
+            # e.g. "[20260720 222217] ERROR - accounts.views.post:112 - Invalid Google credential."
+            "format": "[{asctime}] {levelname} - {module}.{funcName}:{lineno} - {message}",
             "style": "{",
-            "datefmt": "%Y-%m-%d %H:%M:%S",
+            "datefmt": "%Y%m%d %H%M%S",
         },
     },
     "handlers": {
