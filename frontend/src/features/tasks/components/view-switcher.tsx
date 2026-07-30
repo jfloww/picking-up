@@ -59,17 +59,19 @@ export function ViewSwitcher({
           ))}
         </div>
       </div>
-      <div className="flex shrink-0 items-center rounded-lg border border-border bg-card p-1">
-        <Button variant="ghost" size="icon" className="size-8" onClick={onPrev} aria-label="Previous">
-          <ChevronLeft />
-        </Button>
-        <Button variant="ghost" size="sm" className="h-8 px-3" onClick={onToday}>
-          Today
-        </Button>
-        <Button variant="ghost" size="icon" className="size-8" onClick={onNext} aria-label="Next">
-          <ChevronRight />
-        </Button>
-      </div>
+      {view !== "bucket" && (
+        <div className="flex shrink-0 items-center rounded-lg border border-border bg-card p-1">
+          <Button variant="ghost" size="icon" className="size-8" onClick={onPrev} aria-label="Previous">
+            <ChevronLeft />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-8 px-3" onClick={onToday}>
+            Today
+          </Button>
+          <Button variant="ghost" size="icon" className="size-8" onClick={onNext} aria-label="Next">
+            <ChevronRight />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
