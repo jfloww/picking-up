@@ -118,6 +118,14 @@ export function BucketListView(_props: CalendarViewProps) {
             ))}
           </datalist>
           {composerError && <p className="text-xs text-destructive">{composerError}</p>}
+          {/* No visible submit button by design, but a form with more than
+              one text field and no submit button suppresses a real browser's
+              implicit Enter-to-submit entirely (per the HTML Standard). This
+              sr-only button restores Enter-to-submit for every field without
+              changing the visual design. */}
+          <button type="submit" className="sr-only">
+            Add item
+          </button>
         </form>
       ) : (
         <button

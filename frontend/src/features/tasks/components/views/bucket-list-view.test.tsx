@@ -119,6 +119,25 @@ describe("BucketListView", () => {
     expect(screen.queryByText("climb Fuji")).toBeNull();
   });
 
+  it("includes a submit button in the general composer form, so a real browser's implicit Enter-to-submit isn't suppressed", async () => {
+    // The composer form has two text fields (title, category) and previously
+    // had no submit button. Per the HTML Standard's implicit-submission
+    // algorithm, a form with more than one text field and no submit button
+    // suppresses Enter-to-submit entirely in real browsers — jsdom does not
+    // emulate this suppression (verified separately: fireEvent.keyDown with
+    // Enter never triggers a submit in jsdom, button or no button), so the
+    // meaningful, browser-accurate assertion is structural: a submit button
+    // must exist in the DOM, since its mere presence is what restores
+    // Enter-to-submit for every field in the form.
+    renderView();
+    await waitFor(() => expect(screen.getByRole("button", { name: /add item/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /add item/i }));
+
+    const form = screen.getByLabelText("Item title").closest("form")!;
+    const submitButton = form.querySelector('button[type="submit"]');
+    expect(submitButton).not.toBeNull();
+  });
+
   it("reuses an existing category's casing when the general composer's category is a case-insensitive match", async () => {
     renderView([makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", category: "To Eat" } })]);
     await waitFor(() => expect(screen.getByText("To Eat")).toBeTruthy());
