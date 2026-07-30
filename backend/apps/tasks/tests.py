@@ -349,3 +349,30 @@ class TaskApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+
+class BucketScopeTests(TestCase):
+    def test_creates_and_fetches_a_bucket_scoped_task(self):
+        owner, client = auth_client("bucket@example.com")
+        payload = make_task_payload(
+            scope_kind="bucket",
+            scope_value="Restaurants to try before I leave Tokyo",  # 40 chars, > old 20-char limit
+        )
+        response = client.post("/api/tasks/", payload, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["scope_kind"], "bucket")
+        self.assertEqual(response.data["scope_value"], "Restaurants to try before I leave Tokyo")
+
+        get_response = client.get("/api/tasks/")
+        self.assertEqual(get_response.data[0]["scope_value"], "Restaurants to try before I leave Tokyo")
+
+    def test_updates_a_task_from_one_category_to_another(self):
+        owner, client = auth_client("bucket-update@example.com")
+        payload = make_task_payload(scope_kind="bucket", scope_value="To Go")
+        create_response = client.post("/api/tasks/", payload, format="json")
+        task_id = create_response.data["id"]
+
+        payload["scope_value"] = "To Eat"
+        update_response = client.put(f"/api/tasks/{task_id}/", payload, format="json")
+        self.assertEqual(update_response.status_code, 200)
+        self.assertEqual(update_response.data["scope_value"], "To Eat")
