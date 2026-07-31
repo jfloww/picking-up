@@ -10,7 +10,7 @@ describe("scopeKey", () => {
     expect(scopeKey({ kind: "year", year: "2026" })).toBe("year:2026");
   });
 
-  it("returns a category-based key for a bucket scope", () => {
-    expect(scopeKey({ kind: "bucket", category: "To Eat" })).toBe("bucket:To Eat");
+  it("returns a category-key for a bucket scope", () => {
+    expect(scopeKey({ kind: "bucket", categoryId: "cat-1" })).toBe("bucket:cat-1");
   });
 });

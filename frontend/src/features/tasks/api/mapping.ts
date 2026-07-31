@@ -9,6 +9,7 @@ export interface ApiTask {
   done: boolean;
   scope_kind: ScopeKind;
   scope_value: string;
+  bucket_category: string | null;
   rolled_from_kind: ScopeKind | null;
   rolled_from_value: string | null;
   created_at: string;
@@ -35,11 +36,14 @@ function scopeValueOf(scope: Scope): string {
     case "year":
       return scope.year;
     case "bucket":
-      return scope.category;
+      // Unused on the wire for bucket scope — bucket_category is the real
+      // reference. Kept as "" (not e.g. the category id) so scope_value
+      // never silently duplicates identity that could drift from the FK.
+      return "";
   }
 }
 
-function scopeFromParts(kind: ScopeKind, value: string): Scope {
+function scopeFromParts(kind: ScopeKind, value: string, bucketCategoryId: string | null): Scope {
   switch (kind) {
     case "day":
       return { kind: "day", date: value };
@@ -50,7 +54,12 @@ function scopeFromParts(kind: ScopeKind, value: string): Scope {
     case "year":
       return { kind: "year", year: value };
     case "bucket":
-      return { kind: "bucket", category: value };
+      // rolled_from_kind/rolled_from_value can theoretically be "bucket" per
+      // the type system, but nothing in this app ever rolls a bucket-scoped
+      // task over (rollover.ts only handles day/week/month) — unreachable
+      // in practice, so there's no rolled_from_bucket_category wire field to
+      // read here; bucketCategoryId is always null on that call path.
+      return { kind: "bucket", categoryId: bucketCategoryId ?? "" };
   }
 }
 
@@ -62,6 +71,7 @@ export function toApiPayload(task: Task): ApiTask {
     done: task.done,
     scope_kind: task.scope.kind,
     scope_value: scopeValueOf(task.scope),
+    bucket_category: task.scope.kind === "bucket" ? task.scope.categoryId : null,
     rolled_from_kind: task.rolledFrom?.kind ?? null,
     rolled_from_value: task.rolledFrom ? scopeValueOf(task.rolledFrom) : null,
     created_at: task.createdAt,
@@ -84,10 +94,10 @@ export function fromApiPayload(payload: ApiTask): Task {
     title: payload.title,
     memo: payload.memo ?? undefined,
     done: payload.done,
-    scope: scopeFromParts(payload.scope_kind, payload.scope_value),
+    scope: scopeFromParts(payload.scope_kind, payload.scope_value, payload.bucket_category),
     rolledFrom:
       payload.rolled_from_kind && payload.rolled_from_value
-        ? scopeFromParts(payload.rolled_from_kind, payload.rolled_from_value)
+        ? scopeFromParts(payload.rolled_from_kind, payload.rolled_from_value, null)
         : undefined,
     createdAt: payload.created_at,
     completedAt: payload.completed_at ?? undefined,

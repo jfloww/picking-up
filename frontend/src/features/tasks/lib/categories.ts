@@ -1,56 +1,39 @@
-import type { Task } from "../types";
-
-export function normalizeCategoryInput(input: string): string {
-  return input.trim();
-}
-
-// Case-insensitive match against categories already in use; returns the
-// EXISTING display casing on a match, or the trimmed input if it's new —
-// so "to eat" typed against an existing "To Eat" reuses "To Eat" rather
-// than creating a second, differently-cased category.
-export function resolveCategoryCasing(input: string, existingCategories: string[]): string {
-  const trimmed = normalizeCategoryInput(input);
-  const existing = existingCategories.find((c) => c.toLowerCase() === trimmed.toLowerCase());
-  return existing ?? trimmed;
-}
+import type { Category, Task } from "../types";
 
 export interface BucketCategoryGroup {
-  category: string;
+  categoryId: string;
+  categoryName: string;
   active: Task[];
   completed: Task[];
 }
 
-// One entry per distinct category among bucket-scoped tasks, ordered by the
-// earliest createdAt among that category's own tasks (not alphabetical).
+// One entry per saved Category (not per category-in-use) — an empty
+// category still produces a group with empty arrays. Ordered by the
+// category's own createdAt, ascending; never derived from task data.
 // Within each group: active tasks first, completed below, both in stable
 // creation order.
-export function groupBucketTasks(tasks: Task[]): BucketCategoryGroup[] {
+export function groupBucketTasks(tasks: Task[], categories: Category[]): BucketCategoryGroup[] {
   const bucketTasks = tasks.filter(
-    (t): t is Task & { scope: { kind: "bucket"; category: string } } => t.scope.kind === "bucket",
+    (t): t is Task & { scope: { kind: "bucket"; categoryId: string } } => t.scope.kind === "bucket",
   );
 
   const byCategory = new Map<string, Task[]>();
   for (const t of bucketTasks) {
-    const list = byCategory.get(t.scope.category) ?? [];
+    const list = byCategory.get(t.scope.categoryId) ?? [];
     list.push(t);
-    byCategory.set(t.scope.category, list);
+    byCategory.set(t.scope.categoryId, list);
   }
 
-  const withOrderKey = Array.from(byCategory.entries()).map(([category, items]) => {
+  const sortedCategories = [...categories].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  return sortedCategories.map((category) => {
+    const items = byCategory.get(category.id) ?? [];
     const sorted = [...items].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     return {
-      category,
+      categoryId: category.id,
+      categoryName: category.name,
       active: sorted.filter((t) => !t.done),
       completed: sorted.filter((t) => t.done),
-      earliestCreatedAt: sorted[0].createdAt,
     };
   });
-
-  withOrderKey.sort((a, b) => a.earliestCreatedAt.localeCompare(b.earliestCreatedAt));
-
-  return withOrderKey.map(({ category, active, completed }) => ({ category, active, completed }));
-}
-
-export function bucketCategoriesInUse(tasks: Task[]): string[] {
-  return groupBucketTasks(tasks).map((g) => g.category);
 }

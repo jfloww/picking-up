@@ -8,7 +8,7 @@ const SCOPE_FIELDS = {
   week: "weekStart",
   month: "month",
   year: "year",
-  bucket: "category",
+  bucket: "categoryId",
 } as const;
 
 export type TaskStorage = Pick<Storage, "getItem" | "setItem">;

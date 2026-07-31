@@ -10,6 +10,7 @@ const fullApiTask: ApiTask = {
   done: true,
   scope_kind: "day",
   scope_value: "2026-07-27",
+  bucket_category: null,
   rolled_from_kind: "day",
   rolled_from_value: "2026-07-20",
   created_at: "2026-07-27T00:00:00.000Z",
@@ -58,6 +59,7 @@ describe("fromApiPayload", () => {
       done: false,
       scope_kind: "week",
       scope_value: "2026-07-19",
+      bucket_category: null,
       rolled_from_kind: null,
       rolled_from_value: null,
       created_at: "2026-07-27T00:00:00.000Z",
@@ -134,13 +136,17 @@ describe("toApiPayload", () => {
   });
 
   it("round-trips a bucket-scoped task", () => {
-    const bucketTask: Task = {
+    const task: Task = {
       id: "b1",
-      title: "try that new ramen place",
+      title: "visit kyoto",
       done: false,
-      scope: { kind: "bucket", category: "To Eat" },
+      scope: { kind: "bucket", categoryId: "cat-1" },
       createdAt: "2026-07-30T00:00:00.000Z",
     };
-    expect(fromApiPayload(toApiPayload(bucketTask))).toEqual(bucketTask);
+    const payload = toApiPayload(task);
+    expect(payload.scope_kind).toBe("bucket");
+    expect(payload.scope_value).toBe("");
+    expect(payload.bucket_category).toBe("cat-1");
+    expect(fromApiPayload(payload)).toEqual(task);
   });
 });
