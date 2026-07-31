@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fromApiPayload, toApiPayload, type ApiTask } from "./mapping";
+import { categoryFromApiPayload, fromApiPayload, toApiPayload, type ApiTask } from "./mapping";
 import type { Task } from "../types";
 
 const fullApiTask: ApiTask = {
@@ -148,5 +148,16 @@ describe("toApiPayload", () => {
     expect(payload.scope_value).toBe("");
     expect(payload.bucket_category).toBe("cat-1");
     expect(fromApiPayload(payload)).toEqual(task);
+  });
+});
+
+describe("categoryFromApiPayload", () => {
+  it("maps an ApiCategory to a Category", () => {
+    const payload = { id: "cat-1", name: "To Eat", created_at: "2026-07-30T00:00:00.000Z" };
+    expect(categoryFromApiPayload(payload)).toEqual({
+      id: "cat-1",
+      name: "To Eat",
+      createdAt: "2026-07-30T00:00:00.000Z",
+    });
   });
 });

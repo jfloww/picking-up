@@ -1,4 +1,4 @@
-import type { Scope, Subtask, Task } from "../types";
+import type { Category, Scope, Subtask, Task } from "../types";
 
 type ScopeKind = Scope["kind"];
 
@@ -111,4 +111,14 @@ export function fromApiPayload(payload: ApiTask): Task {
     background: payload.background ?? undefined,
     dueDate: payload.due_date ?? undefined,
   };
+}
+
+export interface ApiCategory {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export function categoryFromApiPayload(payload: ApiCategory): Category {
+  return { id: payload.id, name: payload.name, createdAt: payload.created_at };
 }
