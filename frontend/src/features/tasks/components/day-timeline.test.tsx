@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { todayKey } from "../lib/dates";
 import { TasksProvider } from "../store";
-import { fakeRepository, makeTask } from "../test-utils";
+import { fakeCategoryRepository, fakeRepository, makeTask } from "../test-utils";
 import { DayTimeline, HOUR_HEIGHT } from "./day-timeline";
 
 beforeAll(() => {
@@ -29,7 +29,7 @@ function renderTimeline(
 ) {
   const railRef = { current: null } as React.RefObject<HTMLDivElement | null>;
   const utils = render(
-    <TasksProvider repository={fakeRepository(tasks)}>
+    <TasksProvider repository={fakeRepository(tasks)} categoryRepository={fakeCategoryRepository()}>
       <DayTimeline
         date={date}
         onSelectTask={onSelectTask}
@@ -314,7 +314,7 @@ describe("DayTimeline", () => {
   it("shows the drag preview line on the rail when dragState has a previewTime", async () => {
     const railRef = { current: null } as React.RefObject<HTMLDivElement | null>;
     render(
-      <TasksProvider repository={fakeRepository()}>
+      <TasksProvider repository={fakeRepository()} categoryRepository={fakeCategoryRepository()}>
         <DayTimeline
           date={todayKey()}
           railRef={railRef}

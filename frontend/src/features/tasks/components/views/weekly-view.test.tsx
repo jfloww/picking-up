@@ -2,14 +2,14 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider } from "../../store";
-import { fakeRepository, makeTask } from "../../test-utils";
+import { fakeCategoryRepository, fakeRepository, makeTask } from "../../test-utils";
 import { WeeklyView } from "./weekly-view";
 
 const ANCHOR = "2026-07-16"; // Thursday; week: 2026-07-12 .. 2026-07-18
 
 function renderView(onDrillDown = vi.fn(), tasks = [] as Parameters<typeof fakeRepository>[0]) {
   render(
-    <TasksProvider repository={fakeRepository(tasks)}>
+    <TasksProvider repository={fakeRepository(tasks)} categoryRepository={fakeCategoryRepository()}>
       <WeeklyView anchor={ANCHOR} onAnchorChange={vi.fn()} onDrillDown={onDrillDown} />
     </TasksProvider>,
   );

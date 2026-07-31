@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider } from "../store";
-import { fakeRepository, makeTask } from "../test-utils";
+import { fakeCategoryRepository, fakeRepository, makeTask } from "../test-utils";
 import { DayAgenda } from "./day-agenda";
 
 const ANCHOR = "2026-07-16"; // Thursday; "today" under the pinned clock below
@@ -30,7 +30,7 @@ function renderAgenda(
 ) {
   const agendaZoneRef = { current: null } as React.RefObject<HTMLDivElement | null>;
   return render(
-    <TasksProvider repository={fakeRepository(tasks)}>
+    <TasksProvider repository={fakeRepository(tasks)} categoryRepository={fakeCategoryRepository()}>
       <DayAgenda
         date={date}
         onSelectTask={onSelectTask}

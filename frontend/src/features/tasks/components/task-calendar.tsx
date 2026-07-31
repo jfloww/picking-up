@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Alert, AlertAction, AlertTitle } from "@/components/ui/alert";
+import type { CategoryRepository } from "../data/category-repository";
 import type { TaskRepository } from "../data/repository";
 import {
   addDays,
@@ -123,9 +124,15 @@ function CalendarInner() {
   );
 }
 
-export function TaskCalendar({ repository }: { repository?: TaskRepository } = {}) {
+export function TaskCalendar({
+  repository,
+  categoryRepository,
+}: {
+  repository?: TaskRepository;
+  categoryRepository?: CategoryRepository;
+} = {}) {
   return (
-    <TasksProvider repository={repository}>
+    <TasksProvider repository={repository} categoryRepository={categoryRepository}>
       <CalendarInner />
     </TasksProvider>
   );

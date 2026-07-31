@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { shiftAnchor, TaskCalendar } from "./task-calendar";
 import { todayKey } from "../lib/dates";
-import { fakeRepository, makeTask } from "../test-utils";
+import { fakeCategoryRepository, fakeRepository, makeTask } from "../test-utils";
 
 describe("shiftAnchor", () => {
   it("daily pages by one day", () => {
@@ -30,7 +30,7 @@ describe("shiftAnchor", () => {
 
 describe("TaskCalendar", () => {
   it("defaults to the Daily Focus Planner view and switches scales", async () => {
-    render(<TaskCalendar repository={fakeRepository()} />);
+    render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} />);
     await waitFor(() =>
       expect(
         screen.getByRole("tab", { name: "Daily", selected: true }),
@@ -54,7 +54,7 @@ describe("TaskCalendar", () => {
     });
 
     it("shows a date label matching the current view, and keeps tabs/nav/label together as one non-shrinking block", async () => {
-      render(<TaskCalendar repository={fakeRepository()} />);
+      render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} />);
       await waitFor(() => expect(screen.getByText("Week of Jul 12 – Jul 18")).toBeTruthy());
 
       const header = screen.getByText("Week of Jul 12 – Jul 18").closest("header");
@@ -73,7 +73,7 @@ describe("TaskCalendar", () => {
     });
 
     it("shows the month name and year as the header label when Monthly is the active view", async () => {
-      render(<TaskCalendar repository={fakeRepository()} />);
+      render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} />);
       await waitFor(() => expect(screen.getByRole("tab", { name: "Monthly" })).toBeTruthy());
       fireEvent.click(screen.getByRole("tab", { name: "Monthly" }));
       await waitFor(() => expect(screen.getByText("July 2026")).toBeTruthy());
@@ -81,7 +81,7 @@ describe("TaskCalendar", () => {
   });
 
   it("switches to the Bucket List tab and shows its content", async () => {
-    render(<TaskCalendar repository={fakeRepository()} />);
+    render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} />);
     await waitFor(() => expect(screen.getByRole("tab", { name: "Bucket List" })).toBeTruthy());
     fireEvent.click(screen.getByRole("tab", { name: "Bucket List" }));
     await waitFor(() =>
@@ -101,7 +101,7 @@ describe("drill-down navigation", () => {
   });
 
   it("double-clicking a Weekly day date switches to Daily anchored on that date", async () => {
-    render(<TaskCalendar repository={fakeRepository()} />);
+    render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} />);
     await waitFor(() => expect(screen.getByRole("tab", { name: "Weekly" })).toBeTruthy());
     fireEvent.click(screen.getByRole("tab", { name: "Weekly" }));
     await waitFor(() => expect(screen.getByLabelText("Go to 2026-07-14")).toBeTruthy());
@@ -120,7 +120,7 @@ describe("sync error banner", () => {
     const repo = fakeRepository([task]);
     vi.spyOn(repo, "update").mockRejectedValueOnce(new Error("down"));
 
-    render(<TaskCalendar repository={repo} />);
+    render(<TaskCalendar repository={repo} categoryRepository={fakeCategoryRepository()} />);
 
     await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
     fireEvent.click(screen.getAllByRole("checkbox")[0]);

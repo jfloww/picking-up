@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { todayKey, weekStartOf } from "../lib/dates";
 import { TasksProvider } from "../store";
-import { fakeRepository, makeTask } from "../test-utils";
+import { fakeCategoryRepository, fakeRepository, makeTask } from "../test-utils";
 import { DayAgendaDrawer } from "./day-agenda-drawer";
 
 function renderDrawer({
@@ -14,7 +14,7 @@ function renderDrawer({
   tasks = [] as Parameters<typeof fakeRepository>[0],
 } = {}) {
   render(
-    <TasksProvider repository={fakeRepository(tasks)}>
+    <TasksProvider repository={fakeRepository(tasks)} categoryRepository={fakeCategoryRepository()}>
       <DayAgendaDrawer
         date={date}
         onClose={onClose}
