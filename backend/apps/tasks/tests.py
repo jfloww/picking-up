@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import Task
+from .models import Category, Task
 
 
 User = get_user_model()
@@ -28,6 +28,7 @@ def make_task_payload(**overrides):
         "done": False,
         "scope_kind": "day",
         "scope_value": "2026-07-27",
+        "bucket_category": None,
         "rolled_from_kind": None,
         "rolled_from_value": None,
         "created_at": "2026-07-27T00:00:00.000Z",
@@ -354,25 +355,53 @@ class TaskApiTests(TestCase):
 class BucketScopeTests(TestCase):
     def test_creates_and_fetches_a_bucket_scoped_task(self):
         owner, client = auth_client("bucket@example.com")
-        payload = make_task_payload(
-            scope_kind="bucket",
-            scope_value="Restaurants to try before I leave Tokyo",  # 40 chars, > old 20-char limit
-        )
+        category = Category.objects.create(user=owner, name="To Eat")
+        payload = make_task_payload(scope_kind="bucket", scope_value="", bucket_category=str(category.id))
         response = client.post("/api/tasks/", payload, format="json")
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["scope_kind"], "bucket")
-        self.assertEqual(response.data["scope_value"], "Restaurants to try before I leave Tokyo")
+        self.assertEqual(response.data["bucket_category"], str(category.id))
 
         get_response = client.get("/api/tasks/")
-        self.assertEqual(get_response.data[0]["scope_value"], "Restaurants to try before I leave Tokyo")
+        self.assertEqual(get_response.data[0]["bucket_category"], str(category.id))
 
     def test_updates_a_task_from_one_category_to_another(self):
         owner, client = auth_client("bucket-update@example.com")
-        payload = make_task_payload(scope_kind="bucket", scope_value="To Go")
+        to_go = Category.objects.create(user=owner, name="To Go")
+        to_eat = Category.objects.create(user=owner, name="To Eat")
+        payload = make_task_payload(scope_kind="bucket", scope_value="", bucket_category=str(to_go.id))
         create_response = client.post("/api/tasks/", payload, format="json")
         task_id = create_response.data["id"]
 
-        payload["scope_value"] = "To Eat"
+        payload["bucket_category"] = str(to_eat.id)
         update_response = client.put(f"/api/tasks/{task_id}/", payload, format="json")
         self.assertEqual(update_response.status_code, 200)
-        self.assertEqual(update_response.data["scope_value"], "To Eat")
+        self.assertEqual(update_response.data["bucket_category"], str(to_eat.id))
+
+    def test_rejects_a_bucket_category_belonging_to_another_user(self):
+        owner, client = auth_client("bucket-owner@example.com")
+        other, _ = auth_client("bucket-other@example.com")
+        others_category = Category.objects.create(user=other, name="Not Yours")
+        payload = make_task_payload(
+            scope_kind="bucket", scope_value="", bucket_category=str(others_category.id),
+        )
+        response = client.post("/api/tasks/", payload, format="json")
+        self.assertEqual(response.status_code, 400)
+
+
+class CategoryModelTests(TestCase):
+    def test_two_users_can_each_have_a_category_with_the_same_name(self):
+        owner, _ = auth_client("cat-owner@example.com")
+        other, _ = auth_client("cat-other@example.com")
+        Category.objects.create(user=owner, name="To Eat")
+        Category.objects.create(user=other, name="To Eat")  # no IntegrityError
+
+        self.assertEqual(Category.objects.filter(name="To Eat").count(), 2)
+
+    def test_exact_duplicate_name_for_the_same_user_is_rejected_at_the_db_level(self):
+        from django.db import IntegrityError
+
+        owner, _ = auth_client("cat-dupe@example.com")
+        Category.objects.create(user=owner, name="To Eat")
+        with self.assertRaises(IntegrityError):
+            Category.objects.create(user=owner, name="To Eat")
