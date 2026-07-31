@@ -616,6 +616,29 @@ describe("TasksProvider", () => {
       expect(result.current.categories).toHaveLength(1);
     });
 
+    it("createCategory does not dispatch a duplicate when the repo's create-or-reuse resolves to an already-known category", async () => {
+      // fakeCategoryRepository.create() reuses an existing category on a
+      // case-insensitive name match (same as the real backend's
+      // create-or-reuse endpoint) and resolves to that SAME existing object
+      // — this exercises store.tsx's createCategory guard
+      // (`!state.categories.some((c) => c.id === category.id)`), which must
+      // recognize the returned category is already in state and skip
+      // dispatching "categoryAdded" a second time.
+      const existing = { id: "c-1", name: "To Eat", createdAt: "2026-07-01T00:00:00.000Z" };
+      const { categoryRepo, result } = setup(fakeRepository(), fakeCategoryRepository([existing]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      await waitFor(() => expect(result.current.categories).toHaveLength(1));
+
+      let reused: Category | undefined;
+      await act(async () => {
+        reused = await result.current.createCategory("to eat"); // case-insensitive match reuses "existing"
+      });
+      expect(reused?.id).toBe("c-1");
+      expect(result.current.categories).toHaveLength(1); // no duplicate added
+      expect(result.current.categories[0]).toEqual(existing);
+      expect(categoryRepo.categories).toHaveLength(1);
+    });
+
     it("renameCategory updates the category's name and reports success", async () => {
       const category = { id: "c-1", name: "To Go", createdAt: "2026-07-01T00:00:00.000Z" };
       const { categoryRepo, result } = setup(fakeRepository(), fakeCategoryRepository([category]));

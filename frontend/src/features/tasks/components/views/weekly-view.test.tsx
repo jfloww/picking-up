@@ -35,9 +35,13 @@ describe("WeeklyView", () => {
   it("shows the hero's done/total count, 0 when nothing is done", async () => {
     const a = makeTask({ title: "a", scope: { kind: "day", date: "2026-07-14" } });
     renderView(vi.fn(), [a]);
-    await waitFor(() => expect(screen.getByText("This Week")).toBeTruthy());
+    // "This Week" is a static label present on the very first render,
+    // before the store's initial-load promise resolves — waiting on it
+    // doesn't prove tasks have loaded. "/1" only appears once the task
+    // above has actually loaded and been counted (total starts at 0), so
+    // it's the assertion that should gate the wait, not a sibling one.
+    await waitFor(() => expect(screen.getByText("/1")).toBeTruthy());
     expect(screen.getByText("0")).toBeTruthy();
-    expect(screen.getByText("/1")).toBeTruthy();
   });
 
   it("counts a done task in the hero total", async () => {
@@ -48,11 +52,17 @@ describe("WeeklyView", () => {
   });
 
   it("excludes a task from another week from the hero count", async () => {
-    const outside = makeTask({ title: "outside", scope: { kind: "day", date: "2026-07-20" } });
-    renderView(vi.fn(), [outside]);
-    await waitFor(() => expect(screen.getByText("This Week")).toBeTruthy());
+    // Includes an in-week task too, not just the out-of-week one: with only
+    // the excluded task, the hero's final state (0/0) is identical to its
+    // pre-load state, so a waitFor on it can pass before the store has
+    // actually loaded anything — the in-week task gives "/1" a genuine
+    // load-dependent value to wait on, while still proving "outside" (which
+    // would push it to "/2") isn't counted.
+    const inWeek = makeTask({ id: "in", title: "in week", scope: { kind: "day", date: "2026-07-14" } });
+    const outside = makeTask({ id: "out", title: "outside", scope: { kind: "day", date: "2026-07-20" } });
+    renderView(vi.fn(), [inWeek, outside]);
+    await waitFor(() => expect(screen.getByText("/1")).toBeTruthy());
     expect(screen.getByText("0")).toBeTruthy();
-    expect(screen.getByText("/0")).toBeTruthy();
   });
 
   it("marks a past unfinished task overdue and today's unfinished task pending", async () => {
