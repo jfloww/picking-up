@@ -15,6 +15,7 @@ const apiTask: ApiTask = {
   done: false,
   scope_kind: "day",
   scope_value: "2026-07-27",
+  bucket_category: null,
   rolled_from_kind: null,
   rolled_from_value: null,
   created_at: "2026-07-27T00:00:00.000Z",
