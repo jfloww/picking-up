@@ -9,6 +9,13 @@ class SubtaskSerializer(serializers.Serializer):
     done = serializers.BooleanField()
 
 
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ("id", "name", "created_at")
+        read_only_fields = ("id", "created_at")
+
+
 class TaskSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField()
     memo = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)

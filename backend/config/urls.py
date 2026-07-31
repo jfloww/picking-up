@@ -3,7 +3,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.accounts.views import EmailTokenObtainPairView, GoogleTokenObtainView, LogoutView, MeView, RegisterView
-from apps.tasks.views import TaskDetailView, TaskListCreateView
+from apps.tasks.views import CategoryDetailView, CategoryListCreateView, TaskDetailView, TaskListCreateView
 
 
 urlpatterns = [
@@ -16,4 +16,6 @@ urlpatterns = [
     path("api/auth/me/", MeView.as_view(), name="me"),
     path("api/tasks/", TaskListCreateView.as_view(), name="task-list-create"),
     path("api/tasks/<uuid:pk>/", TaskDetailView.as_view(), name="task-detail"),
+    path("api/categories/", CategoryListCreateView.as_view(), name="category-list-create"),
+    path("api/categories/<uuid:pk>/", CategoryDetailView.as_view(), name="category-detail"),
 ]

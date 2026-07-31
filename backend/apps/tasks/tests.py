@@ -484,3 +484,97 @@ class BackfillBucketCategoriesMigrationTests(TransactionTestCase):
         executor.migrate([("tasks", None)])
         call_command_migrate = __import__("django.core.management", fromlist=["call_command"]).call_command
         call_command_migrate("migrate")
+
+
+class CategoryApiTests(TestCase):
+    def test_list_only_returns_the_authenticated_users_own_categories_ordered_by_created_at(self):
+        owner, owner_client = auth_client("cat-list-owner@example.com")
+        other, _ = auth_client("cat-list-other@example.com")
+        first = Category.objects.create(user=owner, name="To Go")
+        Category.objects.create(user=other, name="Not Mine")
+        second = Category.objects.create(user=owner, name="To Eat")
+
+        response = owner_client.get("/api/categories/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([c["id"] for c in response.data], [str(first.id), str(second.id)])
+
+    def test_create_makes_a_new_category(self):
+        owner, client = auth_client("cat-create@example.com")
+
+        response = client.post("/api/categories/", {"name": "  To Eat  "}, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["name"], "To Eat")
+        self.assertEqual(Category.objects.filter(user=owner).count(), 1)
+
+    def test_create_with_a_case_insensitive_duplicate_name_reuses_the_existing_category(self):
+        owner, client = auth_client("cat-create-dupe@example.com")
+        existing = Category.objects.create(user=owner, name="To Eat")
+
+        response = client.post("/api/categories/", {"name": "to eat"}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["id"], str(existing.id))
+        self.assertEqual(Category.objects.filter(user=owner).count(), 1)
+
+    def test_create_rejects_a_blank_name(self):
+        owner, client = auth_client("cat-create-blank@example.com")
+
+        response = client.post("/api/categories/", {"name": "   "}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Category.objects.filter(user=owner).count(), 0)
+
+    def test_a_different_users_category_with_the_same_name_is_not_reused(self):
+        owner, owner_client = auth_client("cat-create-scope@example.com")
+        other, _ = auth_client("cat-create-scope-other@example.com")
+        Category.objects.create(user=other, name="To Eat")
+
+        response = owner_client.post("/api/categories/", {"name": "To Eat"}, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Category.objects.filter(user=owner).count(), 1)
+
+    def test_rename_updates_the_name(self):
+        owner, client = auth_client("cat-rename@example.com")
+        category = Category.objects.create(user=owner, name="To Go")
+
+        response = client.patch(f"/api/categories/{category.id}/", {"name": "To Visit"}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["name"], "To Visit")
+        category.refresh_from_db()
+        self.assertEqual(category.name, "To Visit")
+
+    def test_rename_rejects_a_case_insensitive_collision_with_another_category(self):
+        owner, client = auth_client("cat-rename-collision@example.com")
+        Category.objects.create(user=owner, name="To Eat")
+        to_go = Category.objects.create(user=owner, name="To Go")
+
+        response = client.patch(f"/api/categories/{to_go.id}/", {"name": "to eat"}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        to_go.refresh_from_db()
+        self.assertEqual(to_go.name, "To Go")
+
+    def test_rename_rejects_a_blank_name(self):
+        owner, client = auth_client("cat-rename-blank@example.com")
+        category = Category.objects.create(user=owner, name="To Go")
+
+        response = client.patch(f"/api/categories/{category.id}/", {"name": "   "}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        category.refresh_from_db()
+        self.assertEqual(category.name, "To Go")
+
+    def test_cannot_rename_another_users_category(self):
+        owner, _ = auth_client("cat-rename-owner@example.com")
+        _, other_client = auth_client("cat-rename-attacker@example.com")
+        category = Category.objects.create(user=owner, name="To Go")
+
+        response = other_client.patch(f"/api/categories/{category.id}/", {"name": "Hijacked"}, format="json")
+
+        self.assertEqual(response.status_code, 404)
+        category.refresh_from_db()
+        self.assertEqual(category.name, "To Go")
