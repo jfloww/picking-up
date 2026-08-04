@@ -13,13 +13,14 @@ import {
   weekDates,
   weekStartOf,
 } from "../../lib/dates";
+import { computeOrderBetween } from "../../lib/reorder";
 import { dayTasksForWeek, resolveRepeatWeekdays, weekStats } from "../../lib/times";
 import { useTasks } from "../../store";
 import type { ViewKind } from "../view-switcher";
 import { ScopeTasks } from "../scope-tasks";
 import { TaskDetailDrawer } from "../task-detail-drawer";
 import { taskItemHandlers } from "../task-item";
-import { useDragToRescheduleDay } from "../use-drag-to-reschedule-day";
+import { useDragToRescheduleOrReorder } from "../use-drag-to-reschedule-or-reorder";
 
 export interface CalendarViewProps {
   anchor: string;
@@ -52,8 +53,34 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
     : undefined;
 
   const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const { dragState, getDragHandlers } = useDragToRescheduleDay({
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const orderedIdsByDate: Record<string, string[]> = {};
+  for (const date of dates) {
+    orderedIdsByDate[date] = [...dayTasksForWeek(tasks, date, weekStart)]
+      .filter((t) => !t.time)
+      .sort((a, b) => a.order - b.order)
+      .map((t) => t.id);
+  }
+  const { dragState, getDragHandlers } = useDragToRescheduleOrReorder({
     columnRefs,
+    itemRefs,
+    orderedIdsByDate,
+    onReorder: (id, insertBeforeId, sourceDate) => {
+      const ids = orderedIdsByDate[sourceDate] ?? [];
+      const remaining = ids.filter((taskId) => taskId !== id);
+      const targetIndex =
+        insertBeforeId === null ? remaining.length : remaining.indexOf(insertBeforeId);
+      if (targetIndex === -1) return;
+      const byId = (taskId: string) => tasks.find((t) => t.id === taskId);
+      const before = targetIndex > 0 ? byId(remaining[targetIndex - 1])?.order : undefined;
+      const after =
+        targetIndex < remaining.length ? byId(remaining[targetIndex])?.order : undefined;
+      const dragged = byId(id);
+      if (!dragged) return;
+      const newOrder = computeOrderBetween(before, after);
+      if (newOrder === dragged.order) return;
+      actions.setOrder(id, newOrder);
+    },
     onReschedule: (id, date) => actions.rescheduleTaskToDay(id, date),
   });
 
@@ -93,7 +120,8 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
         {dates.map((date, i) => {
           const dayTasks = dayTasksForWeek(tasks, date, weekStart);
           const dayDone = dayTasks.filter((t) => t.done).length;
-          const isDropTarget = dragState?.targetDate === date;
+          const isDropTarget =
+            dragState?.resolution.kind === "reschedule" && dragState.resolution.date === date;
           return (
             <div
               key={date}
@@ -136,6 +164,7 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
                   highlightOverdue
                   showRepeatLabel
                   getDragHandlers={getDragHandlers}
+                  itemRefs={itemRefs}
                 />
               </div>
             </div>

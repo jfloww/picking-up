@@ -1,5 +1,7 @@
 "use client";
 
+import { GripVertical } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 import { shortDateLabel, todayKey, weekStartOf } from "../lib/dates";
@@ -12,6 +14,8 @@ import { TaskItem, taskItemHandlers } from "./task-item";
 type GetDragHandlers = (
   id: string,
   title: string,
+  sourceDate: string,
+  timed: boolean,
 ) => {
   onPointerDown: (e: React.PointerEvent) => void;
   onPointerMove: (e: React.PointerEvent) => void;
@@ -28,6 +32,7 @@ export function ScopeTasks({
   highlightOverdue = false,
   showRepeatLabel = false,
   getDragHandlers,
+  itemRefs,
 }: {
   scope: Scope;
   quickAdd?: boolean;
@@ -36,6 +41,7 @@ export function ScopeTasks({
   highlightOverdue?: boolean;
   showRepeatLabel?: boolean;
   getDragHandlers?: GetDragHandlers;
+  itemRefs?: React.RefObject<Record<string, HTMLDivElement | null>>;
 }) {
   const actions = useTasks();
   const { tasks, addTask } = actions;
@@ -95,6 +101,7 @@ export function ScopeTasks({
           const taskItem = (
             <TaskItem
               key={t.id}
+              size={getDragHandlers ? "week" : undefined}
               task={t}
               dateLabel={date ? shortDateLabel(date, today) : undefined}
               highlight={highlight}
@@ -103,10 +110,33 @@ export function ScopeTasks({
               {...taskItemHandlers(t.id, actions)}
             />
           );
-          if (!getDragHandlers || t.done) return taskItem;
+          if (!getDragHandlers) return taskItem;
           return (
-            <li key={t.id} className="touch-none" {...getDragHandlers(t.id, t.title)}>
-              <ul>{taskItem}</ul>
+            <li
+              key={t.id}
+              ref={
+                itemRefs
+                  ? (el: HTMLLIElement | null) => {
+                      // itemRefs is typed for HTMLDivElement (matching
+                      // useDragToRescheduleOrReorder's columnRefs-style
+                      // interface), but the row wrapper here is a <li>; the
+                      // hook only calls getBoundingClientRect() on it, which
+                      // every HTMLElement supports, so this cast is safe.
+                      itemRefs.current[t.id] = el as unknown as HTMLDivElement | null;
+                    }
+                  : undefined
+              }
+              className="flex items-start gap-1.5"
+            >
+              <button
+                type="button"
+                aria-label={`Reorder ${t.title}`}
+                className="mt-1 flex size-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-subtle hover:bg-muted/60 hover:text-foreground active:cursor-grabbing"
+                {...getDragHandlers(t.id, t.title, dayDate!, !!t.time)}
+              >
+                <GripVertical className="size-3.5" />
+              </button>
+              <div className="min-w-0 flex-1">{taskItem}</div>
             </li>
           );
         })}

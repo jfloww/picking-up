@@ -858,7 +858,7 @@ describe("ScopeTasks day box (Weekly view props)", () => {
     expect(screen.queryByText("Weekdays")).toBeNull();
   });
 
-  it("without getDragHandlers, task rows render without a drag wrapper", async () => {
+  it("without getDragHandlers, task rows render without a drag handle", async () => {
     const day = todayKey();
     const t = makeTask({ title: "plain task", scope: { kind: "day", date: day } });
     render(
@@ -867,10 +867,14 @@ describe("ScopeTasks day box (Weekly view props)", () => {
       </TasksProvider>,
     );
     await waitFor(() => expect(screen.getByText("plain task")).toBeTruthy());
-    expect(screen.getByText("plain task").closest(".touch-none")).toBeNull();
+    expect(screen.queryByLabelText("Reorder plain task")).toBeNull();
   });
 
-  it("with getDragHandlers, wires the returned handlers onto each task row", async () => {
+  it("with getDragHandlers, wires the returned handlers onto each task row's handle", async () => {
+    // Signature and wrapper element per Task 5 (weekly-drag-handle):
+    // getDragHandlers is now called with (id, title, sourceDate, timed), and
+    // the handlers land on a dedicated "Reorder <title>" handle button
+    // rather than on a whole-card ".touch-none" wrapper.
     const day = todayKey();
     const t = makeTask({ id: "a", title: "draggable task", scope: { kind: "day", date: day } });
     const onPointerDown = vi.fn();
@@ -888,14 +892,16 @@ describe("ScopeTasks day box (Weekly view props)", () => {
     );
     await waitFor(() => expect(screen.getByText("draggable task")).toBeTruthy());
 
-    expect(getDragHandlers).toHaveBeenCalledWith("a", "draggable task");
-    const wrapper = screen.getByText("draggable task").closest(".touch-none");
-    expect(wrapper).not.toBeNull();
-    fireEvent.pointerDown(wrapper!, { pointerId: 1 });
+    expect(getDragHandlers).toHaveBeenCalledWith("a", "draggable task", day, false);
+    const handle = screen.getByLabelText("Reorder draggable task");
+    fireEvent.pointerDown(handle, { pointerId: 1 });
     expect(onPointerDown).toHaveBeenCalled();
   });
 
-  it("with getDragHandlers, a done task is not wrapped for dragging", async () => {
+  it("with getDragHandlers, a done task is also wrapped for dragging", async () => {
+    // Per Task 5's spec, the handle now shows for done tasks too (matching
+    // the existing reschedule behavior's "done or not" rule) -- this
+    // replaces the old whole-card-drag hook's "|| t.done" exclusion.
     const day = todayKey();
     const t = makeTask({
       id: "a",
@@ -917,7 +923,7 @@ describe("ScopeTasks day box (Weekly view props)", () => {
     );
     await waitFor(() => expect(screen.getByText("finished task")).toBeTruthy());
 
-    expect(getDragHandlers).not.toHaveBeenCalled();
-    expect(screen.getByText("finished task").closest(".touch-none")).toBeNull();
+    expect(getDragHandlers).toHaveBeenCalledWith("a", "finished task", day, false);
+    expect(screen.getByLabelText("Reorder finished task")).toBeTruthy();
   });
 });
