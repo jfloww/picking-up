@@ -90,6 +90,7 @@ interface TasksContextValue extends TasksState {
   setDuration: (id: string, durationMinutes: number | undefined) => void;
   setBackground: (id: string, background: boolean) => void;
   setDueDate: (id: string, dueDate: string | undefined) => void;
+  setOrder: (id: string, order: number) => void;
   removeTask: (id: string) => void;
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
@@ -213,11 +214,27 @@ export function TasksProvider({
       addTask(title, scope) {
         const trimmed = title.trim();
         if (!trimmed) return undefined;
+        const order =
+          scope.kind === "day"
+            ? Math.max(
+                0,
+                ...state.tasks
+                  .filter(
+                    (t) =>
+                      t.scope.kind === "day" &&
+                      t.scope.date === scope.date &&
+                      !t.time &&
+                      !t.done,
+                  )
+                  .map((t) => t.order),
+              ) + 1
+            : 0;
         const task: Task = {
           id: crypto.randomUUID(),
           title: trimmed,
           done: false,
           scope,
+          order,
           createdAt: new Date().toISOString(),
         };
         dispatch({ type: "added", task });
@@ -232,6 +249,7 @@ export function TasksProvider({
           title: trimmed,
           done: false,
           scope: { kind: "bucket", categoryId },
+          order: 0,
           createdAt: new Date().toISOString(),
         };
         dispatch({ type: "added", task });
@@ -350,6 +368,13 @@ export function TasksProvider({
         const current = state.tasks.find((t) => t.id === id);
         if (!current) return;
         const task: Task = { ...current, dueDate };
+        dispatch({ type: "updated", task });
+        repo.update(task).catch(handleSyncFailure);
+      },
+      setOrder(id, order) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current) return;
+        const task: Task = { ...current, order };
         dispatch({ type: "updated", task });
         repo.update(task).catch(handleSyncFailure);
       },

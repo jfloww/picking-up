@@ -23,6 +23,7 @@ export interface ApiTask {
   priority: boolean | null;
   duration_minutes: number | null;
   background: boolean | null;
+  order: number;
 }
 
 function scopeValueOf(scope: Scope): string {
@@ -85,6 +86,7 @@ export function toApiPayload(task: Task): ApiTask {
     priority: task.priority ?? null,
     duration_minutes: task.durationMinutes ?? null,
     background: task.background ?? null,
+    order: task.order,
   };
 }
 
@@ -110,6 +112,7 @@ export function fromApiPayload(payload: ApiTask): Task {
     durationMinutes: payload.duration_minutes ?? undefined,
     background: payload.background ?? undefined,
     dueDate: payload.due_date ?? undefined,
+    order: payload.order,
   };
 }
 
