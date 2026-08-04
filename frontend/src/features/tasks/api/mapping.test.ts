@@ -24,6 +24,7 @@ const fullApiTask: ApiTask = {
   priority: true,
   duration_minutes: 45,
   background: true,
+  order: 3,
 };
 
 const fullTask: Task = {
@@ -44,6 +45,7 @@ const fullTask: Task = {
   priority: true,
   durationMinutes: 45,
   background: true,
+  order: 3,
 };
 
 describe("fromApiPayload", () => {
@@ -73,6 +75,7 @@ describe("fromApiPayload", () => {
       priority: null,
       duration_minutes: null,
       background: null,
+      order: 0,
     };
 
     const task = fromApiPayload(minimal);
@@ -103,6 +106,7 @@ describe("toApiPayload", () => {
       done: false,
       scope: { kind: "month", month: "2026-07" },
       createdAt: "2026-07-27T00:00:00.000Z",
+      order: 0,
     };
 
     const payload = toApiPayload(minimal);
@@ -130,6 +134,7 @@ describe("toApiPayload", () => {
       done: false,
       scope: { kind: "year", year: "2026" },
       createdAt: "2026-07-27T00:00:00.000Z",
+      order: 0,
     };
 
     expect(fromApiPayload(toApiPayload(yearTask))).toEqual(yearTask);
@@ -142,6 +147,7 @@ describe("toApiPayload", () => {
       done: false,
       scope: { kind: "bucket", categoryId: "cat-1" },
       createdAt: "2026-07-30T00:00:00.000Z",
+      order: 0,
     };
     const payload = toApiPayload(task);
     expect(payload.scope_kind).toBe("bucket");

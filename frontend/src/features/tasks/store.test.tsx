@@ -750,6 +750,43 @@ describe("TasksProvider", () => {
     });
   });
 
+  it("setOrder updates a task's order and persists it", async () => {
+    const task = makeTask({ id: "a", order: 1, scope: { kind: "day", date: todayKey() } });
+    const { repo, result } = setup(fakeRepository([task]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    act(() => result.current.setOrder("a", 2.5));
+
+    expect(result.current.tasks[0].order).toBe(2.5);
+    await waitFor(() => expect(repo.tasks[0].order).toBe(2.5));
+  });
+
+  it("addTask appends a new day-scoped untimed task after the current highest All-Day-To-Do order for that day", async () => {
+    const today = todayKey();
+    const existing = makeTask({ id: "a", order: 3, scope: { kind: "day", date: today } });
+    const { result } = setup(fakeRepository([existing]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    let created: ReturnType<typeof result.current.addTask>;
+    act(() => {
+      created = result.current.addTask("new task", { kind: "day", date: today });
+    });
+
+    expect(created?.order).toBe(4);
+  });
+
+  it("addTask on a task with no existing All-Day-To-Do siblings for that day starts at order 1", async () => {
+    const { result } = setup(fakeRepository([]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    let created: ReturnType<typeof result.current.addTask>;
+    act(() => {
+      created = result.current.addTask("first task", { kind: "day", date: todayKey() });
+    });
+
+    expect(created?.order).toBe(1);
+  });
+
   describe("sync failure handling", () => {
     it("setMemo: on a repo.update rejection, sets syncError and resyncs tasks from a fresh list()", async () => {
       const task = makeTask({ id: "a", memo: "old", scope: { kind: "day", date: todayKey() } });

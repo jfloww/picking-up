@@ -37,6 +37,7 @@ const apiTask: ApiTask = {
   priority: true,
   duration_minutes: 45,
   background: null,
+  order: 2,
 };
 
 const expectedTask: Task = {
@@ -57,6 +58,7 @@ const expectedTask: Task = {
   durationMinutes: 45,
   background: undefined,
   dueDate: "2026-07-31",
+  order: 2,
 };
 
 /** Requests the fake Django leg received, for asserting on the outbound side. */

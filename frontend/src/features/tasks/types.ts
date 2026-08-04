@@ -35,6 +35,7 @@ export interface Task {
   durationMinutes?: number; // meaningful alongside `time`; a positive integer
   background?: boolean; // renders in the timeline's slim background lane instead of the regular overlap columns
   dueDate?: string; // "YYYY-MM-DD"; independent of scope; unset for routine tasks
+  order: number; // fractional manual position within "All Day To-Do"; meaningless for every other list, but always present
 }
 
 export function scopeKey(scope: Scope): string {

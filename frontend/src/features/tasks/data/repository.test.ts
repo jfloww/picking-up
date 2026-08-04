@@ -17,6 +17,7 @@ const task: Task = {
   done: false,
   scope: { kind: "day", date: "2026-07-16" },
   createdAt: "2026-07-16T00:00:00.000Z",
+  order: 0,
 };
 
 describe("createLocalStorageRepository", () => {

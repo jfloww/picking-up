@@ -29,6 +29,7 @@ const apiTask: ApiTask = {
   priority: null,
   duration_minutes: null,
   background: null,
+  order: 0,
 };
 
 const task: Task = {
@@ -37,6 +38,7 @@ const task: Task = {
   done: false,
   scope: { kind: "day", date: "2026-07-27" },
   createdAt: "2026-07-27T00:00:00.000Z",
+  order: 0,
 };
 
 function jsonResponse(body: unknown, status = 200): Response {

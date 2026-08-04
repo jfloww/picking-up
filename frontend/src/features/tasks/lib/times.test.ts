@@ -26,6 +26,7 @@ function task(overrides: Partial<Task>): Task {
     done: false,
     scope: { kind: "day", date: "2026-07-16" },
     createdAt: "2026-07-16T00:00:00.000Z",
+    order: 0,
     ...overrides,
   };
 }
@@ -124,6 +125,7 @@ describe("layoutTimedTasks", () => {
       done: false,
       scope: { kind: "day", date: "2026-07-16" },
       createdAt: "2026-07-16T00:00:00.000Z",
+      order: 0,
       ...overrides,
     };
   }

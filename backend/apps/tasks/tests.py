@@ -351,6 +351,23 @@ class TaskApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_order_defaults_to_zero_and_is_updatable(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/", make_task_payload(id=str(uuid.uuid4())), format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["order"], 0)
+
+        task_id = response.data["id"]
+        response = client.put(
+            f"/api/tasks/{task_id}/",
+            make_task_payload(id=task_id, order=2.5),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["order"], 2.5)
+
 
 class BucketScopeTests(TestCase):
     def test_creates_and_fetches_a_bucket_scoped_task(self):
@@ -484,6 +501,42 @@ class BackfillBucketCategoriesMigrationTests(TransactionTestCase):
         executor.migrate([("tasks", None)])
         call_command_migrate = __import__("django.core.management", fromlist=["call_command"]).call_command
         call_command_migrate("migrate")
+
+
+class BackfillTaskOrderMigrationTests(TransactionTestCase):
+    def test_backfills_order_from_created_at_sequence(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0005_backfill_bucket_categories")])
+
+        old_state = executor.loader.project_state([("tasks", "0005_backfill_bucket_categories")])
+        OldUser = old_state.apps.get_model("auth", "User")
+        OldTask = old_state.apps.get_model("tasks", "Task")
+
+        user = OldUser.objects.create(username="order@example.com", email="order@example.com")
+        # Created out of created_at order, to prove the backfill sorts by
+        # created_at rather than trusting row-insertion order.
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="third", scope_kind="day",
+            scope_value="2026-07-03", created_at="2026-07-03T00:00:00.000Z",
+        )
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="first", scope_kind="day",
+            scope_value="2026-07-01", created_at="2026-07-01T00:00:00.000Z",
+        )
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="second", scope_kind="day",
+            scope_value="2026-07-02", created_at="2026-07-02T00:00:00.000Z",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0006_task_order")])
+
+        new_state = executor.loader.project_state([("tasks", "0006_task_order")])
+        NewTask = new_state.apps.get_model("tasks", "Task")
+
+        by_title = {t.title: t.order for t in NewTask.objects.filter(user_id=user.id)}
+        self.assertLess(by_title["first"], by_title["second"])
+        self.assertLess(by_title["second"], by_title["third"])
 
 
 class CategoryApiTests(TestCase):

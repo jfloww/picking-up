@@ -138,15 +138,64 @@ Add `"order"` to `Meta.fields`, directly after `"background"`:
         )
 ```
 
-- [ ] **Step 6: Run migrations, then run the test to verify it passes**
+- [ ] **Step 6: Write a failing test for the backfill migration itself**
+
+This codebase already has an established pattern for testing data
+migrations directly — `BackfillBucketCategoriesMigrationTests` at the
+bottom of `backend/apps/tasks/tests.py`, using `MigrationExecutor` to run
+migrations up to a specific point, create rows against that historical
+schema, migrate further, then assert against the result. Append this new
+class directly after it (reusing the `uuid_module`, `connection`,
+`MigrationExecutor`, `TransactionTestCase` names that file already
+imports right before `BackfillBucketCategoriesMigrationTests` — no new
+imports needed):
+
+```python
+class BackfillTaskOrderMigrationTests(TransactionTestCase):
+    def test_backfills_order_from_created_at_sequence(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0005_backfill_bucket_categories")])
+
+        old_state = executor.loader.project_state([("tasks", "0005_backfill_bucket_categories")])
+        OldUser = old_state.apps.get_model("auth", "User")
+        OldTask = old_state.apps.get_model("tasks", "Task")
+
+        user = OldUser.objects.create(username="order@example.com", email="order@example.com")
+        # Created out of created_at order, to prove the backfill sorts by
+        # created_at rather than trusting row-insertion order.
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="third", scope_kind="day",
+            scope_value="2026-07-03", created_at="2026-07-03T00:00:00.000Z",
+        )
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="first", scope_kind="day",
+            scope_value="2026-07-01", created_at="2026-07-01T00:00:00.000Z",
+        )
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="second", scope_kind="day",
+            scope_value="2026-07-02", created_at="2026-07-02T00:00:00.000Z",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0006_task_order")])
+
+        new_state = executor.loader.project_state([("tasks", "0006_task_order")])
+        NewTask = new_state.apps.get_model("tasks", "Task")
+
+        by_title = {t.title: t.order for t in NewTask.objects.filter(user_id=user.id)}
+        self.assertLess(by_title["first"], by_title["second"])
+        self.assertLess(by_title["second"], by_title["third"])
+```
+
+- [ ] **Step 7: Run migrations, then run the tests to verify they pass**
 
 Run: `cd backend && ORACLE_DB_USER= ORACLE_DB_PASSWORD= ORACLE_DB_DSN= python manage.py migrate`
 Expected: applies `tasks.0006_task_order` cleanly.
 
 Run: `cd backend && ORACLE_DB_USER= ORACLE_DB_PASSWORD= ORACLE_DB_DSN= python manage.py test apps.tasks -v 2`
-Expected: PASS — every test in `apps/tasks/tests.py`, including the new one.
+Expected: PASS — every test in `apps/tasks/tests.py`, including both new ones (the serializer test from Step 1 and the migration test from Step 6).
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add backend/apps/tasks/models.py backend/apps/tasks/migrations/0006_task_order.py backend/apps/tasks/serializers.py backend/apps/tasks/tests.py

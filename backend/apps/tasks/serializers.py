@@ -55,6 +55,7 @@ class TaskSerializer(serializers.ModelSerializer):
         required=False, allow_null=True, default=None, min_value=0,
     )
     background = serializers.BooleanField(required=False, allow_null=True, default=None)
+    order = serializers.FloatField(required=False, default=0.0)
 
     class Meta:
         model = Task
@@ -79,6 +80,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "priority",
             "duration_minutes",
             "background",
+            "order",
         )
 
     def __init__(self, *args, **kwargs):
