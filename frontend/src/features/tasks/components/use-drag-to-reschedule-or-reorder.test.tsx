@@ -22,9 +22,11 @@ function mockRect(el: HTMLElement, rect: Partial<DOMRect>) {
 function Harness({
   onReorder,
   onReschedule,
+  onParentPointerDown,
 }: {
   onReorder: (id: string, insertBeforeId: string | null, sourceDate: string) => void;
   onReschedule: (id: string, date: string) => void;
+  onParentPointerDown?: () => void;
 }) {
   const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -49,6 +51,7 @@ function Harness({
             itemRefs.current["a"] = el;
           }}
           data-testid="item-a"
+          onPointerDown={onParentPointerDown}
         >
           <button type="button" data-testid="handle-a" {...getDragHandlers("a", "Task A", "2026-07-13", false)} onClick={() => onReorder("clicked", null, "2026-07-13")}>
             Handle A
@@ -77,8 +80,14 @@ function Harness({
   );
 }
 
-function setup(onReorder = vi.fn(), onReschedule = vi.fn()) {
-  render(<Harness onReorder={onReorder} onReschedule={onReschedule} />);
+function setup(onReorder = vi.fn(), onReschedule = vi.fn(), onParentPointerDown?: () => void) {
+  render(
+    <Harness
+      onReorder={onReorder}
+      onReschedule={onReschedule}
+      onParentPointerDown={onParentPointerDown}
+    />,
+  );
   mockRect(screen.getByTestId("col-mon"), { top: 0, bottom: 200, left: 0, right: 100 });
   mockRect(screen.getByTestId("col-tue"), { top: 0, bottom: 200, left: 200, right: 300 });
   mockRect(screen.getByTestId("item-a"), { top: 0, bottom: 50, left: 0, right: 100 });
@@ -173,10 +182,8 @@ describe("useDragToRescheduleOrReorder", () => {
   });
 
   it("stops the pointerdown event from propagating to the card", () => {
-    const { handleA } = setup();
-    const parent = screen.getByTestId("item-a");
     const parentPointerDown = vi.fn();
-    parent.addEventListener("pointerdown", parentPointerDown);
+    const { handleA } = setup(vi.fn(), vi.fn(), parentPointerDown);
     fireEvent.pointerDown(handleA, { pointerId: 1, clientX: 10, clientY: 10 });
     expect(parentPointerDown).not.toHaveBeenCalled();
   });
