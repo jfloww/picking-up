@@ -270,6 +270,10 @@ describe("DayAgenda reorder handle", () => {
     const handleFirst = screen.getByLabelText("Reorder first");
     const cardFirst = screen.getByTestId("agenda-f");
     const cardSecond = screen.getByTestId("agenda-s");
+    const list = screen.getByTestId("all-day-todo-list");
+    vi.spyOn(list, "getBoundingClientRect").mockReturnValue({
+      top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100, x: 0, y: 0, toJSON: () => {},
+    } as DOMRect);
     vi.spyOn(cardFirst, "getBoundingClientRect").mockReturnValue({
       top: 0, bottom: 50, left: 0, right: 100, width: 100, height: 50, x: 0, y: 0, toJSON: () => {},
     } as DOMRect);
@@ -285,6 +289,91 @@ describe("DayAgenda reorder handle", () => {
     const items = screen.getAllByTestId(/^agenda-/).map((el) => el.textContent);
     expect(items[0]).toContain("second");
     expect(items[1]).toContain("first");
+  });
+
+  it("releasing outside the All Day To-Do list cancels the drag: no setOrder, order unchanged, no indicator", async () => {
+    const first = makeTask({ id: "f", title: "first", order: 1, scope: { kind: "day", date: ANCHOR } });
+    const second = makeTask({ id: "s", title: "second", order: 2, scope: { kind: "day", date: ANCHOR } });
+    const repo = fakeRepository([first, second]);
+    render(
+      <TasksProvider repository={repo} categoryRepository={fakeCategoryRepository()}>
+        <DayAgenda date={ANCHOR} agendaZoneRef={{ current: null }} getDragHandlers={noopGetDragHandlers} />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("first")).toBeTruthy());
+
+    const handleFirst = screen.getByLabelText("Reorder first");
+    const cardFirst = screen.getByTestId("agenda-f");
+    const cardSecond = screen.getByTestId("agenda-s");
+    const list = screen.getByTestId("all-day-todo-list");
+    vi.spyOn(list, "getBoundingClientRect").mockReturnValue({
+      top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100, x: 0, y: 0, toJSON: () => {},
+    } as DOMRect);
+    vi.spyOn(cardFirst, "getBoundingClientRect").mockReturnValue({
+      top: 0, bottom: 50, left: 0, right: 100, width: 100, height: 50, x: 0, y: 0, toJSON: () => {},
+    } as DOMRect);
+    vi.spyOn(cardSecond, "getBoundingClientRect").mockReturnValue({
+      top: 50, bottom: 100, left: 0, right: 100, width: 100, height: 50, x: 0, y: 50, toJSON: () => {},
+    } as DOMRect);
+
+    fireEvent.pointerDown(handleFirst, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(handleFirst, { pointerId: 1, clientX: 10, clientY: 90 }); // still inside the list container (0-100)
+    expect(screen.getByTestId("reorder-indicator")).toBeTruthy();
+    fireEvent.pointerMove(handleFirst, { pointerId: 1, clientX: 10, clientY: 500 }); // well below the list container
+    expect(screen.queryByTestId("reorder-indicator")).toBeNull();
+    fireEvent.pointerUp(handleFirst, { pointerId: 1, clientX: 10, clientY: 500 });
+
+    expect(repo.tasks.find((t) => t.id === "f")?.order).toBe(1);
+    const items = screen.getAllByTestId(/^agenda-/).map((el) => el.textContent);
+    expect(items[0]).toContain("first");
+    expect(items[1]).toContain("second");
+    expect(screen.queryByTestId("reorder-indicator")).toBeNull();
+  });
+
+  it("dropping a task back into its current position (adjacent to a different neighbor than itself) is a no-op", async () => {
+    const a = makeTask({ id: "a", title: "alpha", order: 0.5, scope: { kind: "day", date: ANCHOR } });
+    const b = makeTask({ id: "b", title: "bravo", order: 2, scope: { kind: "day", date: ANCHOR } });
+    const c = makeTask({ id: "c", title: "charlie", order: 3, scope: { kind: "day", date: ANCHOR } });
+    const repo = fakeRepository([a, b, c]);
+    render(
+      <TasksProvider repository={repo} categoryRepository={fakeCategoryRepository()}>
+        <DayAgenda date={ANCHOR} agendaZoneRef={{ current: null }} getDragHandlers={noopGetDragHandlers} />
+      </TasksProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
+
+    const handleA = screen.getByLabelText("Reorder alpha");
+    const cardA = screen.getByTestId("agenda-a");
+    const cardB = screen.getByTestId("agenda-b");
+    const cardC = screen.getByTestId("agenda-c");
+    const list = screen.getByTestId("all-day-todo-list");
+    vi.spyOn(list, "getBoundingClientRect").mockReturnValue({
+      top: 0, bottom: 150, left: 0, right: 100, width: 100, height: 150, x: 0, y: 0, toJSON: () => {},
+    } as DOMRect);
+    vi.spyOn(cardA, "getBoundingClientRect").mockReturnValue({
+      top: 0, bottom: 50, left: 0, right: 100, width: 100, height: 50, x: 0, y: 0, toJSON: () => {},
+    } as DOMRect);
+    vi.spyOn(cardB, "getBoundingClientRect").mockReturnValue({
+      top: 50, bottom: 100, left: 0, right: 100, width: 100, height: 50, x: 0, y: 50, toJSON: () => {},
+    } as DOMRect);
+    vi.spyOn(cardC, "getBoundingClientRect").mockReturnValue({
+      top: 100, bottom: 150, left: 0, right: 100, width: 100, height: 50, x: 0, y: 100, toJSON: () => {},
+    } as DOMRect);
+
+    // Drop directly above b (60 is within b's upper half, 50-100) — this is
+    // exactly where "a" already sits, just resolved via b's id rather than
+    // a's own id, so the naive `id === insertBeforeId` guard would miss it.
+    fireEvent.pointerDown(handleA, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(handleA, { pointerId: 1, clientX: 10, clientY: 60 });
+    fireEvent.pointerUp(handleA, { pointerId: 1, clientX: 10, clientY: 60 });
+
+    expect(repo.tasks.find((t) => t.id === "a")?.order).toBe(0.5);
+    expect(repo.tasks.find((t) => t.id === "b")?.order).toBe(2);
+    expect(repo.tasks.find((t) => t.id === "c")?.order).toBe(3);
+    const items = screen.getAllByTestId(/^agenda-/).map((el) => el.textContent);
+    expect(items[0]).toContain("alpha");
+    expect(items[1]).toContain("bravo");
+    expect(items[2]).toContain("charlie");
   });
 
   it("a handle-drag does not also trigger the existing drag-to-schedule gesture on the same card", async () => {

@@ -51,15 +51,27 @@ export function DayAgenda({
   const currentTime = nowTime();
 
   const reorderItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const reorderContainerRef = useRef<HTMLDivElement | null>(null);
 
   function handleReorder(id: string, insertBeforeId: string | null) {
-    if (id === insertBeforeId) return;
-    const dragged = allDayToDo.find((t) => t.id === id);
-    if (!dragged) return;
+    const currentIndex = allDayToDo.findIndex((t) => t.id === id);
+    if (currentIndex === -1) return;
+    const dragged = allDayToDo[currentIndex];
     const remaining = allDayToDo.filter((t) => t.id !== id);
     const targetIndex =
       insertBeforeId === null ? remaining.length : remaining.findIndex((t) => t.id === insertBeforeId);
     if (targetIndex === -1) return;
+    // Compare list *positions*, not just the resolved order value: the
+    // dragged item currently sits at currentIndex within allDayToDo
+    // (dragged still present). Removing it to build `remaining` shifts
+    // every later index down by one, so the slot it already occupies is
+    // targetIndex === currentIndex in `remaining`'s index space — e.g.
+    // dropping it directly above its current next-neighbor recomputes
+    // the same position even though insertBeforeId now names a
+    // *different* neighbor than "itself." Catching that here (rather
+    // than only `id === insertBeforeId`) avoids a no-op drag firing a
+    // real setOrder/network call.
+    if (targetIndex === currentIndex) return;
     const before = remaining[targetIndex - 1]?.order;
     const after = remaining[targetIndex]?.order;
     const newOrder = computeOrderBetween(before, after);
@@ -68,6 +80,7 @@ export function DayAgenda({
   }
 
   const { dragState: reorderDragState, getDragHandlers: getReorderHandlers } = useDragToReorder({
+    containerRef: reorderContainerRef,
     itemRefs: reorderItemRefs,
     orderedIds: allDayToDo.map((t) => t.id),
     onReorder: handleReorder,
@@ -76,7 +89,7 @@ export function DayAgenda({
   function renderCard(t: Task, highlight?: "overdue" | "pending", reorderable = false) {
     return (
       <div key={t.id}>
-        {reorderable && reorderDragState?.insertBeforeId === t.id && (
+        {reorderable && reorderDragState?.insideList && reorderDragState.insertBeforeId === t.id && (
           <div data-testid="reorder-indicator" className="h-0.5 rounded-full bg-brand" />
         )}
         <div
@@ -138,9 +151,9 @@ export function DayAgenda({
                 {allDayToDo.length}
               </span>
             </div>
-            <div className="space-y-3">
+            <div ref={reorderContainerRef} data-testid="all-day-todo-list" className="space-y-3">
               {allDayToDo.map((t) => renderCard(t, undefined, true))}
-              {reorderDragState && reorderDragState.insertBeforeId === null && (
+              {reorderDragState && reorderDragState.insideList && reorderDragState.insertBeforeId === null && (
                 <div data-testid="reorder-indicator" className="h-0.5 rounded-full bg-brand" />
               )}
             </div>

@@ -9,8 +9,16 @@ export interface ReorderDragState {
   title: string;
   pointerX: number;
   pointerY: number;
-  // Id of the card the drop would land above; null means "at the end."
+  // Id of the card the drop would land above; null means "at the end,
+  // inside the list." Only meaningful when insideList is true — while
+  // insideList is false, ignore this field (the drag is over territory
+  // outside the "All Day To-Do" container and would cancel on release).
   insertBeforeId: string | null;
+  // Whether the pointer is currently within the "All Day To-Do" list's
+  // own container, mirroring useDragToSchedule's allDayZoneRef
+  // containment check. False means releasing now cancels the drag: the
+  // task keeps its original order, nothing is dispatched or saved.
+  insideList: boolean;
 }
 
 interface DragGesture {
@@ -22,28 +30,41 @@ interface DragGesture {
   moved: boolean;
 }
 
+interface ReorderResolution {
+  insideList: boolean;
+  insertBeforeId: string | null;
+}
+
 export function useDragToReorder(options: {
+  containerRef: React.RefObject<HTMLDivElement | null>;
   itemRefs: React.RefObject<Record<string, HTMLDivElement | null>>;
   orderedIds: string[];
   onReorder: (id: string, insertBeforeId: string | null) => void;
 }) {
-  const { itemRefs, orderedIds, onReorder } = options;
+  const { containerRef, itemRefs, orderedIds, onReorder } = options;
   const [dragState, setDragState] = useState<ReorderDragState | null>(null);
   const gestureRef = useRef<DragGesture | null>(null);
   const suppressClickRef = useRef(false);
 
   const resolve = useCallback(
-    (clientY: number): string | null => {
+    (clientX: number, clientY: number): ReorderResolution => {
+      const containerEl = containerRef.current;
+      if (containerEl) {
+        const r = containerEl.getBoundingClientRect();
+        if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) {
+          return { insideList: false, insertBeforeId: null };
+        }
+      }
       const refs = itemRefs.current;
       for (const id of orderedIds) {
         const el = refs[id];
         if (!el) continue;
         const r = el.getBoundingClientRect();
-        if (clientY < (r.top + r.bottom) / 2) return id;
+        if (clientY < (r.top + r.bottom) / 2) return { insideList: true, insertBeforeId: id };
       }
-      return null;
+      return { insideList: true, insertBeforeId: null };
     },
-    [itemRefs, orderedIds],
+    [containerRef, itemRefs, orderedIds],
   );
 
   const getDragHandlers = useCallback(
@@ -80,12 +101,14 @@ export function useDragToReorder(options: {
           }
         }
 
+        const resolution = resolve(e.clientX, e.clientY);
         setDragState({
           id: gesture.id,
           title: gesture.title,
           pointerX: e.clientX,
           pointerY: e.clientY,
-          insertBeforeId: resolve(e.clientY),
+          insertBeforeId: resolution.insertBeforeId,
+          insideList: resolution.insideList,
         });
       },
       onPointerUp: (e: React.PointerEvent) => {
@@ -103,7 +126,15 @@ export function useDragToReorder(options: {
           setTimeout(() => {
             suppressClickRef.current = false;
           }, 0);
-          onReorder(gesture.id, resolve(e.clientY));
+          const resolution = resolve(e.clientX, e.clientY);
+          // Releasing outside the "All Day To-Do" container cancels the
+          // drag entirely — the task keeps its original order, nothing is
+          // dispatched or saved. insertBeforeId: null (inside, past the
+          // last card) is a different, valid drop target and must still
+          // call onReorder.
+          if (resolution.insideList) {
+            onReorder(gesture.id, resolution.insertBeforeId);
+          }
         }
         setDragState(null);
       },

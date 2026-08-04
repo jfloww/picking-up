@@ -21,18 +21,22 @@ function mockRect(el: HTMLElement, rect: Partial<DOMRect>) {
 
 function Harness({
   onReorder,
+  restrictContainer = false,
 }: {
   onReorder: (id: string, insertBeforeId: string | null) => void;
+  restrictContainer?: boolean;
 }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const { dragState, getDragHandlers } = useDragToReorder({
+    containerRef,
     itemRefs,
     orderedIds: ["a", "b", "c"],
     onReorder,
   });
 
   return (
-    <div>
+    <div ref={restrictContainer ? containerRef : undefined} data-testid="container">
       <div
         ref={(el) => {
           itemRefs.current["a"] = el;
@@ -55,13 +59,18 @@ function Harness({
         }}
         data-testid="item-c"
       />
-      <div data-testid="target">{dragState ? (dragState.insertBeforeId ?? "end") : "not-dragging"}</div>
+      <div data-testid="target">
+        {dragState ? (dragState.insideList ? (dragState.insertBeforeId ?? "end") : "outside") : "not-dragging"}
+      </div>
     </div>
   );
 }
 
-function setup(onReorder = vi.fn()) {
-  render(<Harness onReorder={onReorder} />);
+function setup(onReorder = vi.fn(), restrictContainer = false) {
+  render(<Harness onReorder={onReorder} restrictContainer={restrictContainer} />);
+  if (restrictContainer) {
+    mockRect(screen.getByTestId("container"), { top: 0, bottom: 150, left: 0, right: 100 });
+  }
   mockRect(screen.getByTestId("item-a"), { top: 0, bottom: 50, left: 0, right: 100 });
   mockRect(screen.getByTestId("item-b"), { top: 50, bottom: 100, left: 0, right: 100 });
   mockRect(screen.getByTestId("item-c"), { top: 100, bottom: 150, left: 0, right: 100 });
@@ -139,5 +148,35 @@ describe("useDragToReorder", () => {
     expect(captureSpy).not.toHaveBeenCalled();
     fireEvent.pointerMove(handle, { pointerId: 1, clientX: 10, clientY: 60 });
     expect(captureSpy).toHaveBeenCalledWith(1);
+  });
+
+  it("releasing outside the container cancels the drag without calling onReorder", () => {
+    const { onReorder, handle } = setup(vi.fn(), true);
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 10, clientY: 60 }); // still inside container (0-150)
+    expect(screen.getByTestId("target").textContent).toBe("b");
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 10, clientY: 300 }); // below the container entirely
+    expect(screen.getByTestId("target").textContent).toBe("outside");
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 10, clientY: 300 });
+    expect(onReorder).not.toHaveBeenCalled();
+    expect(screen.getByTestId("target").textContent).toBe("not-dragging");
+  });
+
+  it("does not show an outside state when there is no container ref (unrestricted usage keeps resolving normally)", () => {
+    const { onReorder, handle } = setup(vi.fn(), false);
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 10, clientY: 300 }); // far below every item, but no container to bound it
+    expect(screen.getByTestId("target").textContent).toBe("end");
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 10, clientY: 300 });
+    expect(onReorder).toHaveBeenCalledWith("a", null);
+  });
+
+  it("still resolves an insertion position (not outside) when releasing inside the container but past the last item's midpoint", () => {
+    const { onReorder, handle } = setup(vi.fn(), true);
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 10, clientY: 140 }); // inside container (0-150), past item-c's midpoint
+    expect(screen.getByTestId("target").textContent).toBe("end");
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 10, clientY: 140 });
+    expect(onReorder).toHaveBeenCalledWith("a", null);
   });
 });
