@@ -1,5 +1,8 @@
 "use client";
 
+import { GripVertical } from "lucide-react";
+import { Fragment } from "react";
+
 import { cn } from "@/lib/utils";
 
 import { shortDateLabel, todayKey, weekStartOf } from "../lib/dates";
@@ -8,10 +11,13 @@ import { useTasks } from "../store";
 import { scopeKey, type Scope, type Task } from "../types";
 import { QuickAdd } from "./quick-add";
 import { TaskItem, taskItemHandlers } from "./task-item";
+import type { RescheduleOrReorderDragState } from "./use-drag-to-reschedule-or-reorder";
 
 type GetDragHandlers = (
   id: string,
   title: string,
+  sourceDate: string,
+  timed: boolean,
 ) => {
   onPointerDown: (e: React.PointerEvent) => void;
   onPointerMove: (e: React.PointerEvent) => void;
@@ -27,7 +33,10 @@ export function ScopeTasks({
   onSelectTask,
   highlightOverdue = false,
   showRepeatLabel = false,
+  size,
   getDragHandlers,
+  itemRefs,
+  dragState,
 }: {
   scope: Scope;
   quickAdd?: boolean;
@@ -35,7 +44,15 @@ export function ScopeTasks({
   onSelectTask?: (id: string) => void;
   highlightOverdue?: boolean;
   showRepeatLabel?: boolean;
+  /**
+   * Card layout for the rendered rows. Deliberately independent of
+   * `getDragHandlers`: a caller that wants drag handles for some other
+   * reason must not silently inherit Weekly's compact layout too.
+   */
+  size?: "week";
   getDragHandlers?: GetDragHandlers;
+  itemRefs?: React.RefObject<Record<string, HTMLDivElement | null>>;
+  dragState?: RescheduleOrReorderDragState | null;
 }) {
   const actions = useTasks();
   const { tasks, addTask } = actions;
@@ -83,6 +100,21 @@ export function ScopeTasks({
   const today = todayKey();
   const dayDate = scope.kind === "day" ? scope.date : null;
 
+  // The drag state is shared by every day column, so gate the insertion
+  // indicator to the column that actually holds the dragged task — that's
+  // the only day a "reorder" resolution can refer to. The drag state
+  // doesn't carry its source day, so identify it by which column renders
+  // the dragged id. `undefined` means "no indicator at all"; `null` is a
+  // meaningful value from the hook, meaning "past every item".
+  const showIndicator =
+    dragState?.resolution.kind === "reorder" &&
+    items.some(({ task }) => task.id === dragState.id);
+  const indicatorBeforeId =
+    showIndicator && dragState?.resolution.kind === "reorder"
+      ? dragState.resolution.insertBeforeId
+      : undefined;
+  const indicator = <li data-testid="reorder-indicator" className="h-0.5 rounded-full bg-brand" />;
+
   return (
     <div className="space-y-1">
       <ul className="space-y-1">
@@ -95,6 +127,7 @@ export function ScopeTasks({
           const taskItem = (
             <TaskItem
               key={t.id}
+              size={size}
               task={t}
               dateLabel={date ? shortDateLabel(date, today) : undefined}
               highlight={highlight}
@@ -103,13 +136,39 @@ export function ScopeTasks({
               {...taskItemHandlers(t.id, actions)}
             />
           );
-          if (!getDragHandlers || t.done) return taskItem;
+          if (!getDragHandlers) return taskItem;
           return (
-            <li key={t.id} className="touch-none" {...getDragHandlers(t.id, t.title)}>
-              <ul>{taskItem}</ul>
-            </li>
+            <Fragment key={t.id}>
+              {indicatorBeforeId === t.id && indicator}
+              <li
+                ref={
+                  itemRefs
+                    ? (el: HTMLLIElement | null) => {
+                        // itemRefs is typed for HTMLDivElement (matching
+                        // useDragToRescheduleOrReorder's columnRefs-style
+                        // interface), but the row wrapper here is a <li>; the
+                        // hook only calls getBoundingClientRect() on it, which
+                        // every HTMLElement supports, so this cast is safe.
+                        itemRefs.current[t.id] = el as unknown as HTMLDivElement | null;
+                      }
+                    : undefined
+                }
+                className="flex items-start gap-1.5"
+              >
+                <button
+                  type="button"
+                  aria-label={`Reorder ${t.title}`}
+                  className="mt-1 flex size-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-subtle hover:bg-muted/60 hover:text-foreground active:cursor-grabbing"
+                  {...getDragHandlers(t.id, t.title, dayDate!, !!t.time)}
+                >
+                  <GripVertical className="size-3.5" />
+                </button>
+                <div className="min-w-0 flex-1">{taskItem}</div>
+              </li>
+            </Fragment>
           );
         })}
+        {showIndicator && indicatorBeforeId === null && indicator}
       </ul>
       {quickAdd && <QuickAdd onAdd={(title) => addTask(title, scope)} />}
     </div>

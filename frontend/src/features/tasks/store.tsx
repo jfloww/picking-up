@@ -14,8 +14,8 @@ import { createApiCategoryRepository } from "./data/category-repository";
 import type { CategoryRepository } from "./data/category-repository";
 import { createApiTaskRepository } from "./data/api-task-repository";
 import type { TaskRepository } from "./data/repository";
-import { todayKey } from "./lib/dates";
-import { isValidTime } from "./lib/times";
+import { todayKey, weekStartOf } from "./lib/dates";
+import { dayTasksForWeek, isValidTime } from "./lib/times";
 import { rolloverTasks } from "./lib/rollover";
 import { materializeRoutines } from "./lib/routines";
 import type { Category, Scope, Task } from "./types";
@@ -326,7 +326,37 @@ export function TasksProvider({
         }
         if (originalDate === date) return;
 
-        const task: Task = { ...current, scope: { kind: "day", date }, rolledFrom: undefined };
+        // Carrying the old day's order value across would land an untimed
+        // task at an arbitrary position in the new day's list, unrelated to
+        // the user's intent — append it past the destination's existing
+        // untimed tasks instead. A timed task's position is always driven
+        // by `time`, not `order`, so its existing value is left as-is.
+        //
+        // The scan deliberately differs from addTask's: it goes through
+        // dayTasksForWeek (the same source Weekly's own columns and its
+        // reorder scan use) rather than plain scope.kind === "day" tasks,
+        // and it does not exclude done tasks. Weekly renders untimed done
+        // and not-done tasks interleaved in one order-sorted list, and
+        // shows rolled-over week-scoped tasks in their original day's
+        // column — so both are real siblings that must count towards "the
+        // end of the list", or an appended task lands mid-column instead.
+        // (addTask's own filter is left alone: Daily's list structure, with
+        // its separate Done section, is different.)
+        const order = current.time
+          ? current.order
+          : Math.max(
+              0,
+              ...dayTasksForWeek(state.tasks, date, weekStartOf(date))
+                .filter((t) => !t.time)
+                .map((t) => t.order),
+            ) + 1;
+
+        const task: Task = {
+          ...current,
+          scope: { kind: "day", date },
+          rolledFrom: undefined,
+          order,
+        };
         if (current.repeatSourceId !== undefined) {
           task.repeatSourceId = undefined;
         }

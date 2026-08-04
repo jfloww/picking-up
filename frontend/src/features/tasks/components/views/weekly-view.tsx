@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -13,13 +13,14 @@ import {
   weekDates,
   weekStartOf,
 } from "../../lib/dates";
+import { computeOrderBetween } from "../../lib/reorder";
 import { dayTasksForWeek, resolveRepeatWeekdays, weekStats } from "../../lib/times";
 import { useTasks } from "../../store";
 import type { ViewKind } from "../view-switcher";
 import { ScopeTasks } from "../scope-tasks";
 import { TaskDetailDrawer } from "../task-detail-drawer";
 import { taskItemHandlers } from "../task-item";
-import { useDragToRescheduleDay } from "../use-drag-to-reschedule-day";
+import { useDragToRescheduleOrReorder } from "../use-drag-to-reschedule-or-reorder";
 
 export interface CalendarViewProps {
   anchor: string;
@@ -33,7 +34,7 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
   const actions = useTasks();
   const { tasks } = actions;
   const weekStart = weekStartOf(anchor);
-  const dates = weekDates(weekStart);
+  const dates = useMemo(() => weekDates(weekStart), [weekStart]);
   const today = todayKey();
   const { done, total } = weekStats(tasks, weekStart);
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
@@ -52,8 +53,59 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
     : undefined;
 
   const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const { dragState, getDragHandlers } = useDragToRescheduleDay({
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // Memoized so it keeps a stable identity across the re-renders an active
+  // drag causes (every pointermove sets drag state). It's a dependency of
+  // the hook's internal `resolve`/`getDragHandlers` useCallbacks, so
+  // rebuilding it each render would recreate those on every pointermove and
+  // negate their memoization entirely.
+  const orderedIdsByDate = useMemo(() => {
+    const byDate: Record<string, string[]> = {};
+    for (const date of dates) {
+      byDate[date] = [...dayTasksForWeek(tasks, date, weekStart)]
+        .filter((t) => !t.time)
+        .sort((a, b) => a.order - b.order)
+        .map((t) => t.id);
+    }
+    return byDate;
+  }, [tasks, dates, weekStart]);
+  const { dragState, getDragHandlers } = useDragToRescheduleOrReorder({
     columnRefs,
+    itemRefs,
+    orderedIdsByDate,
+    onReorder: (id, insertBeforeId, sourceDate) => {
+      const ids = orderedIdsByDate[sourceDate] ?? [];
+      const currentIndex = ids.indexOf(id);
+      if (currentIndex === -1) return;
+      const remaining = ids.filter((taskId) => taskId !== id);
+      const targetIndex =
+        insertBeforeId === null ? remaining.length : remaining.indexOf(insertBeforeId);
+      if (targetIndex === -1) return;
+      // Compare list *positions*, not just the resolved order value: the
+      // dragged id currently sits at currentIndex within `ids` (itself
+      // still present). Removing it to build `remaining` shifts every
+      // later index down by one, so the slot it already occupies is
+      // targetIndex === currentIndex in `remaining`'s index space — e.g.
+      // dropping it directly above its current next-neighbor recomputes
+      // the same position even though insertBeforeId names a *different*
+      // neighbor than "itself". Catching that here (rather than only
+      // `id === insertBeforeId`) avoids a visually-no-op drag firing a
+      // real setOrder and its network write.
+      if (targetIndex === currentIndex) return;
+      const byId = (taskId: string) => tasks.find((t) => t.id === taskId);
+      const before = targetIndex > 0 ? byId(remaining[targetIndex - 1])?.order : undefined;
+      const after =
+        targetIndex < remaining.length ? byId(remaining[targetIndex])?.order : undefined;
+      const dragged = byId(id);
+      if (!dragged) return;
+      const newOrder = computeOrderBetween(before, after);
+      // Still distinct from the positional guard above: a move to a
+      // genuinely different index can still land on the exact same order
+      // value when neighbours share order values or the midpoint of two
+      // adjacent floats rounds back onto the dragged task's own value.
+      if (newOrder === dragged.order) return;
+      actions.setOrder(id, newOrder);
+    },
     onReschedule: (id, date) => actions.rescheduleTaskToDay(id, date),
   });
 
@@ -93,7 +145,8 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
         {dates.map((date, i) => {
           const dayTasks = dayTasksForWeek(tasks, date, weekStart);
           const dayDone = dayTasks.filter((t) => t.done).length;
-          const isDropTarget = dragState?.targetDate === date;
+          const isDropTarget =
+            dragState?.resolution.kind === "reschedule" && dragState.resolution.date === date;
           return (
             <div
               key={date}
@@ -135,7 +188,10 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
                   onSelectTask={handleSelectTask}
                   highlightOverdue
                   showRepeatLabel
+                  size="week"
                   getDragHandlers={getDragHandlers}
+                  itemRefs={itemRefs}
+                  dragState={dragState}
                 />
               </div>
             </div>

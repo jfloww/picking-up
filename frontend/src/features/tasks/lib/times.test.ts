@@ -90,8 +90,14 @@ describe("compareTasksForDay", () => {
     expect(sorted).toEqual([nine, noon, untimed]);
   });
 
-  it("returns 0 for two untimed tasks (stable sort keeps insertion order)", () => {
-    expect(compareTasksForDay(task({}), task({}))).toBe(0);
+  it("returns 0 for two untimed tasks with equal order", () => {
+    expect(compareTasksForDay(task({ order: 5 }), task({ order: 5 }))).toBe(0);
+  });
+
+  it("breaks ties between two untimed tasks by order", () => {
+    const first = task({ order: 1 });
+    const second = task({ order: 2 });
+    expect([second, first].sort(compareTasksForDay)).toEqual([first, second]);
   });
 });
 
