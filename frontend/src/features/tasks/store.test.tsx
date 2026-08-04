@@ -498,6 +498,49 @@ describe("TasksProvider", () => {
 
       expect(result.current.tasks[0]).toBe(rolledOver);
     });
+
+    it("rescheduleTaskToDay appends order for an untimed task moved to a new day", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 6, 1)); // pin "today" before the fixed dates below
+      const existing = makeTask({ id: "e", order: 3, scope: { kind: "day", date: "2026-07-20" } });
+      const moved = makeTask({ id: "a", order: 99, scope: { kind: "day", date: "2026-07-14" } });
+      const { repo, result } = setup(fakeRepository([existing, moved]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.rescheduleTaskToDay("a", "2026-07-20"));
+
+      expect(result.current.tasks.find((t) => t.id === "a")?.order).toBe(4);
+      await waitFor(() => expect(repo.tasks.find((t) => t.id === "a")?.order).toBe(4));
+    });
+
+    it("rescheduleTaskToDay leaves a timed task's order untouched when moved to a new day", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 6, 1)); // pin "today" before the fixed dates below
+      const moved = makeTask({
+        id: "a",
+        order: 7,
+        time: "09:00",
+        scope: { kind: "day", date: "2026-07-14" },
+      });
+      const { result } = setup(fakeRepository([moved]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.rescheduleTaskToDay("a", "2026-07-20"));
+
+      expect(result.current.tasks.find((t) => t.id === "a")?.order).toBe(7);
+    });
+
+    it("rescheduleTaskToDay starts an untimed task at order 1 when the destination day has no untimed tasks yet", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 6, 1)); // pin "today" before the fixed dates below
+      const moved = makeTask({ id: "a", order: 99, scope: { kind: "day", date: "2026-07-14" } });
+      const { result } = setup(fakeRepository([moved]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.rescheduleTaskToDay("a", "2026-07-20"));
+
+      expect(result.current.tasks.find((t) => t.id === "a")?.order).toBe(1);
+    });
   });
 
   describe("time and subtask actions", () => {

@@ -326,7 +326,33 @@ export function TasksProvider({
         }
         if (originalDate === date) return;
 
-        const task: Task = { ...current, scope: { kind: "day", date }, rolledFrom: undefined };
+        // Carrying the old day's order value across would land an untimed
+        // task at an arbitrary position in the new day's list, unrelated to
+        // the user's intent — append it past the destination's existing
+        // untimed tasks instead, same computation addTask uses. A timed
+        // task's position is always driven by `time`, not `order`, so its
+        // existing value is left as-is.
+        const order = current.time
+          ? current.order
+          : Math.max(
+              0,
+              ...state.tasks
+                .filter(
+                  (t) =>
+                    t.scope.kind === "day" &&
+                    t.scope.date === date &&
+                    !t.time &&
+                    !t.done,
+                )
+                .map((t) => t.order),
+            ) + 1;
+
+        const task: Task = {
+          ...current,
+          scope: { kind: "day", date },
+          rolledFrom: undefined,
+          order,
+        };
         if (current.repeatSourceId !== undefined) {
           task.repeatSourceId = undefined;
         }
