@@ -13,6 +13,15 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
   };
 }
 
+export function makeCategory(overrides: Partial<Category> = {}): Category {
+  return {
+    id: crypto.randomUUID(),
+    name: "category",
+    createdAt: "2026-07-16T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 export function fakeRepository(
   initial: Task[] = [],
 ): TaskRepository & { tasks: Task[] } {

@@ -1,13 +1,17 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { fakeRepository, makeTask } from "../../test-utils";
+import { fakeCategoryRepository, fakeRepository, makeCategory, makeTask } from "../../test-utils";
 import { TasksProvider } from "../../store";
 import { BucketListView } from "./bucket-list-view";
+import type { Category } from "../../types";
 
-function renderView(tasks = [] as ReturnType<typeof makeTask>[]) {
+function renderView(tasks = [] as ReturnType<typeof makeTask>[], categories: Category[] = []) {
   return render(
-    <TasksProvider repository={fakeRepository(tasks)}>
+    <TasksProvider
+      repository={fakeRepository(tasks)}
+      categoryRepository={fakeCategoryRepository(categories)}
+    >
       <BucketListView anchor="2026-07-16" onAnchorChange={() => {}} />
     </TasksProvider>,
   );
@@ -21,10 +25,15 @@ describe("BucketListView", () => {
   });
 
   it("groups tasks by category and shows item counts", async () => {
-    renderView([
-      makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", category: "To Eat" } }),
-      makeTask({ id: "2", title: "Kyoto", scope: { kind: "bucket", category: "To Go" } }),
-    ]);
+    const toEat = makeCategory({ id: "cat-to-eat", name: "To Eat" });
+    const toGo = makeCategory({ id: "cat-to-go", name: "To Go" });
+    renderView(
+      [
+        makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", categoryId: toEat.id } }),
+        makeTask({ id: "2", title: "Kyoto", scope: { kind: "bucket", categoryId: toGo.id } }),
+      ],
+      [toEat, toGo],
+    );
     await waitFor(() => expect(screen.getByText("To Eat")).toBeTruthy());
     expect(screen.getByText("To Go")).toBeTruthy();
     expect(screen.getByText("sushi")).toBeTruthy();
@@ -32,7 +41,11 @@ describe("BucketListView", () => {
   });
 
   it("completes and un-completes an item from its row", async () => {
-    renderView([makeTask({ id: "1", title: "sushi", done: false, scope: { kind: "bucket", category: "To Eat" } })]);
+    const toEat = makeCategory({ id: "cat-to-eat", name: "To Eat" });
+    renderView(
+      [makeTask({ id: "1", title: "sushi", done: false, scope: { kind: "bucket", categoryId: toEat.id } })],
+      [toEat],
+    );
     await waitFor(() => expect(screen.getByLabelText("Toggle sushi")).toBeTruthy());
     fireEvent.click(screen.getByLabelText("Toggle sushi"));
     await waitFor(() => expect(screen.getByText("sushi").className).toContain("line-through"));
@@ -41,17 +54,26 @@ describe("BucketListView", () => {
   });
 
   it("deletes an item from its row", async () => {
-    renderView([makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", category: "To Eat" } })]);
+    const toEat = makeCategory({ id: "cat-to-eat", name: "To Eat" });
+    renderView(
+      [makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", categoryId: toEat.id } })],
+      [toEat],
+    );
     await waitFor(() => expect(screen.getByText("sushi")).toBeTruthy());
     fireEvent.click(screen.getByLabelText("Delete sushi"));
     await waitFor(() => expect(screen.queryByText("sushi")).toBeNull());
   });
 
   it("removes a category's whole section once its last item is deleted, keeping other categories", async () => {
-    renderView([
-      makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", category: "To Eat" } }),
-      makeTask({ id: "2", title: "Kyoto", scope: { kind: "bucket", category: "To Go" } }),
-    ]);
+    const toEat = makeCategory({ id: "cat-to-eat", name: "To Eat" });
+    const toGo = makeCategory({ id: "cat-to-go", name: "To Go" });
+    renderView(
+      [
+        makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", categoryId: toEat.id } }),
+        makeTask({ id: "2", title: "Kyoto", scope: { kind: "bucket", categoryId: toGo.id } }),
+      ],
+      [toEat, toGo],
+    );
     await waitFor(() => expect(screen.getByText("To Eat")).toBeTruthy());
     fireEvent.click(screen.getByLabelText("Delete sushi"));
     await waitFor(() => expect(screen.queryByText("To Eat")).toBeNull());
@@ -59,7 +81,11 @@ describe("BucketListView", () => {
   });
 
   it("opens the Task Detail drawer when a row's title is clicked", async () => {
-    renderView([makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", category: "To Eat" } })]);
+    const toEat = makeCategory({ id: "cat-to-eat", name: "To Eat" });
+    renderView(
+      [makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", categoryId: toEat.id } })],
+      [toEat],
+    );
     await waitFor(() => expect(screen.getByText("sushi")).toBeTruthy());
     fireEvent.click(screen.getByText("sushi"));
     await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeTruthy());
@@ -67,7 +93,11 @@ describe("BucketListView", () => {
   });
 
   it("adds several items with Enter inside one category without losing focus", async () => {
-    renderView([makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", category: "To Eat" } })]);
+    const toEat = makeCategory({ id: "cat-to-eat", name: "To Eat" });
+    renderView(
+      [makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", categoryId: toEat.id } })],
+      [toEat],
+    );
     await waitFor(() => expect(screen.getByLabelText("Add item to To Eat")).toBeTruthy());
     const input = screen.getByLabelText("Add item to To Eat") as HTMLInputElement;
 
@@ -146,7 +176,11 @@ describe("BucketListView", () => {
   });
 
   it("reuses an existing category's casing when the general composer's category is a case-insensitive match", async () => {
-    renderView([makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", category: "To Eat" } })]);
+    const toEat = makeCategory({ id: "cat-to-eat", name: "To Eat" });
+    renderView(
+      [makeTask({ id: "1", title: "sushi", scope: { kind: "bucket", categoryId: toEat.id } })],
+      [toEat],
+    );
     await waitFor(() => expect(screen.getByText("To Eat")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /add item/i }));
 

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 import { dueDateLabel, isOverdue, todayKey } from "../lib/dates";
 import { addMinutesToTime } from "../lib/times";
-import type { Task } from "../types";
+import type { Category, Task } from "../types";
 import { TaskDetailFields } from "./task-detail-fields";
 
 // Applied only to checkboxes that represent top-level task completion (not
@@ -32,7 +32,8 @@ interface TaskItemActions {
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
-  setCategory: (id: string, category: string) => void;
+  setCategory: (id: string, categoryId: string) => void;
+  createCategory: (name: string) => Promise<Category | undefined>;
 }
 
 function formatHourMinute(hour: number, minute: number): string {
@@ -81,7 +82,14 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onRemoveSubtask: (subtaskId: string) => actions.removeSubtask(id, subtaskId),
     onEditSubtaskTitle: (subtaskId: string, title: string) =>
       actions.editSubtaskTitle(id, subtaskId, title),
-    onCategoryChange: (category: string) => actions.setCategory(id, category),
+    // The editor works in category names (create-or-reuse UX); resolve to
+    // a stable id here before handing off to the store, which only ever
+    // deals in categoryId.
+    onCategoryChange: (categoryName: string) => {
+      void actions.createCategory(categoryName).then((category) => {
+        if (category) actions.setCategory(id, category.id);
+      });
+    },
   };
 }
 

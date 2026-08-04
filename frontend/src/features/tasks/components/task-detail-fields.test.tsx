@@ -298,9 +298,10 @@ describe("TaskDetailFields bucket category", () => {
   it("shows the Category field for a bucket-scoped task", () => {
     render(
       <TaskDetailFields
-        task={makeTask({ scope: { kind: "bucket", category: "To Eat" } })}
+        task={makeTask({ scope: { kind: "bucket", categoryId: "cat-to-eat" } })}
         {...noopHandlers}
         bucketCategories={["To Eat", "To Go"]}
+        bucketCategoryName="To Eat"
         onCategoryChange={() => {}}
       />,
     );
@@ -315,7 +316,7 @@ describe("TaskDetailFields bucket category", () => {
   it("hides Start/Duration for a bucket-scoped task even when showTime is true", () => {
     render(
       <TaskDetailFields
-        task={makeTask({ scope: { kind: "bucket", category: "To Do" }, time: "09:00" })}
+        task={makeTask({ scope: { kind: "bucket", categoryId: "cat-to-do" }, time: "09:00" })}
         {...noopHandlers}
         showTime
       />,
@@ -325,14 +326,14 @@ describe("TaskDetailFields bucket category", () => {
 
   it("hides Repeat for a bucket-scoped task", () => {
     render(
-      <TaskDetailFields task={makeTask({ scope: { kind: "bucket", category: "To Do" } })} {...noopHandlers} />,
+      <TaskDetailFields task={makeTask({ scope: { kind: "bucket", categoryId: "cat-to-do" } })} {...noopHandlers} />,
     );
     expect(screen.queryByLabelText("Repeat on Monday")).toBeNull();
   });
 
   it("still shows Due date, Priority, and Background for a bucket-scoped task", () => {
     render(
-      <TaskDetailFields task={makeTask({ scope: { kind: "bucket", category: "To Do" } })} {...noopHandlers} />,
+      <TaskDetailFields task={makeTask({ scope: { kind: "bucket", categoryId: "cat-to-do" } })} {...noopHandlers} />,
     );
     expect(screen.getByLabelText("Due date")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Priority" })).toBeTruthy();
@@ -342,9 +343,10 @@ describe("TaskDetailFields bucket category", () => {
   it("re-syncs the Category input's displayed value when the drawer switches to a different bucket task without unmounting", () => {
     const { rerender } = render(
       <TaskDetailFields
-        task={makeTask({ id: "a", scope: { kind: "bucket", category: "To Eat" } })}
+        task={makeTask({ id: "a", scope: { kind: "bucket", categoryId: "cat-to-eat" } })}
         {...noopHandlers}
         bucketCategories={["To Eat", "To Go"]}
+        bucketCategoryName="To Eat"
         onCategoryChange={() => {}}
       />,
     );
@@ -354,9 +356,10 @@ describe("TaskDetailFields bucket category", () => {
     // TaskDetailDrawer swaps tasks while staying open.
     rerender(
       <TaskDetailFields
-        task={makeTask({ id: "b", scope: { kind: "bucket", category: "To Go" } })}
+        task={makeTask({ id: "b", scope: { kind: "bucket", categoryId: "cat-to-go" } })}
         {...noopHandlers}
         bucketCategories={["To Eat", "To Go"]}
+        bucketCategoryName="To Go"
         onCategoryChange={() => {}}
       />,
     );
@@ -367,9 +370,10 @@ describe("TaskDetailFields bucket category", () => {
     const onCategoryChange = vi.fn();
     render(
       <TaskDetailFields
-        task={makeTask({ scope: { kind: "bucket", category: "To Eat" } })}
+        task={makeTask({ scope: { kind: "bucket", categoryId: "cat-to-eat" } })}
         {...noopHandlers}
         bucketCategories={["To Eat"]}
+        bucketCategoryName="To Eat"
         onCategoryChange={onCategoryChange}
       />,
     );

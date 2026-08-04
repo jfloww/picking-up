@@ -28,6 +28,7 @@ export function TaskDetailFields({
   onRemoveSubtask,
   onEditSubtaskTitle,
   bucketCategories = [],
+  bucketCategoryName,
   onCategoryChange,
   showTime = true,
   showDelete = true,
@@ -48,7 +49,11 @@ export function TaskDetailFields({
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
   onEditSubtaskTitle: (subtaskId: string, title: string) => void;
+  // Category *names* only — categories are resolved to ids by the caller
+  // (see TaskDetailDrawer/taskItemHandlers), so this component never needs
+  // to know about ids at all.
   bucketCategories?: string[];
+  bucketCategoryName?: string;
   onCategoryChange?: (category: string) => void;
   showTime?: boolean;
   showDelete?: boolean;
@@ -230,7 +235,7 @@ export function TaskDetailFields({
       {task.scope.kind === "bucket" && (
         <section className={cn(drawer && "space-y-2.5")}>
           <TaskCategoryEditor
-            category={task.scope.category}
+            category={bucketCategoryName ?? ""}
             categories={bucketCategories}
             onCategoryChange={(category) => onCategoryChange?.(category)}
           />
