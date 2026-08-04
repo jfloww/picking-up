@@ -32,7 +32,7 @@ export function compareTasksForDay(a: Task, b: Task): number {
   }
   if (a.time) return -1;
   if (b.time) return 1;
-  return 0;
+  return a.order - b.order;
 }
 
 export function yToSnappedTime(
