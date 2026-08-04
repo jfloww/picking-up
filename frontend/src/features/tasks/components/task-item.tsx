@@ -206,7 +206,16 @@ export function TaskItem({
     const hasMeta = !!task.time || subtasks.length > 0 || !!repeatLabel;
     return (
       <li>
-        <div className={cn("rounded-lg bg-muted px-2 py-1.5", task.done && "opacity-55")}>
+        <div
+          className={cn(
+            "rounded-lg bg-muted px-2 py-1.5",
+            task.done && "opacity-55",
+            highlight === "overdue" &&
+              "border-l-2 border-destructive bg-destructive/10 pl-1.5 pr-2",
+            highlight === "pending" &&
+              "border-l-2 border-warning bg-warning/10 pl-1.5 pr-2",
+          )}
+        >
           {hasMeta && (
             <div className="flex items-center gap-1.5">
               <span onClick={(e) => e.stopPropagation()} className="contents">

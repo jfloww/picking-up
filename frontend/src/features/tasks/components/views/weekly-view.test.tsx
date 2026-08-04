@@ -65,15 +65,14 @@ describe("WeeklyView", () => {
     expect(screen.getByText("0")).toBeTruthy();
   });
 
-  it("renders a past unfinished task and today's unfinished task in their respective day columns", async () => {
-    // Previously this asserted overdue/pending border-color classes
-    // (border-destructive / border-warning), which came from TaskItem's
-    // "default" size. Task 5 wires ScopeTasks to always render Weekly's
-    // cards at size="week" when a drag handle is present, and TaskItem's
-    // "week" branch (added in Task 3, task-item.tsx) doesn't consume the
-    // `highlight` prop at all -- it has no overdue/pending visual treatment.
-    // So that distinction is no longer observable here; this test now only
-    // verifies both tasks still render in the correct day column.
+  it("marks a past unfinished task overdue and today's unfinished task pending", async () => {
+    // Previously (Task 5) this only checked day-column placement: wiring
+    // ScopeTasks to always render Weekly's cards at size="week" when a drag
+    // handle is present exposed that TaskItem's "week" branch didn't consume
+    // the `highlight` prop at all, so the border-color distinction wasn't
+    // observable here. TaskItem's "week" branch now applies highlight-driven
+    // border/background classes (see task-item.tsx), restoring the original
+    // assertions below.
     const overdue = makeTask({
       id: "o",
       title: "overdue task",
@@ -86,6 +85,12 @@ describe("WeeklyView", () => {
     });
     renderView(vi.fn(), [overdue, pending]);
     await waitFor(() => expect(screen.getByText("overdue task")).toBeTruthy());
+    expect(screen.getByText("overdue task").closest("div")?.className).toContain(
+      "border-destructive",
+    );
+    expect(screen.getByText("pending task").closest("div")?.className).toContain(
+      "border-warning",
+    );
     expect(screen.getByTestId("day-column-2026-07-14").textContent).toContain("overdue task");
     expect(screen.getByTestId("day-column-2026-07-16").textContent).toContain("pending task");
   });

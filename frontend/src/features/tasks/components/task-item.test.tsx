@@ -78,4 +78,38 @@ describe('TaskItem size="week"', () => {
     // task.done (only "large" does, via a different class/value).
     expect(container.querySelector(".opacity-55")).toBeTruthy();
   });
+
+  it("shows the destructive border/background treatment for highlight=\"overdue\"", () => {
+    const task = makeTask({ title: "overdue thing" });
+    const { container } = render(
+      <TaskItem task={task} size="week" highlight="overdue" {...noopHandlers} />,
+    );
+    const card = container.querySelector(".rounded-lg");
+    expect(card?.className).toContain("border-destructive");
+    expect(card?.className).toContain("bg-destructive/10");
+    // The highlight background must win over the card's base "bg-muted",
+    // not just be appended alongside it (cn()/twMerge dedupes conflicting
+    // background-color utilities, keeping only the last one).
+    expect(card?.className).not.toContain("bg-muted");
+  });
+
+  it("shows the warning border/background treatment for highlight=\"pending\"", () => {
+    const task = makeTask({ title: "pending thing" });
+    const { container } = render(
+      <TaskItem task={task} size="week" highlight="pending" {...noopHandlers} />,
+    );
+    const card = container.querySelector(".rounded-lg");
+    expect(card?.className).toContain("border-warning");
+    expect(card?.className).toContain("bg-warning/10");
+    expect(card?.className).not.toContain("bg-muted");
+  });
+
+  it("shows no highlight treatment when highlight is unset", () => {
+    const task = makeTask({ title: "plain thing" });
+    const { container } = render(<TaskItem task={task} size="week" {...noopHandlers} />);
+    const card = container.querySelector(".rounded-lg");
+    expect(card?.className).toContain("bg-muted");
+    expect(card?.className).not.toContain("border-destructive");
+    expect(card?.className).not.toContain("border-warning");
+  });
 });
