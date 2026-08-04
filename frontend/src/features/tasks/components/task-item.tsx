@@ -119,7 +119,7 @@ export function TaskItem({
   dateLabel?: string;
   highlight?: "overdue" | "pending";
   repeatLabel?: string;
-  size?: "default" | "large" | "timeline";
+  size?: "default" | "large" | "timeline" | "week";
   onToggle: () => void;
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
@@ -141,6 +141,7 @@ export function TaskItem({
   const doneCount = subtasks.filter((s) => s.done).length;
   const large = size === "large";
   const timeline = size === "timeline";
+  const week = size === "week";
   const largeMeta = task.time
     ? `${highlight === "overdue" ? "Overdue • " : ""}${formatTaskTimeRange(task.time, task.durationMinutes)}`
     : "All Day";
@@ -149,7 +150,7 @@ export function TaskItem({
     <span
       className={cn(
         "shrink-0 tabular-nums text-subtle",
-        timeline ? "text-[11px]" : "text-xs",
+        timeline || week ? "text-[11px]" : "text-xs",
       )}
     >
       {timeline ? formatTaskTimeRange(task.time, task.durationMinutes) : formatTaskTime(task.time)}
@@ -196,6 +197,65 @@ export function TaskItem({
             {task.title}
           </button>
           {timeBadge}
+        </div>
+      </li>
+    );
+  }
+
+  if (week) {
+    const hasMeta = !!task.time || subtasks.length > 0 || !!repeatLabel;
+    return (
+      <li>
+        <div className={cn("rounded-lg bg-muted px-2 py-1.5", task.done && "opacity-55")}>
+          {hasMeta && (
+            <div className="flex items-center gap-1.5">
+              <span onClick={(e) => e.stopPropagation()} className="contents">
+                <Checkbox
+                  checked={task.done}
+                  onCheckedChange={onToggle}
+                  aria-label={`Toggle ${task.title}`}
+                  className={cn("size-[13px] border-subtle", DONE_CHECKBOX_CLASS)}
+                />
+              </span>
+              {repeatLabel && (
+                <span className="shrink-0 truncate rounded bg-card px-1 text-[9.5px] font-medium text-muted-foreground">
+                  {repeatLabel}
+                </span>
+              )}
+              <span className="ml-auto flex shrink-0 items-center gap-1">
+                {timeBadge}
+                {subtasks.length > 0 && (
+                  <span
+                    aria-label={`Subtasks: ${doneCount}/${subtasks.length}`}
+                    className="shrink-0 rounded bg-card px-1 text-[10px] tabular-nums text-muted-foreground"
+                  >
+                    {doneCount}/{subtasks.length}
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
+          {!hasMeta && (
+            <span onClick={(e) => e.stopPropagation()} className="contents">
+              <Checkbox
+                checked={task.done}
+                onCheckedChange={onToggle}
+                aria-label={`Toggle ${task.title}`}
+                className={cn("mr-1.5 size-[13px] border-subtle", DONE_CHECKBOX_CLASS)}
+              />
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={selectOrToggle}
+            className={cn(
+              "text-left text-[12.5px] leading-[1.35]",
+              hasMeta ? "mt-1 block w-full" : "inline",
+              task.done && "text-muted-foreground line-through",
+            )}
+          >
+            {task.title}
+          </button>
         </div>
       </li>
     );
