@@ -1,4 +1,4 @@
-import { getAccessToken } from "@/lib/auth/cookies";
+import { getAccessToken } from "@/lib/auth/server-cookies";
 
 const API_BASE_URL = process.env.DJANGO_API_BASE_URL ?? "http://localhost:8000";
 

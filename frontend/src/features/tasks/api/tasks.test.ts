@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/auth/cookies", () => ({
+vi.mock("@/lib/auth/server-cookies", () => ({
   getAccessToken: vi.fn().mockResolvedValue("test-token"),
 }));
 

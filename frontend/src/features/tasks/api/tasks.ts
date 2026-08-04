@@ -1,5 +1,5 @@
 import { apiRequest } from "@/lib/api/server";
-import { getAccessToken } from "@/lib/auth/cookies";
+import { getAccessToken } from "@/lib/auth/server-cookies";
 
 import { fromApiPayload, toApiPayload, type ApiTask } from "./mapping";
 import type { Task } from "../types";

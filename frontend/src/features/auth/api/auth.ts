@@ -1,5 +1,5 @@
 import { apiRequest } from "@/lib/api/server";
-import { getAccessToken } from "@/lib/auth/cookies";
+import { getAccessToken } from "@/lib/auth/server-cookies";
 
 import type { CurrentUser, TokenPair } from "../types";
 
