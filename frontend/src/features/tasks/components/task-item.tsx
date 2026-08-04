@@ -218,7 +218,7 @@ export function TaskItem({
                 />
               </span>
               {repeatLabel && (
-                <span className="shrink-0 truncate rounded bg-card px-1 text-[9.5px] font-medium text-muted-foreground">
+                <span className="min-w-0 truncate rounded bg-card px-1 text-[9.5px] font-medium text-muted-foreground">
                   {repeatLabel}
                 </span>
               )}
