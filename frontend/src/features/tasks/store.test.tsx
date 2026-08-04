@@ -3,18 +3,18 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider, tasksReducer, useTasks } from "./store";
-import { fakeRepository, makeTask } from "./test-utils";
+import { fakeCategoryRepository, fakeRepository, makeTask } from "./test-utils";
 import { addDays, todayKey, weekStartOf } from "./lib/dates";
-import type { Task } from "./types";
+import type { Category, Task } from "./types";
 
 describe("tasksReducer", () => {
   it("handles loaded/added/updated/removed", () => {
     const task = makeTask({ id: "a" });
     let state = tasksReducer(
-      { loaded: false, tasks: [], syncError: null },
+      { loaded: false, tasks: [], categories: [], syncError: null },
       { type: "loaded", tasks: [task] },
     );
-    expect(state).toEqual({ loaded: true, tasks: [task], syncError: null });
+    expect(state).toEqual({ loaded: true, tasks: [task], categories: [], syncError: null });
 
     const other = makeTask({ id: "b" });
     state = tasksReducer(state, { type: "added", task: other });
@@ -32,11 +32,11 @@ describe("tasksReducer", () => {
 });
 
 describe("TasksProvider", () => {
-  function setup(repo = fakeRepository()) {
+  function setup(repo = fakeRepository(), categoryRepo = fakeCategoryRepository()) {
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <TasksProvider repository={repo}>{children}</TasksProvider>
+      <TasksProvider repository={repo} categoryRepository={categoryRepo}>{children}</TasksProvider>
     );
-    return { repo, ...renderHook(() => useTasks(), { wrapper }) };
+    return { repo, categoryRepo, ...renderHook(() => useTasks(), { wrapper }) };
   }
 
   it("loads tasks, applies rollover, and persists rolled tasks", async () => {
@@ -561,40 +561,104 @@ describe("TasksProvider", () => {
   });
 
   describe("bucket list actions", () => {
-    it("addBucketItem trims the title, normalizes category casing, and rejects a blank title or category", async () => {
-      const existing = makeTask({
-        id: "existing",
-        scope: { kind: "bucket", category: "To Eat" },
-      });
-      const { repo, result } = setup(fakeRepository([existing]));
+    it("addBucketItem creates a task in the given category and rejects a blank title", async () => {
+      const category = { id: "c-1", name: "To Eat", createdAt: "2026-07-01T00:00:00.000Z" };
+      const { repo, result } = setup(fakeRepository(), fakeCategoryRepository([category]));
       await waitFor(() => expect(result.current.loaded).toBe(true));
 
       act(() => {
-        result.current.addBucketItem("  try the new ramen place  ", "to eat"); // case-insensitive match
+        result.current.addBucketItem("  try the new ramen place  ", "c-1");
       });
-      await waitFor(() => expect(result.current.tasks).toHaveLength(2));
-      const created = result.current.tasks.find((t) => t.id !== "existing")!;
+      await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+      const created = result.current.tasks[0];
       expect(created.title).toBe("try the new ramen place");
-      expect(created.scope).toEqual({ kind: "bucket", category: "To Eat" }); // reused existing casing
-      await waitFor(() => expect(repo.tasks).toHaveLength(2));
+      expect(created.scope).toEqual({ kind: "bucket", categoryId: "c-1" });
+      await waitFor(() => expect(repo.tasks).toHaveLength(1));
 
-      act(() => result.current.addBucketItem("   ", "To Go"));
-      expect(result.current.tasks).toHaveLength(2); // blank title rejected
+      act(() => result.current.addBucketItem("   ", "c-1"));
+      expect(result.current.tasks).toHaveLength(1); // blank title rejected
 
-      act(() => result.current.addBucketItem("valid title", "   "));
-      expect(result.current.tasks).toHaveLength(2); // blank category rejected
+      act(() => result.current.addBucketItem("valid title", ""));
+      expect(result.current.tasks).toHaveLength(1); // blank categoryId rejected
     });
 
-    it("setCategory moves a task to a new category and normalizes casing to match existing categories", async () => {
-      const task1 = makeTask({ id: "a", scope: { kind: "bucket", category: "To Go" } });
-      const task2 = makeTask({ id: "b", scope: { kind: "bucket", category: "To Eat" } });
-      const { repo, result } = setup(fakeRepository([task1, task2]));
+    it("setCategory moves a task to a different category by id, persisting the change", async () => {
+      const toGo = { id: "c-go", name: "To Go", createdAt: "2026-07-01T00:00:00.000Z" };
+      const toEat = { id: "c-eat", name: "To Eat", createdAt: "2026-07-02T00:00:00.000Z" };
+      const task = makeTask({ id: "a", scope: { kind: "bucket", categoryId: "c-go" } });
+      const { repo, result } = setup(fakeRepository([task]), fakeCategoryRepository([toGo, toEat]));
       await waitFor(() => expect(result.current.loaded).toBe(true));
 
-      // Move to a new category with different casing, should match existing "To Eat" and reuse its casing
-      act(() => result.current.setCategory("a", "to eat"));
-      expect(result.current.tasks[0].scope).toEqual({ kind: "bucket", category: "To Eat" });
-      await waitFor(() => expect(repo.tasks[0].scope).toEqual({ kind: "bucket", category: "To Eat" }));
+      act(() => result.current.setCategory("a", "c-eat"));
+      expect(result.current.tasks[0].scope).toEqual({ kind: "bucket", categoryId: "c-eat" });
+      await waitFor(() => expect(repo.tasks[0].scope).toEqual({ kind: "bucket", categoryId: "c-eat" }));
+    });
+  });
+
+  describe("category actions", () => {
+    it("createCategory creates and returns a new category, rejecting a blank name", async () => {
+      const { categoryRepo, result } = setup();
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      let created: Category | undefined;
+      await act(async () => {
+        created = await result.current.createCategory("  To Eat  ");
+      });
+      expect(created?.name).toBe("To Eat");
+      await waitFor(() => expect(result.current.categories).toHaveLength(1));
+      expect(categoryRepo.categories).toHaveLength(1);
+
+      let rejected: Category | undefined;
+      await act(async () => {
+        rejected = await result.current.createCategory("   ");
+      });
+      expect(rejected).toBeUndefined();
+      expect(result.current.categories).toHaveLength(1);
+    });
+
+    it("createCategory does not dispatch a duplicate when the repo's create-or-reuse resolves to an already-known category", async () => {
+      // fakeCategoryRepository.create() reuses an existing category on a
+      // case-insensitive name match (same as the real backend's
+      // create-or-reuse endpoint) and resolves to that SAME existing object
+      // — this exercises store.tsx's createCategory guard
+      // (`!state.categories.some((c) => c.id === category.id)`), which must
+      // recognize the returned category is already in state and skip
+      // dispatching "categoryAdded" a second time.
+      const existing = { id: "c-1", name: "To Eat", createdAt: "2026-07-01T00:00:00.000Z" };
+      const { categoryRepo, result } = setup(fakeRepository(), fakeCategoryRepository([existing]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      await waitFor(() => expect(result.current.categories).toHaveLength(1));
+
+      let reused: Category | undefined;
+      await act(async () => {
+        reused = await result.current.createCategory("to eat"); // case-insensitive match reuses "existing"
+      });
+      expect(reused?.id).toBe("c-1");
+      expect(result.current.categories).toHaveLength(1); // no duplicate added
+      expect(result.current.categories[0]).toEqual(existing);
+      expect(categoryRepo.categories).toHaveLength(1);
+    });
+
+    it("renameCategory updates the category's name and reports success", async () => {
+      const category = { id: "c-1", name: "To Go", createdAt: "2026-07-01T00:00:00.000Z" };
+      const { categoryRepo, result } = setup(fakeRepository(), fakeCategoryRepository([category]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      await waitFor(() => expect(result.current.categories).toHaveLength(1));
+
+      let ok = false;
+      await act(async () => {
+        ok = await result.current.renameCategory("c-1", "To Visit");
+      });
+      expect(ok).toBe(true);
+      expect(result.current.categories[0].name).toBe("To Visit");
+      expect(categoryRepo.categories[0].name).toBe("To Visit");
+    });
+
+    it("categories load alongside tasks on initial load", async () => {
+      const category = { id: "c-1", name: "To Eat", createdAt: "2026-07-01T00:00:00.000Z" };
+      const { result } = setup(fakeRepository(), fakeCategoryRepository([category]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      expect(result.current.categories).toEqual([category]);
     });
   });
 
@@ -684,6 +748,43 @@ describe("TasksProvider", () => {
       act(() => result.current.setRepeatWeekdays("a", []));
       expect(result.current.tasks[0].dueDate).toBe("2026-07-31");
     });
+  });
+
+  it("setOrder updates a task's order and persists it", async () => {
+    const task = makeTask({ id: "a", order: 1, scope: { kind: "day", date: todayKey() } });
+    const { repo, result } = setup(fakeRepository([task]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    act(() => result.current.setOrder("a", 2.5));
+
+    expect(result.current.tasks[0].order).toBe(2.5);
+    await waitFor(() => expect(repo.tasks[0].order).toBe(2.5));
+  });
+
+  it("addTask appends a new day-scoped untimed task after the current highest All-Day-To-Do order for that day", async () => {
+    const today = todayKey();
+    const existing = makeTask({ id: "a", order: 3, scope: { kind: "day", date: today } });
+    const { result } = setup(fakeRepository([existing]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    let created: ReturnType<typeof result.current.addTask>;
+    act(() => {
+      created = result.current.addTask("new task", { kind: "day", date: today });
+    });
+
+    expect(created?.order).toBe(4);
+  });
+
+  it("addTask on a task with no existing All-Day-To-Do siblings for that day starts at order 1", async () => {
+    const { result } = setup(fakeRepository([]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    let created: ReturnType<typeof result.current.addTask>;
+    act(() => {
+      created = result.current.addTask("first task", { kind: "day", date: todayKey() });
+    });
+
+    expect(created?.order).toBe(1);
   });
 
   describe("sync failure handling", () => {

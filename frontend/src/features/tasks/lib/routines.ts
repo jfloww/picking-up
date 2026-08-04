@@ -30,6 +30,7 @@ export function materializeRoutines(tasks: Task[], today: string): Task[] {
       time: anchor.time,
       done: false,
       scope: { kind: "day", date: today },
+      order: 0,
       repeatSourceId: anchor.id,
       createdAt: new Date().toISOString(),
     }));

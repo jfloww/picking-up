@@ -10,28 +10,32 @@ import {
   type ReactNode,
 } from "react";
 
+import { createApiCategoryRepository } from "./data/category-repository";
+import type { CategoryRepository } from "./data/category-repository";
 import { createApiTaskRepository } from "./data/api-task-repository";
 import type { TaskRepository } from "./data/repository";
 import { todayKey } from "./lib/dates";
 import { isValidTime } from "./lib/times";
 import { rolloverTasks } from "./lib/rollover";
 import { materializeRoutines } from "./lib/routines";
-import { bucketCategoriesInUse, resolveCategoryCasing } from "./lib/categories";
-import type { Scope, Task } from "./types";
+import type { Category, Scope, Task } from "./types";
 
 const SYNC_ERROR_MESSAGE = "Something didn't save. Reconnecting to check what's saved…";
 
 export interface TasksState {
   loaded: boolean;
   tasks: Task[];
+  categories: Category[];
   syncError: string | null;
 }
 
 export type TasksAction =
-  | { type: "loaded"; tasks: Task[] }
+  | { type: "loaded"; tasks: Task[]; categories?: Category[] }
   | { type: "added"; task: Task }
   | { type: "updated"; task: Task }
   | { type: "removed"; id: string }
+  | { type: "categoryAdded"; category: Category }
+  | { type: "categoryUpdated"; category: Category }
   | { type: "syncErrorOccurred" }
   | { type: "syncErrorDismissed" };
 
@@ -41,7 +45,12 @@ export function tasksReducer(
 ): TasksState {
   switch (action.type) {
     case "loaded":
-      return { ...state, loaded: true, tasks: action.tasks };
+      return {
+        ...state,
+        loaded: true,
+        tasks: action.tasks,
+        categories: action.categories ?? state.categories,
+      };
     case "added":
       return { ...state, tasks: [...state.tasks, action.task] };
     case "updated":
@@ -53,6 +62,15 @@ export function tasksReducer(
       };
     case "removed":
       return { ...state, tasks: state.tasks.filter((t) => t.id !== action.id) };
+    case "categoryAdded":
+      return { ...state, categories: [...state.categories, action.category] };
+    case "categoryUpdated":
+      return {
+        ...state,
+        categories: state.categories.map((c) =>
+          c.id === action.category.id ? action.category : c,
+        ),
+      };
     case "syncErrorOccurred":
       return { ...state, syncError: SYNC_ERROR_MESSAGE };
     case "syncErrorDismissed":
@@ -72,13 +90,16 @@ interface TasksContextValue extends TasksState {
   setDuration: (id: string, durationMinutes: number | undefined) => void;
   setBackground: (id: string, background: boolean) => void;
   setDueDate: (id: string, dueDate: string | undefined) => void;
+  setOrder: (id: string, order: number) => void;
   removeTask: (id: string) => void;
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
-  addBucketItem: (title: string, category: string) => Task | undefined;
-  setCategory: (id: string, category: string) => void;
+  addBucketItem: (title: string, categoryId: string) => Task | undefined;
+  setCategory: (id: string, categoryId: string) => void;
+  createCategory: (name: string) => Promise<Category | undefined>;
+  renameCategory: (id: string, name: string) => Promise<boolean>;
   dismissSyncError: () => void;
 }
 
@@ -86,19 +107,26 @@ const TasksContext = createContext<TasksContextValue | null>(null);
 
 export function TasksProvider({
   repository,
+  categoryRepository,
   children,
 }: {
   repository?: TaskRepository;
+  categoryRepository?: CategoryRepository;
   children: ReactNode;
 }) {
   const [state, dispatch] = useReducer(tasksReducer, {
     loaded: false,
     tasks: [],
+    categories: [],
     syncError: null,
   });
   const repo = useMemo(
     () => repository ?? createApiTaskRepository(),
     [repository],
+  );
+  const categoryRepo = useMemo(
+    () => categoryRepository ?? createApiCategoryRepository(),
+    [categoryRepository],
   );
 
   const tasksRef = useRef(state.tasks);
@@ -129,15 +157,14 @@ export function TasksProvider({
 
   useEffect(() => {
     let cancelled = false;
-    void repo
-      .list()
-      .then((tasks) => {
+    void Promise.all([repo.list(), categoryRepo.list()])
+      .then(([tasks, categories]) => {
         if (cancelled) return;
         const today = todayKey();
         const rolled = rolloverTasks(tasks, today);
         const spawned = materializeRoutines(rolled, today);
         const finalTasks = [...rolled, ...spawned];
-        dispatch({ type: "loaded", tasks: finalTasks });
+        dispatch({ type: "loaded", tasks: finalTasks, categories });
         appliedDayRef.current = today;
         rolled.forEach((task, i) => {
           if (task !== tasks[i]) repo.update(task).catch(handleSyncFailure);
@@ -147,13 +174,13 @@ export function TasksProvider({
       .catch(() => {
         if (cancelled) return;
         dispatch({ type: "syncErrorOccurred" });
-        dispatch({ type: "loaded", tasks: [] });
+        dispatch({ type: "loaded", tasks: [], categories: [] });
       });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repo]);
+  }, [repo, categoryRepo]);
 
   useEffect(() => {
     function rolloverIfDateChanged() {
@@ -187,26 +214,42 @@ export function TasksProvider({
       addTask(title, scope) {
         const trimmed = title.trim();
         if (!trimmed) return undefined;
+        const order =
+          scope.kind === "day"
+            ? Math.max(
+                0,
+                ...state.tasks
+                  .filter(
+                    (t) =>
+                      t.scope.kind === "day" &&
+                      t.scope.date === scope.date &&
+                      !t.time &&
+                      !t.done,
+                  )
+                  .map((t) => t.order),
+              ) + 1
+            : 0;
         const task: Task = {
           id: crypto.randomUUID(),
           title: trimmed,
           done: false,
           scope,
+          order,
           createdAt: new Date().toISOString(),
         };
         dispatch({ type: "added", task });
         repo.create(task).catch(handleSyncFailure);
         return task;
       },
-      addBucketItem(title, category) {
+      addBucketItem(title, categoryId) {
         const trimmed = title.trim();
-        const normalizedCategory = resolveCategoryCasing(category, bucketCategoriesInUse(state.tasks));
-        if (!trimmed || !normalizedCategory) return undefined;
+        if (!trimmed || !categoryId) return undefined;
         const task: Task = {
           id: crypto.randomUUID(),
           title: trimmed,
           done: false,
-          scope: { kind: "bucket", category: normalizedCategory },
+          scope: { kind: "bucket", categoryId },
+          order: 0,
           createdAt: new Date().toISOString(),
         };
         dispatch({ type: "added", task });
@@ -328,14 +371,45 @@ export function TasksProvider({
         dispatch({ type: "updated", task });
         repo.update(task).catch(handleSyncFailure);
       },
-      setCategory(id, category) {
+      setOrder(id, order) {
         const current = state.tasks.find((t) => t.id === id);
-        if (!current || current.scope.kind !== "bucket") return;
-        const normalizedCategory = resolveCategoryCasing(category, bucketCategoriesInUse(state.tasks));
-        if (!normalizedCategory) return;
-        const task: Task = { ...current, scope: { kind: "bucket", category: normalizedCategory } };
+        if (!current) return;
+        const task: Task = { ...current, order };
         dispatch({ type: "updated", task });
         repo.update(task).catch(handleSyncFailure);
+      },
+      setCategory(id, categoryId) {
+        const current = state.tasks.find((t) => t.id === id);
+        if (!current || current.scope.kind !== "bucket" || !categoryId) return;
+        const task: Task = { ...current, scope: { kind: "bucket", categoryId } };
+        dispatch({ type: "updated", task });
+        repo.update(task).catch(handleSyncFailure);
+      },
+      async createCategory(name) {
+        const trimmed = name.trim();
+        if (!trimmed) return undefined;
+        try {
+          const category = await categoryRepo.create(trimmed);
+          // create-or-reuse: only dispatch if this category isn't already
+          // in state (the server may have returned an existing match).
+          if (!state.categories.some((c) => c.id === category.id)) {
+            dispatch({ type: "categoryAdded", category });
+          }
+          return category;
+        } catch {
+          return undefined;
+        }
+      },
+      async renameCategory(id, name) {
+        const trimmed = name.trim();
+        if (!trimmed) return false;
+        try {
+          const category = await categoryRepo.rename(id, trimmed);
+          dispatch({ type: "categoryUpdated", category });
+          return true;
+        } catch {
+          return false;
+        }
       },
       addSubtask(id, title) {
         const current = state.tasks.find((t) => t.id === id);
@@ -412,7 +486,7 @@ export function TasksProvider({
         dispatch({ type: "syncErrorDismissed" });
       },
     }),
-    [state, repo],
+    [state, repo, categoryRepo],
   );
 
   return <TasksContext.Provider value={value}>{children}</TasksContext.Provider>;

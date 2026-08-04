@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import Task
+from .models import Category, Task
 
 
 User = get_user_model()
@@ -28,6 +28,7 @@ def make_task_payload(**overrides):
         "done": False,
         "scope_kind": "day",
         "scope_value": "2026-07-27",
+        "bucket_category": None,
         "rolled_from_kind": None,
         "rolled_from_value": None,
         "created_at": "2026-07-27T00:00:00.000Z",
@@ -350,29 +351,283 @@ class TaskApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_order_defaults_to_zero_and_is_updatable(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/", make_task_payload(id=str(uuid.uuid4())), format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["order"], 0)
+
+        task_id = response.data["id"]
+        response = client.put(
+            f"/api/tasks/{task_id}/",
+            make_task_payload(id=task_id, order=2.5),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["order"], 2.5)
+
 
 class BucketScopeTests(TestCase):
     def test_creates_and_fetches_a_bucket_scoped_task(self):
         owner, client = auth_client("bucket@example.com")
-        payload = make_task_payload(
-            scope_kind="bucket",
-            scope_value="Restaurants to try before I leave Tokyo",  # 40 chars, > old 20-char limit
-        )
+        category = Category.objects.create(user=owner, name="To Eat")
+        payload = make_task_payload(scope_kind="bucket", scope_value="", bucket_category=str(category.id))
         response = client.post("/api/tasks/", payload, format="json")
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["scope_kind"], "bucket")
-        self.assertEqual(response.data["scope_value"], "Restaurants to try before I leave Tokyo")
+        self.assertEqual(response.data["bucket_category"], str(category.id))
 
         get_response = client.get("/api/tasks/")
-        self.assertEqual(get_response.data[0]["scope_value"], "Restaurants to try before I leave Tokyo")
+        self.assertEqual(get_response.data[0]["bucket_category"], str(category.id))
 
     def test_updates_a_task_from_one_category_to_another(self):
         owner, client = auth_client("bucket-update@example.com")
-        payload = make_task_payload(scope_kind="bucket", scope_value="To Go")
+        to_go = Category.objects.create(user=owner, name="To Go")
+        to_eat = Category.objects.create(user=owner, name="To Eat")
+        payload = make_task_payload(scope_kind="bucket", scope_value="", bucket_category=str(to_go.id))
         create_response = client.post("/api/tasks/", payload, format="json")
         task_id = create_response.data["id"]
 
-        payload["scope_value"] = "To Eat"
+        payload["bucket_category"] = str(to_eat.id)
         update_response = client.put(f"/api/tasks/{task_id}/", payload, format="json")
         self.assertEqual(update_response.status_code, 200)
-        self.assertEqual(update_response.data["scope_value"], "To Eat")
+        self.assertEqual(update_response.data["bucket_category"], str(to_eat.id))
+
+    def test_rejects_a_bucket_category_belonging_to_another_user(self):
+        owner, client = auth_client("bucket-owner@example.com")
+        other, _ = auth_client("bucket-other@example.com")
+        others_category = Category.objects.create(user=other, name="Not Yours")
+        payload = make_task_payload(
+            scope_kind="bucket", scope_value="", bucket_category=str(others_category.id),
+        )
+        response = client.post("/api/tasks/", payload, format="json")
+        self.assertEqual(response.status_code, 400)
+
+
+class CategoryModelTests(TestCase):
+    def test_two_users_can_each_have_a_category_with_the_same_name(self):
+        owner, _ = auth_client("cat-owner@example.com")
+        other, _ = auth_client("cat-other@example.com")
+        Category.objects.create(user=owner, name="To Eat")
+        Category.objects.create(user=other, name="To Eat")  # no IntegrityError
+
+        self.assertEqual(Category.objects.filter(name="To Eat").count(), 2)
+
+    def test_exact_duplicate_name_for_the_same_user_is_rejected_at_the_db_level(self):
+        from django.db import IntegrityError
+
+        owner, _ = auth_client("cat-dupe@example.com")
+        Category.objects.create(user=owner, name="To Eat")
+        with self.assertRaises(IntegrityError):
+            Category.objects.create(user=owner, name="To Eat")
+
+
+import uuid as uuid_module
+
+from django.contrib.auth import get_user_model as get_user_model_for_migration
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+from django.test import TransactionTestCase
+
+
+class BackfillBucketCategoriesMigrationTests(TransactionTestCase):
+    def test_backfills_distinct_case_insensitive_categories_and_repoints_tasks(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0004_category_and_bucket_category_fk")])
+
+        old_state = executor.loader.project_state(
+            [("tasks", "0004_category_and_bucket_category_fk")]
+        )
+        OldUser = old_state.apps.get_model("auth", "User")
+        OldTask = old_state.apps.get_model("tasks", "Task")
+
+        user = OldUser.objects.create(username="migrate@example.com", email="migrate@example.com")
+        other_user = OldUser.objects.create(username="migrate2@example.com", email="migrate2@example.com")
+
+        # Same user, same category, two different castings — should dedupe
+        # into ONE Category, keeping the earlier task's casing.
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="sushi", scope_kind="bucket",
+            scope_value="To Eat", created_at="2026-07-01T00:00:00.000Z",
+        )
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="ramen", scope_kind="bucket",
+            scope_value="to eat", created_at="2026-07-02T00:00:00.000Z",
+        )
+        # A day-scoped task should be completely untouched by the migration.
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="unrelated", scope_kind="day",
+            scope_value="2026-07-03", created_at="2026-07-03T00:00:00.000Z",
+        )
+        # A different user's bucket category with the SAME name as the first
+        # user's — must become its own separate Category (per-user uniqueness).
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=other_user.id, title="also sushi", scope_kind="bucket",
+            scope_value="To Eat", created_at="2026-07-01T00:00:00.000Z",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0005_backfill_bucket_categories")])
+
+        new_state = executor.loader.project_state(
+            [("tasks", "0005_backfill_bucket_categories")]
+        )
+        NewCategory = new_state.apps.get_model("tasks", "Category")
+        NewTask = new_state.apps.get_model("tasks", "Task")
+
+        user_categories = NewCategory.objects.filter(user_id=user.id)
+        self.assertEqual(user_categories.count(), 1)
+        self.assertEqual(user_categories.first().name, "To Eat")  # earliest task's casing
+
+        other_user_categories = NewCategory.objects.filter(user_id=other_user.id)
+        self.assertEqual(other_user_categories.count(), 1)
+        self.assertEqual(other_user_categories.first().id, other_user_categories.first().id)
+        self.assertNotEqual(other_user_categories.first().id, user_categories.first().id)
+
+        bucket_tasks = NewTask.objects.filter(user_id=user.id, scope_kind="bucket")
+        self.assertEqual(bucket_tasks.count(), 2)
+        for t in bucket_tasks:
+            self.assertEqual(t.bucket_category_id, user_categories.first().id)
+
+        untouched = NewTask.objects.get(user_id=user.id, scope_kind="day")
+        self.assertIsNone(untouched.bucket_category_id)
+
+        # Roll every app migration back to its latest state so later tests in
+        # the suite (which use the real `apps.tasks.models.Task`/`Category`,
+        # not this historical snapshot) run against the real schema.
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", None)])
+        call_command_migrate = __import__("django.core.management", fromlist=["call_command"]).call_command
+        call_command_migrate("migrate")
+
+
+class BackfillTaskOrderMigrationTests(TransactionTestCase):
+    def test_backfills_order_from_created_at_sequence(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0005_backfill_bucket_categories")])
+
+        old_state = executor.loader.project_state([("tasks", "0005_backfill_bucket_categories")])
+        OldUser = old_state.apps.get_model("auth", "User")
+        OldTask = old_state.apps.get_model("tasks", "Task")
+
+        user = OldUser.objects.create(username="order@example.com", email="order@example.com")
+        # Created out of created_at order, to prove the backfill sorts by
+        # created_at rather than trusting row-insertion order.
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="third", scope_kind="day",
+            scope_value="2026-07-03", created_at="2026-07-03T00:00:00.000Z",
+        )
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="first", scope_kind="day",
+            scope_value="2026-07-01", created_at="2026-07-01T00:00:00.000Z",
+        )
+        OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="second", scope_kind="day",
+            scope_value="2026-07-02", created_at="2026-07-02T00:00:00.000Z",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0006_task_order")])
+
+        new_state = executor.loader.project_state([("tasks", "0006_task_order")])
+        NewTask = new_state.apps.get_model("tasks", "Task")
+
+        by_title = {t.title: t.order for t in NewTask.objects.filter(user_id=user.id)}
+        self.assertLess(by_title["first"], by_title["second"])
+        self.assertLess(by_title["second"], by_title["third"])
+
+
+class CategoryApiTests(TestCase):
+    def test_list_only_returns_the_authenticated_users_own_categories_ordered_by_created_at(self):
+        owner, owner_client = auth_client("cat-list-owner@example.com")
+        other, _ = auth_client("cat-list-other@example.com")
+        first = Category.objects.create(user=owner, name="To Go")
+        Category.objects.create(user=other, name="Not Mine")
+        second = Category.objects.create(user=owner, name="To Eat")
+
+        response = owner_client.get("/api/categories/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([c["id"] for c in response.data], [str(first.id), str(second.id)])
+
+    def test_create_makes_a_new_category(self):
+        owner, client = auth_client("cat-create@example.com")
+
+        response = client.post("/api/categories/", {"name": "  To Eat  "}, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["name"], "To Eat")
+        self.assertEqual(Category.objects.filter(user=owner).count(), 1)
+
+    def test_create_with_a_case_insensitive_duplicate_name_reuses_the_existing_category(self):
+        owner, client = auth_client("cat-create-dupe@example.com")
+        existing = Category.objects.create(user=owner, name="To Eat")
+
+        response = client.post("/api/categories/", {"name": "to eat"}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["id"], str(existing.id))
+        self.assertEqual(Category.objects.filter(user=owner).count(), 1)
+
+    def test_create_rejects_a_blank_name(self):
+        owner, client = auth_client("cat-create-blank@example.com")
+
+        response = client.post("/api/categories/", {"name": "   "}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Category.objects.filter(user=owner).count(), 0)
+
+    def test_a_different_users_category_with_the_same_name_is_not_reused(self):
+        owner, owner_client = auth_client("cat-create-scope@example.com")
+        other, _ = auth_client("cat-create-scope-other@example.com")
+        Category.objects.create(user=other, name="To Eat")
+
+        response = owner_client.post("/api/categories/", {"name": "To Eat"}, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Category.objects.filter(user=owner).count(), 1)
+
+    def test_rename_updates_the_name(self):
+        owner, client = auth_client("cat-rename@example.com")
+        category = Category.objects.create(user=owner, name="To Go")
+
+        response = client.patch(f"/api/categories/{category.id}/", {"name": "To Visit"}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["name"], "To Visit")
+        category.refresh_from_db()
+        self.assertEqual(category.name, "To Visit")
+
+    def test_rename_rejects_a_case_insensitive_collision_with_another_category(self):
+        owner, client = auth_client("cat-rename-collision@example.com")
+        Category.objects.create(user=owner, name="To Eat")
+        to_go = Category.objects.create(user=owner, name="To Go")
+
+        response = client.patch(f"/api/categories/{to_go.id}/", {"name": "to eat"}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        to_go.refresh_from_db()
+        self.assertEqual(to_go.name, "To Go")
+
+    def test_rename_rejects_a_blank_name(self):
+        owner, client = auth_client("cat-rename-blank@example.com")
+        category = Category.objects.create(user=owner, name="To Go")
+
+        response = client.patch(f"/api/categories/{category.id}/", {"name": "   "}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        category.refresh_from_db()
+        self.assertEqual(category.name, "To Go")
+
+    def test_cannot_rename_another_users_category(self):
+        owner, _ = auth_client("cat-rename-owner@example.com")
+        _, other_client = auth_client("cat-rename-attacker@example.com")
+        category = Category.objects.create(user=owner, name="To Go")
+
+        response = other_client.patch(f"/api/categories/{category.id}/", {"name": "Hijacked"}, format="json")
+
+        self.assertEqual(response.status_code, 404)
+        category.refresh_from_db()
+        self.assertEqual(category.name, "To Go")

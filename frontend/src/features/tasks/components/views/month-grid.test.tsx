@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider } from "../../store";
-import { fakeRepository, makeTask } from "../../test-utils";
+import { fakeCategoryRepository, fakeRepository, makeTask } from "../../test-utils";
 import { MonthGrid } from "./month-grid";
 
 function renderGrid({
@@ -13,7 +13,7 @@ function renderGrid({
   tasks = [] as Parameters<typeof fakeRepository>[0],
 } = {}) {
   render(
-    <TasksProvider repository={fakeRepository(tasks)}>
+    <TasksProvider repository={fakeRepository(tasks)} categoryRepository={fakeCategoryRepository()}>
       <MonthGrid
         monthKey={monthKey}
         selectedDate={selectedDate}

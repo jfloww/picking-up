@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 
@@ -11,6 +13,24 @@ SCOPE_KIND_CHOICES = [
 ]
 
 
+class Category(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="categories"
+    )
+    name = models.CharField(max_length=60)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "name"], name="unique_category_name_per_user"),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class Task(models.Model):
     id = models.UUIDField(primary_key=True, editable=True)
     user = models.ForeignKey(
@@ -20,7 +40,10 @@ class Task(models.Model):
     memo = models.TextField(blank=True, null=True)
     done = models.BooleanField(default=False)
     scope_kind = models.CharField(max_length=10, choices=SCOPE_KIND_CHOICES)
-    scope_value = models.CharField(max_length=60)
+    scope_value = models.CharField(max_length=60, blank=True)
+    bucket_category = models.ForeignKey(
+        Category, null=True, blank=True, on_delete=models.SET_NULL, related_name="tasks"
+    )
     rolled_from_kind = models.CharField(
         max_length=10, blank=True, null=True, choices=SCOPE_KIND_CHOICES
     )
@@ -42,6 +65,7 @@ class Task(models.Model):
     priority = models.BooleanField(blank=True, null=True)
     duration_minutes = models.PositiveIntegerField(blank=True, null=True)
     background = models.BooleanField(blank=True, null=True)
+    order = models.FloatField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

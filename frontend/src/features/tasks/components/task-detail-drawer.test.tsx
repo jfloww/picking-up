@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { makeTask } from "../test-utils";
+import { makeCategory, makeTask } from "../test-utils";
 import { TaskDetailDrawer } from "./task-detail-drawer";
 
 const noopHandlers = {
@@ -717,10 +717,12 @@ describe("TaskDetailDrawer", () => {
 });
 
 describe("bucket-scoped task", () => {
+  const toEat = makeCategory({ id: "cat-to-eat", name: "To Eat" });
+  const toGo = makeCategory({ id: "cat-to-go", name: "To Go" });
   const bucketTask = makeTask({
     id: "bk",
     title: "try that new ramen place",
-    scope: { kind: "bucket", category: "To Eat" },
+    scope: { kind: "bucket", categoryId: toEat.id },
   });
 
   it("hides Start, Duration, and Repeat", () => {
@@ -745,7 +747,7 @@ describe("bucket-scoped task", () => {
       <TaskDetailDrawer
         task={bucketTask}
         {...noopHandlers}
-        bucketCategories={["To Eat", "To Go"]}
+        bucketCategories={[toEat, toGo]}
         onCategoryChange={onCategoryChange}
       />,
     );
@@ -764,7 +766,7 @@ describe("bucket-scoped task", () => {
       <TaskDetailDrawer
         task={bucketTask}
         {...noopHandlers}
-        bucketCategories={["To Eat", "To Go"]}
+        bucketCategories={[toEat, toGo]}
         onCategoryChange={onCategoryChange}
       />,
     );

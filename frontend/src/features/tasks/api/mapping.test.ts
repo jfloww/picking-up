@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fromApiPayload, toApiPayload, type ApiTask } from "./mapping";
+import { categoryFromApiPayload, fromApiPayload, toApiPayload, type ApiTask } from "./mapping";
 import type { Task } from "../types";
 
 const fullApiTask: ApiTask = {
@@ -10,6 +10,7 @@ const fullApiTask: ApiTask = {
   done: true,
   scope_kind: "day",
   scope_value: "2026-07-27",
+  bucket_category: null,
   rolled_from_kind: "day",
   rolled_from_value: "2026-07-20",
   created_at: "2026-07-27T00:00:00.000Z",
@@ -23,6 +24,7 @@ const fullApiTask: ApiTask = {
   priority: true,
   duration_minutes: 45,
   background: true,
+  order: 3,
 };
 
 const fullTask: Task = {
@@ -43,6 +45,7 @@ const fullTask: Task = {
   priority: true,
   durationMinutes: 45,
   background: true,
+  order: 3,
 };
 
 describe("fromApiPayload", () => {
@@ -58,6 +61,7 @@ describe("fromApiPayload", () => {
       done: false,
       scope_kind: "week",
       scope_value: "2026-07-19",
+      bucket_category: null,
       rolled_from_kind: null,
       rolled_from_value: null,
       created_at: "2026-07-27T00:00:00.000Z",
@@ -71,6 +75,7 @@ describe("fromApiPayload", () => {
       priority: null,
       duration_minutes: null,
       background: null,
+      order: 0,
     };
 
     const task = fromApiPayload(minimal);
@@ -101,6 +106,7 @@ describe("toApiPayload", () => {
       done: false,
       scope: { kind: "month", month: "2026-07" },
       createdAt: "2026-07-27T00:00:00.000Z",
+      order: 0,
     };
 
     const payload = toApiPayload(minimal);
@@ -128,19 +134,36 @@ describe("toApiPayload", () => {
       done: false,
       scope: { kind: "year", year: "2026" },
       createdAt: "2026-07-27T00:00:00.000Z",
+      order: 0,
     };
 
     expect(fromApiPayload(toApiPayload(yearTask))).toEqual(yearTask);
   });
 
   it("round-trips a bucket-scoped task", () => {
-    const bucketTask: Task = {
+    const task: Task = {
       id: "b1",
-      title: "try that new ramen place",
+      title: "visit kyoto",
       done: false,
-      scope: { kind: "bucket", category: "To Eat" },
+      scope: { kind: "bucket", categoryId: "cat-1" },
       createdAt: "2026-07-30T00:00:00.000Z",
+      order: 0,
     };
-    expect(fromApiPayload(toApiPayload(bucketTask))).toEqual(bucketTask);
+    const payload = toApiPayload(task);
+    expect(payload.scope_kind).toBe("bucket");
+    expect(payload.scope_value).toBe("");
+    expect(payload.bucket_category).toBe("cat-1");
+    expect(fromApiPayload(payload)).toEqual(task);
+  });
+});
+
+describe("categoryFromApiPayload", () => {
+  it("maps an ApiCategory to a Category", () => {
+    const payload = { id: "cat-1", name: "To Eat", created_at: "2026-07-30T00:00:00.000Z" };
+    expect(categoryFromApiPayload(payload)).toEqual({
+      id: "cat-1",
+      name: "To Eat",
+      createdAt: "2026-07-30T00:00:00.000Z",
+    });
   });
 });

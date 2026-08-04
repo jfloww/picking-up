@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { addDays, shortDateLabel, todayKey, weekStartOf } from "../lib/dates";
 import { TasksProvider } from "../store";
-import { fakeRepository, makeTask } from "../test-utils";
+import { fakeCategoryRepository, fakeRepository, makeTask } from "../test-utils";
 import { PeriodCell } from "./period-cell";
 import { QuickAdd } from "./quick-add";
 import { ScopeTasks } from "./scope-tasks";
@@ -639,7 +639,7 @@ describe("ScopeTasks v2", () => {
       subtasks: [{ id: "s1", title: "x", done: true }],
     });
     render(
-      <TasksProvider repository={fakeRepository([untimed, timed])}>
+      <TasksProvider repository={fakeRepository([untimed, timed])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "day", date: day }} compact />
       </TasksProvider>,
     );
@@ -712,7 +712,7 @@ describe("ScopeTasks", () => {
       scope: { kind: "day", date: addDays(week, 7) },
     });
     render(
-      <TasksProvider repository={fakeRepository([inScope, outOfWeek])}>
+      <TasksProvider repository={fakeRepository([inScope, outOfWeek])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "week", weekStart: week }} quickAdd />
       </TasksProvider>,
     );
@@ -728,7 +728,7 @@ describe("ScopeTasks weekly rollup", () => {
     const future = addDays(week, 2);
     const dayTask = makeTask({ id: "d", title: "day task", scope: { kind: "day", date: future } });
     render(
-      <TasksProvider repository={fakeRepository([dayTask])}>
+      <TasksProvider repository={fakeRepository([dayTask])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "week", weekStart: week }} />
       </TasksProvider>,
     );
@@ -746,7 +746,7 @@ describe("ScopeTasks weekly rollup", () => {
       scope: { kind: "day", date: future },
     });
     render(
-      <TasksProvider repository={fakeRepository([doneTask])}>
+      <TasksProvider repository={fakeRepository([doneTask])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "week", weekStart: week }} quickAdd />
       </TasksProvider>,
     );
@@ -759,7 +759,7 @@ describe("ScopeTasks weekly rollup", () => {
     const future = addDays(week, 2);
     const dayTask = makeTask({ id: "d", title: "day task", scope: { kind: "day", date: future } });
     render(
-      <TasksProvider repository={fakeRepository([dayTask])}>
+      <TasksProvider repository={fakeRepository([dayTask])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "week", weekStart: week }} compact />
       </TasksProvider>,
     );
@@ -775,7 +775,7 @@ describe("ScopeTasks day box (Weekly view props)", () => {
     const t = makeTask({ title: "click me", scope: { kind: "day", date: day } });
     const onSelectTask = vi.fn();
     render(
-      <TasksProvider repository={fakeRepository([t])}>
+      <TasksProvider repository={fakeRepository([t])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "day", date: day }} onSelectTask={onSelectTask} />
       </TasksProvider>,
     );
@@ -789,7 +789,7 @@ describe("ScopeTasks day box (Weekly view props)", () => {
     const past = addDays(todayKey(), -2);
     const t = makeTask({ title: "old task", scope: { kind: "day", date: past } });
     render(
-      <TasksProvider repository={fakeRepository([t])}>
+      <TasksProvider repository={fakeRepository([t])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "day", date: past }} highlightOverdue />
       </TasksProvider>,
     );
@@ -804,7 +804,7 @@ describe("ScopeTasks day box (Weekly view props)", () => {
     const day = todayKey();
     const t = makeTask({ title: "today task", scope: { kind: "day", date: day } });
     render(
-      <TasksProvider repository={fakeRepository([t])}>
+      <TasksProvider repository={fakeRepository([t])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "day", date: day }} highlightOverdue />
       </TasksProvider>,
     );
@@ -818,7 +818,7 @@ describe("ScopeTasks day box (Weekly view props)", () => {
     const past = addDays(todayKey(), -2);
     const t = makeTask({ title: "rolled away", scope: { kind: "day", date: past } });
     render(
-      <TasksProvider repository={fakeRepository([t])}>
+      <TasksProvider repository={fakeRepository([t])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "day", date: past }} quickAdd />
       </TasksProvider>,
     );
@@ -834,7 +834,7 @@ describe("ScopeTasks day box (Weekly view props)", () => {
       repeatWeekdays: [1, 2, 3, 4, 5],
     });
     render(
-      <TasksProvider repository={fakeRepository([t])}>
+      <TasksProvider repository={fakeRepository([t])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "day", date: day }} showRepeatLabel />
       </TasksProvider>,
     );
@@ -850,7 +850,7 @@ describe("ScopeTasks day box (Weekly view props)", () => {
       repeatWeekdays: [1, 2, 3, 4, 5],
     });
     render(
-      <TasksProvider repository={fakeRepository([t])}>
+      <TasksProvider repository={fakeRepository([t])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "day", date: day }} />
       </TasksProvider>,
     );
@@ -862,7 +862,7 @@ describe("ScopeTasks day box (Weekly view props)", () => {
     const day = todayKey();
     const t = makeTask({ title: "plain task", scope: { kind: "day", date: day } });
     render(
-      <TasksProvider repository={fakeRepository([t])}>
+      <TasksProvider repository={fakeRepository([t])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "day", date: day }} />
       </TasksProvider>,
     );
@@ -882,7 +882,7 @@ describe("ScopeTasks day box (Weekly view props)", () => {
       onClickCapture: vi.fn(),
     });
     render(
-      <TasksProvider repository={fakeRepository([t])}>
+      <TasksProvider repository={fakeRepository([t])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "day", date: day }} getDragHandlers={getDragHandlers} />
       </TasksProvider>,
     );
@@ -911,7 +911,7 @@ describe("ScopeTasks day box (Weekly view props)", () => {
       onClickCapture: vi.fn(),
     });
     render(
-      <TasksProvider repository={fakeRepository([t])}>
+      <TasksProvider repository={fakeRepository([t])} categoryRepository={fakeCategoryRepository()}>
         <ScopeTasks scope={{ kind: "day", date: day }} getDragHandlers={getDragHandlers} />
       </TasksProvider>,
     );

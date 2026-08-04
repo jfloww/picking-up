@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/auth/cookies", () => ({
+vi.mock("@/lib/auth/server-cookies", () => ({
   getAccessToken: vi.fn().mockResolvedValue("test-token"),
 }));
 
@@ -15,6 +15,7 @@ const apiTask: ApiTask = {
   done: false,
   scope_kind: "day",
   scope_value: "2026-07-27",
+  bucket_category: null,
   rolled_from_kind: null,
   rolled_from_value: null,
   created_at: "2026-07-27T00:00:00.000Z",
@@ -28,6 +29,7 @@ const apiTask: ApiTask = {
   priority: null,
   duration_minutes: null,
   background: null,
+  order: 0,
 };
 
 const task: Task = {
@@ -36,6 +38,7 @@ const task: Task = {
   done: false,
   scope: { kind: "day", date: "2026-07-27" },
   createdAt: "2026-07-27T00:00:00.000Z",
+  order: 0,
 };
 
 function jsonResponse(body: unknown, status = 200): Response {

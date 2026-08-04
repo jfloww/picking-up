@@ -3,7 +3,13 @@ export type Scope =
   | { kind: "week"; weekStart: string }
   | { kind: "month"; month: string }
   | { kind: "year"; year: string }
-  | { kind: "bucket"; category: string };
+  | { kind: "bucket"; categoryId: string };
+
+export interface Category {
+  id: string;
+  name: string;
+  createdAt: string;
+}
 
 export interface Subtask {
   id: string;
@@ -29,6 +35,7 @@ export interface Task {
   durationMinutes?: number; // meaningful alongside `time`; a positive integer
   background?: boolean; // renders in the timeline's slim background lane instead of the regular overlap columns
   dueDate?: string; // "YYYY-MM-DD"; independent of scope; unset for routine tasks
+  order: number; // fractional manual position within "All Day To-Do"; meaningless for every other list, but always present
 }
 
 export function scopeKey(scope: Scope): string {
@@ -42,6 +49,6 @@ export function scopeKey(scope: Scope): string {
     case "year":
       return `year:${scope.year}`;
     case "bucket":
-      return `bucket:${scope.category}`;
+      return `bucket:${scope.categoryId}`;
   }
 }

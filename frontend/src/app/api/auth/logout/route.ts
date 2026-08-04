@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { requestLogout } from "@/features/auth/api/auth";
-import { clearAuthCookies, getRefreshToken } from "@/lib/auth/cookies";
+import { clearAuthCookies } from "@/lib/auth/cookies";
+import { getRefreshToken } from "@/lib/auth/server-cookies";
 
 export async function POST() {
   const refreshToken = await getRefreshToken();

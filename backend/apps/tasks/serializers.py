@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import SCOPE_KIND_CHOICES, Task
+from .models import SCOPE_KIND_CHOICES, Category, Task
 
 
 class SubtaskSerializer(serializers.Serializer):
@@ -9,10 +9,21 @@ class SubtaskSerializer(serializers.Serializer):
     done = serializers.BooleanField()
 
 
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ("id", "name", "created_at")
+        read_only_fields = ("id", "created_at")
+
+
 class TaskSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField()
     memo = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     done = serializers.BooleanField(required=False, default=False)
+    bucket_category = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.none(), allow_null=True, required=False, default=None,
+        pk_field=serializers.UUIDField(),
+    )
     rolled_from_kind = serializers.ChoiceField(
         choices=SCOPE_KIND_CHOICES, required=False, allow_null=True, allow_blank=True, default=None,
     )
@@ -44,6 +55,7 @@ class TaskSerializer(serializers.ModelSerializer):
         required=False, allow_null=True, default=None, min_value=0,
     )
     background = serializers.BooleanField(required=False, allow_null=True, default=None)
+    order = serializers.FloatField(required=False, default=0.0)
 
     class Meta:
         model = Task
@@ -54,6 +66,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "done",
             "scope_kind",
             "scope_value",
+            "bucket_category",
             "rolled_from_kind",
             "rolled_from_value",
             "created_at",
@@ -67,6 +80,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "priority",
             "duration_minutes",
             "background",
+            "order",
         )
 
     def __init__(self, *args, **kwargs):
@@ -74,6 +88,7 @@ class TaskSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if request is not None and request.user.is_authenticated:
             self.fields["repeat_source"].queryset = Task.objects.filter(user=request.user)
+            self.fields["bucket_category"].queryset = Category.objects.filter(user=request.user)
 
     def validate_id(self, value):
         # Only enforced on create. On update, `id` is immutable (see

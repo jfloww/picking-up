@@ -26,6 +26,7 @@ function task(overrides: Partial<Task>): Task {
     done: false,
     scope: { kind: "day", date: "2026-07-16" },
     createdAt: "2026-07-16T00:00:00.000Z",
+    order: 0,
     ...overrides,
   };
 }
@@ -124,6 +125,7 @@ describe("layoutTimedTasks", () => {
       done: false,
       scope: { kind: "day", date: "2026-07-16" },
       createdAt: "2026-07-16T00:00:00.000Z",
+      order: 0,
       ...overrides,
     };
   }
@@ -482,7 +484,7 @@ describe("bucket-scoped tasks don't leak into day/week/month filters", () => {
     const bucketTask = task({
       id: "b1",
       done: false,
-      scope: { kind: "bucket", category: "To Eat" },
+      scope: { kind: "bucket", categoryId: "cat-eat" },
     });
     expect(weekStats([bucketTask], "2026-07-12")).toEqual({ total: 0, done: 0 });
     expect(monthStats([bucketTask], "2026-07")).toEqual({ total: 0, done: 0 });
@@ -491,7 +493,7 @@ describe("bucket-scoped tasks don't leak into day/week/month filters", () => {
   it("is excluded from dayTasksForWeek", () => {
     const bucketTask = task({
       id: "b1",
-      scope: { kind: "bucket", category: "To Eat" },
+      scope: { kind: "bucket", categoryId: "cat-eat" },
     });
     expect(dayTasksForWeek([bucketTask], "2026-07-16", "2026-07-12")).toEqual([]);
   });

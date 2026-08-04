@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/auth/cookies", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/auth/cookies")>()),
+vi.mock("@/lib/auth/server-cookies", () => ({
   getAccessToken: vi.fn().mockResolvedValue("test-token"),
 }));
 
@@ -24,6 +23,7 @@ const apiTask: ApiTask = {
   done: false,
   scope_kind: "day",
   scope_value: "2026-07-27",
+  bucket_category: null,
   rolled_from_kind: "day",
   rolled_from_value: "2026-07-26",
   created_at: "2026-07-27T00:00:00.000Z",
@@ -37,6 +37,7 @@ const apiTask: ApiTask = {
   priority: true,
   duration_minutes: 45,
   background: null,
+  order: 2,
 };
 
 const expectedTask: Task = {
@@ -57,6 +58,7 @@ const expectedTask: Task = {
   durationMinutes: 45,
   background: undefined,
   dueDate: "2026-07-31",
+  order: 2,
 };
 
 /** Requests the fake Django leg received, for asserting on the outbound side. */

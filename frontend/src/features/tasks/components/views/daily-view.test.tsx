@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider } from "../../store";
-import { fakeRepository, makeTask } from "../../test-utils";
+import { fakeCategoryRepository, fakeRepository, makeTask } from "../../test-utils";
 import { HOUR_HEIGHT } from "../day-timeline";
 import { DailyView } from "./daily-view";
 
@@ -18,7 +18,7 @@ afterAll(() => {
 
 function renderView(onAnchorChange = vi.fn(), tasks = [] as Parameters<typeof fakeRepository>[0]) {
   render(
-    <TasksProvider repository={fakeRepository(tasks)}>
+    <TasksProvider repository={fakeRepository(tasks)} categoryRepository={fakeCategoryRepository()}>
       <DailyView anchor={ANCHOR} onAnchorChange={onAnchorChange} />
     </TasksProvider>,
   );

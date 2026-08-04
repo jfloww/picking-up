@@ -17,9 +17,15 @@ import type { CalendarViewProps } from "./weekly-view";
 // anchor date to page through, so this view simply doesn't use them.
 export function BucketListView(_props: CalendarViewProps) {
   const actions = useTasks();
-  const { tasks } = actions;
-  const groups = groupBucketTasks(tasks);
-  const categories = groups.map((g) => g.category);
+  const { tasks, categories } = actions;
+  // groupBucketTasks returns one entry per saved Category, including ones
+  // with no items — this view only shows a section once it actually has
+  // something in it, matching how it worked before categories became
+  // first-class (a category implicitly stopped existing once its last task
+  // was deleted).
+  const groups = groupBucketTasks(tasks, categories).filter(
+    (g) => g.active.length + g.completed.length > 0,
+  );
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
@@ -36,18 +42,25 @@ export function BucketListView(_props: CalendarViewProps) {
     setComposerError(null);
   };
 
-  const submitComposer = () => {
+  const submitComposer = async () => {
     const title = composerTitle.trim();
-    const category = composerCategory.trim();
+    const categoryName = composerCategory.trim();
     if (!title) {
       setComposerError("Title is required.");
       return;
     }
-    if (!category) {
+    if (!categoryName) {
       setComposerError("Category is required.");
       return;
     }
-    actions.addBucketItem(title, category);
+    // create-or-reuse by name (case-insensitive) — the category may already
+    // exist, in which case this resolves to it rather than duplicating it.
+    const category = await actions.createCategory(categoryName);
+    if (!category) {
+      setComposerError("Couldn't save that category. Try again.");
+      return;
+    }
+    actions.addBucketItem(title, category.id);
     closeComposer();
   };
 
@@ -69,14 +82,14 @@ export function BucketListView(_props: CalendarViewProps) {
         <div className="space-y-6">
           {groups.map((group) => (
             <BucketCategorySection
-              key={group.category}
-              category={group.category}
+              key={group.categoryId}
+              category={group.categoryName}
               active={group.active}
               completed={group.completed}
               onToggle={(taskId) => actions.toggleTask(taskId)}
               onSelect={(taskId) => setSelectedTaskId(taskId)}
               onDelete={(taskId) => actions.removeTask(taskId)}
-              onAddItem={(title) => actions.addBucketItem(title, group.category)}
+              onAddItem={(title) => actions.addBucketItem(title, group.categoryId)}
             />
           ))}
         </div>
@@ -87,7 +100,7 @@ export function BucketListView(_props: CalendarViewProps) {
           className="space-y-2 rounded-md border border-input p-3"
           onSubmit={(e) => {
             e.preventDefault();
-            submitComposer();
+            void submitComposer();
           }}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
@@ -115,7 +128,7 @@ export function BucketListView(_props: CalendarViewProps) {
           />
           <datalist id="bucket-list-category-suggestions">
             {categories.map((c) => (
-              <option key={c} value={c} />
+              <option key={c.id} value={c.name} />
             ))}
           </datalist>
           {composerError && <p className="text-xs text-destructive">{composerError}</p>}

@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
 import { completedAtLabel } from "../lib/dates";
-import type { Scope, Task } from "../types";
+import type { Category, Task } from "../types";
 import { DONE_CHECKBOX_CLASS } from "./task-item";
 import { TaskDetailFields } from "./task-detail-fields";
 
@@ -24,7 +24,15 @@ interface Draft {
   category?: string;
 }
 
-function draftFromTask(task: Task): Draft {
+// Categories are resolved by id everywhere else; this drawer's editor still
+// works in terms of the display name (matching TaskCategoryEditor's
+// free-text, create-or-reuse-by-name UX), so it needs this lookup both to
+// seed the draft and to detect whether the name was actually changed.
+function categoryNameFor(categoryId: string, categories: Category[]): string | undefined {
+  return categories.find((c) => c.id === categoryId)?.name;
+}
+
+function draftFromTask(task: Task, categories: Category[]): Draft {
   return {
     done: task.done,
     memo: task.memo ?? "",
@@ -35,7 +43,7 @@ function draftFromTask(task: Task): Draft {
     repeatWeekdays: task.repeatWeekdays ?? [],
     detached: false,
     dueDate: task.dueDate,
-    category: task.scope.kind === "bucket" ? task.scope.category : undefined,
+    category: task.scope.kind === "bucket" ? categoryNameFor(task.scope.categoryId, categories) : undefined,
   };
 }
 
@@ -76,14 +84,17 @@ export function TaskDetailDrawer({
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
   onEditSubtaskTitle: (subtaskId: string, title: string) => void;
-  bucketCategories?: string[];
+  // Full Category objects, not names — this drawer needs ids both to
+  // resolve the task's current categoryId to a display name (draftFromTask
+  // below) and to hand TaskDetailFields the plain-name list it expects.
+  bucketCategories?: Category[];
   onCategoryChange?: (category: string) => void;
   upcomingRepeatDates?: string[];
 }) {
   const [visible, setVisible] = useState(false);
   // Edits are buffered here and only committed (via the on*Change props
   // above) when Done is clicked — Cancel/X/Escape discard them untouched.
-  const [draft, setDraft] = useState<Draft>(() => draftFromTask(task));
+  const [draft, setDraft] = useState<Draft>(() => draftFromTask(task, bucketCategories));
   // Deleting is immediate (not buffered to Done, like every other action in
   // this file) but destructive enough to want a confirmation step first —
   // the trash button swaps the footer to a Cancel/Confirm pair rather than
@@ -95,7 +106,7 @@ export function TaskDetailDrawer({
   }, []);
 
   useEffect(() => {
-    setDraft(draftFromTask(task));
+    setDraft(draftFromTask(task, bucketCategories));
     setConfirmingDelete(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.id]);
@@ -126,7 +137,7 @@ export function TaskDetailDrawer({
     if (
       task.scope.kind === "bucket" &&
       draft.category !== undefined &&
-      draft.category !== task.scope.category
+      draft.category !== categoryNameFor(task.scope.categoryId, bucketCategories)
     ) {
       onCategoryChange?.(draft.category);
     }
@@ -143,14 +154,13 @@ export function TaskDetailDrawer({
   };
 
   const { detached, category: draftCategory, ...draftFields } = draft;
-  const draftScope: Scope =
-    task.scope.kind === "bucket" && draftCategory !== undefined
-      ? { kind: "bucket", category: draftCategory }
-      : task.scope;
+  // The task's scope (and its categoryId) never changes here — a category
+  // edit is applied via onCategoryChange on Done, like every other field,
+  // not by mutating scope in this preview object. draftCategory carries the
+  // live-typed name straight to TaskDetailFields below instead.
   const draftTask: Task = {
     ...task,
     ...draftFields,
-    scope: draftScope,
     repeatSourceId: detached ? undefined : task.repeatSourceId,
   };
 
@@ -216,7 +226,8 @@ export function TaskDetailDrawer({
           onToggleSubtask={onToggleSubtask}
           onRemoveSubtask={onRemoveSubtask}
           onEditSubtaskTitle={onEditSubtaskTitle}
-          bucketCategories={bucketCategories}
+          bucketCategories={bucketCategories.map((c) => c.name)}
+          bucketCategoryName={draftCategory}
           onCategoryChange={(category) => setDraft((d) => ({ ...d, category }))}
           showTime={task.scope.kind !== "bucket"}
           showDelete={false}

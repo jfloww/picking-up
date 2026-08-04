@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 export const ACCESS_TOKEN_COOKIE = "access_token";
@@ -52,14 +51,4 @@ export function unauthorizedResponse() {
   const response = NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   clearAuthCookies(response);
   return response;
-}
-
-export async function getAccessToken() {
-  const cookieStore = await cookies();
-  return cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
-}
-
-export async function getRefreshToken() {
-  const cookieStore = await cookies();
-  return cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
 }
