@@ -97,6 +97,10 @@ export function useDragToRescheduleOrReorder(options: {
           const dy = e.clientY - gesture.startY;
           if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
           gesture.moved = true;
+          // Capture only once a real drag starts, not on every pointerdown:
+          // capturing unconditionally would redirect a plain click's event
+          // target away from nested interactive elements, since browsers
+          // retarget the click to whichever element holds pointer capture.
           const target = e.currentTarget as HTMLElement;
           if (typeof target.setPointerCapture === "function") {
             target.setPointerCapture(e.pointerId);
@@ -123,6 +127,11 @@ export function useDragToRescheduleOrReorder(options: {
 
         if (gesture.moved) {
           suppressClickRef.current = true;
+          // Safety net: if the source element unmounts before the browser's
+          // post-pointerup click reaches onClickCapture (e.g. a cross-day
+          // drop that moves this card out of its old column and removes
+          // this wrapper from the DOM), the flag would otherwise stay stuck
+          // true and swallow the next unrelated click.
           setTimeout(() => {
             suppressClickRef.current = false;
           }, 0);

@@ -98,6 +98,16 @@ Settled through visual iteration (mockups in
   group truncates with an ellipsis rather than breaking the row (the
   worst case: a 4-day custom cadence + a time + a double-digit subtask
   count all present at once).
+- **No legacy badges on `size="week"` — confirmed decision, not a gap.**
+  The `default` size renders a due-date/overdue badge, a "Priority"
+  badge, a "Background" badge and a "rolled over" icon. The week card
+  deliberately shows none of them: its content is exactly handle,
+  checkbox, repeat cadence label, time, subtask count and title. Asked
+  directly during review whether these should be restored, the answer was
+  to keep them dropped — the compact layout's minimalism is the point, in
+  a column roughly a seventh of the screen wide. Pinned by a test in
+  `task-item.test.tsx` (the `size="week"` block) so reintroducing or
+  further trimming this set has to be a deliberate, visible choice.
 
 ## Interaction design
 

@@ -63,7 +63,16 @@ function Harness({
           }}
           data-testid="item-b"
         />
-        <button type="button" data-testid="handle-timed" {...getDragHandlers("timed", "Timed Task", "2026-07-13", true)}>
+        {/* A second draggable sharing the same hook instance (and therefore
+            the same suppressClickRef) as handle-a, but never itself dragged
+            in the click-suppression tests — its onClick proves the
+            suppression flag doesn't leak across wrappers. */}
+        <button
+          type="button"
+          data-testid="handle-timed"
+          {...getDragHandlers("timed", "Timed Task", "2026-07-13", true)}
+          onClick={() => onReorder("clicked-timed", null, "2026-07-13")}
+        >
           Handle Timed
         </button>
       </div>
@@ -107,6 +116,57 @@ describe("useDragToRescheduleOrReorder", () => {
     fireEvent.pointerUp(handleA, { pointerId: 1, clientX: 10, clientY: 10 });
     expect(onReorder).not.toHaveBeenCalled();
     expect(onReschedule).not.toHaveBeenCalled();
+  });
+
+  it("does not suppress the click after a non-drag pointerdown/up", () => {
+    // Distinct from the test above, which only proves no *mutation* fires
+    // on a plain click: this proves the click itself still reaches its own
+    // handler, i.e. the drag machinery didn't swallow a real click.
+    const { onReorder, handleA } = setup();
+    fireEvent.pointerDown(handleA, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(handleA, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.click(handleA);
+    expect(onReorder).toHaveBeenCalledTimes(1);
+    expect(onReorder).toHaveBeenCalledWith("clicked", null, "2026-07-13");
+  });
+
+  it("self-expires the click-suppression flag even if no click ever reaches onClickCapture (cross-day drop unmount)", () => {
+    vi.useFakeTimers();
+    try {
+      const { onReorder, onReschedule, handleA, handleTimed } = setup();
+      fireEvent.pointerDown(handleA, { pointerId: 1, clientX: 10, clientY: 10 });
+      fireEvent.pointerMove(handleA, { pointerId: 1, clientX: 250, clientY: 50 });
+      fireEvent.pointerUp(handleA, { pointerId: 1, clientX: 250, clientY: 50 });
+      expect(onReschedule).toHaveBeenCalledWith("a", "2026-07-14");
+      // No click on handle-a at all — a real cross-day drop unmounts it from
+      // its old column, so only the setTimeout safety net can clear the flag.
+      vi.advanceTimersByTime(1);
+
+      fireEvent.click(handleTimed);
+      expect(onReorder).toHaveBeenCalledTimes(1);
+      expect(onReorder).toHaveBeenCalledWith("clicked-timed", null, "2026-07-13");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not capture the pointer on a plain click (would break nested click handlers)", () => {
+    const { handleA } = setup();
+    const captureSpy = vi.fn();
+    handleA.setPointerCapture = captureSpy;
+    fireEvent.pointerDown(handleA, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(handleA, { pointerId: 1, clientX: 10, clientY: 10 });
+    expect(captureSpy).not.toHaveBeenCalled();
+  });
+
+  it("captures the pointer once a real drag starts (movement past the threshold)", () => {
+    const { handleA } = setup();
+    const captureSpy = vi.fn();
+    handleA.setPointerCapture = captureSpy;
+    fireEvent.pointerDown(handleA, { pointerId: 1, clientX: 10, clientY: 10 });
+    expect(captureSpy).not.toHaveBeenCalled();
+    fireEvent.pointerMove(handleA, { pointerId: 1, clientX: 250, clientY: 50 });
+    expect(captureSpy).toHaveBeenCalledWith(1);
   });
 
   it("resolves same-day untimed drop to a reorder, targeting the item whose upper half the pointer is over", () => {

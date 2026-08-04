@@ -530,6 +530,46 @@ describe("TasksProvider", () => {
       expect(result.current.tasks.find((t) => t.id === "a")?.order).toBe(7);
     });
 
+    it("rescheduleTaskToDay counts done tasks at the destination when appending", async () => {
+      // Weekly interleaves untimed done and not-done tasks in one
+      // order-sorted column, so a done task at the bottom is a real
+      // sibling: skipping it would compute order 2 here and drop the
+      // moved task above "d3" instead of past it.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 6, 1)); // pin "today" before the fixed dates below
+      const notDone = makeTask({ id: "n", order: 1, scope: { kind: "day", date: "2026-07-20" } });
+      const done2 = makeTask({ id: "d2", order: 2, done: true, scope: { kind: "day", date: "2026-07-20" } });
+      const done3 = makeTask({ id: "d3", order: 3, done: true, scope: { kind: "day", date: "2026-07-20" } });
+      const moved = makeTask({ id: "a", order: 99, scope: { kind: "day", date: "2026-07-14" } });
+      const { result } = setup(fakeRepository([notDone, done2, done3, moved]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.rescheduleTaskToDay("a", "2026-07-20"));
+
+      expect(result.current.tasks.find((t) => t.id === "a")?.order).toBe(4);
+    });
+
+    it("rescheduleTaskToDay counts a rolled-over task shown in the destination day's column when appending", async () => {
+      // A week-scoped task with rolledFrom pointing at the destination day
+      // renders in that day's column in Weekly, so it must count towards
+      // the append max even though its scope isn't kind "day".
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 6, 1)); // pin "today" before the fixed dates below
+      const rolledOver = makeTask({
+        id: "r",
+        order: 5,
+        scope: { kind: "week", weekStart: "2026-07-19" },
+        rolledFrom: { kind: "day", date: "2026-07-20" },
+      });
+      const moved = makeTask({ id: "a", order: 99, scope: { kind: "day", date: "2026-07-14" } });
+      const { result } = setup(fakeRepository([rolledOver, moved]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.rescheduleTaskToDay("a", "2026-07-20"));
+
+      expect(result.current.tasks.find((t) => t.id === "a")?.order).toBe(6);
+    });
+
     it("rescheduleTaskToDay starts an untimed task at order 1 when the destination day has no untimed tasks yet", async () => {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date(2026, 6, 1)); // pin "today" before the fixed dates below

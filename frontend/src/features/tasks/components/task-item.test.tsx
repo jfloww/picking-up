@@ -104,6 +104,40 @@ describe('TaskItem size="week"', () => {
     expect(card?.className).not.toContain("bg-muted");
   });
 
+  it("drops the due-date, priority, background and rolled-over badges the default size shows", () => {
+    // Pinning test for a confirmed product decision, not an oversight: the
+    // week card's content is deliberately limited to handle, checkbox,
+    // repeat cadence, time, subtask count and title (see the "Card layout"
+    // section of docs/superpowers/specs/2026-08-04-weekly-drag-handle-design.md).
+    // Every badge below renders in the default size for this same task, so
+    // if the week branch ever starts falling through to the default layout —
+    // or drops any *more* of its content — that becomes an explicit choice
+    // someone has to make here rather than a silent change.
+    const task = makeTask({
+      title: "loaded task",
+      dueDate: "2020-01-01", // long past due
+      priority: true,
+      background: true,
+      rolledFrom: { kind: "day", date: "2020-01-01" },
+    });
+    const { container: weekCard } = render(
+      <TaskItem task={task} size="week" {...noopHandlers} />,
+    );
+    expect(weekCard.textContent).toContain("loaded task");
+    expect(weekCard.textContent).not.toMatch(/Due /);
+    expect(weekCard.textContent).not.toContain("Priority");
+    expect(weekCard.textContent).not.toContain("Background");
+    expect(weekCard.querySelector('[aria-label="Rolled over"]')).toBeNull();
+
+    // The same task at the default size does render all four, so the
+    // assertions above are about the week layout, not about the fixture.
+    const { container: defaultCard } = render(<TaskItem task={task} {...noopHandlers} />);
+    expect(defaultCard.textContent).toMatch(/Due /);
+    expect(defaultCard.textContent).toContain("Priority");
+    expect(defaultCard.textContent).toContain("Background");
+    expect(defaultCard.querySelector('[aria-label="Rolled over"]')).toBeTruthy();
+  });
+
   it("shows no highlight treatment when highlight is unset", () => {
     const task = makeTask({ title: "plain thing" });
     const { container } = render(<TaskItem task={task} size="week" {...noopHandlers} />);
