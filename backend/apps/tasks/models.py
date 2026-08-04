@@ -65,6 +65,7 @@ class Task(models.Model):
     priority = models.BooleanField(blank=True, null=True)
     duration_minutes = models.PositiveIntegerField(blank=True, null=True)
     background = models.BooleanField(blank=True, null=True)
+    order = models.FloatField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
