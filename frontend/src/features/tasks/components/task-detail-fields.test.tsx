@@ -366,6 +366,23 @@ describe("TaskDetailFields bucket category", () => {
     expect((screen.getByLabelText("Category") as HTMLInputElement).value).toBe("To Go");
   });
 
+  it("re-syncs the Notes textarea's displayed value when the drawer switches to a different task without unmounting", () => {
+    const { rerender } = render(
+      <TaskDetailFields task={makeTask({ id: "a", memo: "first note" })} {...noopHandlers} variant="drawer" />,
+    );
+    expect((screen.getByPlaceholderText("Memo") as HTMLTextAreaElement).value).toBe("first note");
+
+    // Re-render in place (no unmount) with a different task, the way
+    // TaskDetailDrawer swaps tasks while staying open. Both tasks have a
+    // memo, so notesExpanded stays true -> true and the textarea itself
+    // never remounts — this is exactly the scenario that exposes a stale
+    // defaultValue if the textarea isn't a controlled, re-synced input.
+    rerender(
+      <TaskDetailFields task={makeTask({ id: "b", memo: "second note" })} {...noopHandlers} variant="drawer" />,
+    );
+    expect((screen.getByPlaceholderText("Memo") as HTMLTextAreaElement).value).toBe("second note");
+  });
+
   it("calls onCategoryChange when the category is edited", () => {
     const onCategoryChange = vi.fn();
     render(

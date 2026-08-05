@@ -9,9 +9,22 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+// Mirrors next/script's real dedup behavior (see next/dist/client/script.js):
+// onLoad fires only the first time the script is ever loaded in the tab's
+// session (a module-level LoadCache persists across mounts), while onReady
+// fires every time the component mounts and the script is already loaded —
+// including remounts after the script was cached by a prior mount. A naive
+// mock that always calls both wouldn't be able to catch a regression back to
+// onLoad, which is exactly the bug this file guards against.
+const scriptState = vi.hoisted(() => ({ everLoaded: false }));
+
 vi.mock("next/script", () => ({
-  default: ({ onLoad }: { onLoad?: () => void }) => {
-    onLoad?.();
+  default: ({ onLoad, onReady }: { onLoad?: () => void; onReady?: () => void }) => {
+    if (!scriptState.everLoaded) {
+      scriptState.everLoaded = true;
+      onLoad?.();
+    }
+    onReady?.();
     return null;
   },
 }));
@@ -53,6 +66,7 @@ describe("GoogleSignInButton", () => {
     delete (window as { google?: unknown }).google;
     replaceMock.mockClear();
     refreshMock.mockClear();
+    scriptState.everLoaded = false;
   });
 
   it("initializes GIS with the configured client id and renders the button", async () => {
@@ -98,6 +112,24 @@ describe("GoogleSignInButton", () => {
 
     await screen.findByText("Invalid Google credential.");
     expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it("re-initializes GIS when remounted after the script was already loaded once (e.g. navigating back to /login after logout)", async () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_CLIENT_ID", "test-client-id");
+    const initialize = vi.fn();
+    const renderButton = vi.fn();
+    window.google = { accounts: { id: { initialize, renderButton } } };
+
+    const { unmount } = render(<GoogleSignInButton />);
+    await waitFor(() => expect(initialize).toHaveBeenCalledTimes(1));
+    unmount();
+
+    // Simulate a client-side navigation back to /login (logout, then GIS
+    // stays loaded from before): the script mock's LoadCache simulation
+    // means only onReady fires this time, not onLoad.
+    render(<GoogleSignInButton />);
+    await waitFor(() => expect(initialize).toHaveBeenCalledTimes(2));
+    expect(renderButton).toHaveBeenCalledTimes(2);
   });
 
   it("renders nothing when NEXT_PUBLIC_GOOGLE_CLIENT_ID is not configured", () => {
