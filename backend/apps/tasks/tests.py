@@ -1,7 +1,8 @@
 import uuid
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from rest_framework.test import APIClient
 
 from .models import Category, Task
@@ -631,3 +632,39 @@ class CategoryApiTests(TestCase):
         self.assertEqual(response.status_code, 404)
         category.refresh_from_db()
         self.assertEqual(category.name, "To Go")
+
+
+class ProductionStaticFilesTests(SimpleTestCase):
+    def test_whitenoise_middleware_runs_directly_after_security_middleware(self):
+        security_index = settings.MIDDLEWARE.index("django.middleware.security.SecurityMiddleware")
+        self.assertEqual(
+            settings.MIDDLEWARE[security_index + 1],
+            "whitenoise.middleware.WhiteNoiseMiddleware",
+        )
+
+    def test_static_root_is_configured(self):
+        self.assertEqual(settings.STATIC_ROOT.name, "staticfiles")
+
+    def test_staticfiles_storage_uses_whitenoise_compressed_manifest(self):
+        self.assertEqual(
+            settings.STORAGES["staticfiles"]["BACKEND"],
+            "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        )
+
+    def test_default_file_storage_is_still_explicitly_configured(self):
+        # STORAGES is not deep-merged with Django's built-in defaults — if this
+        # project ever adds a FileField/ImageField, an accidentally-omitted
+        # "default" key here would silently misconfigure it project-wide.
+        self.assertEqual(
+            settings.STORAGES["default"]["BACKEND"],
+            "django.core.files.storage.FileSystemStorage",
+        )
+
+    def test_secure_proxy_ssl_header_trusts_nginxs_forwarded_proto(self):
+        # nginx terminates TLS and proxies to gunicorn over plain HTTP; without
+        # this, request.is_secure() is always False behind the proxy and admin
+        # login fails CSRF's origin check.
+        self.assertEqual(
+            settings.SECURE_PROXY_SSL_HEADER,
+            ("HTTP_X_FORWARDED_PROTO", "https"),
+        )

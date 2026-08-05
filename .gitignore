@@ -11,6 +11,7 @@ __pycache__/
 *.py[cod]
 db.sqlite3
 logs/
+staticfiles/
 
 # Environment (all variants except the committed .env.example templates)
 .env
