@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 import { completedAtLabel } from "../lib/dates";
 import type { Category, Task } from "../types";
+import { PromoteUndoToast } from "./promote-undo-toast";
 import { DONE_CHECKBOX_CLASS } from "./task-item";
 import { TaskDetailFields } from "./task-detail-fields";
 
@@ -64,6 +65,8 @@ export function TaskDetailDrawer({
   onToggleSubtask,
   onRemoveSubtask,
   onEditSubtaskTitle,
+  onPromoteSubtask,
+  onUndoPromoteSubtask,
   bucketCategories = [],
   onCategoryChange,
   upcomingRepeatDates,
@@ -84,6 +87,8 @@ export function TaskDetailDrawer({
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
   onEditSubtaskTitle: (subtaskId: string, title: string) => void;
+  onPromoteSubtask: (subtaskId: string) => Task | undefined;
+  onUndoPromoteSubtask: (taskId: string) => void;
   // Full Category objects, not names — this drawer needs ids both to
   // resolve the task's current categoryId to a display name (draftFromTask
   // below) and to hand TaskDetailFields the plain-name list it expects.
@@ -100,6 +105,14 @@ export function TaskDetailDrawer({
   // the trash button swaps the footer to a Cancel/Confirm pair rather than
   // deleting on the first click.
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // subtaskId is tracked alongside the toast's title/taskId so the promoted
+  // row can be hidden immediately (optimistically) instead of waiting for
+  // the parent to re-render with a task.subtasks that no longer includes it.
+  const [promoteToast, setPromoteToast] = useState<{
+    title: string;
+    taskId: string;
+    subtaskId: string;
+  } | null>(null);
 
   useEffect(() => {
     setVisible(true);
@@ -108,6 +121,7 @@ export function TaskDetailDrawer({
   useEffect(() => {
     setDraft(draftFromTask(task, bucketCategories));
     setConfirmingDelete(false);
+    setPromoteToast(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.id]);
 
@@ -153,6 +167,11 @@ export function TaskDetailDrawer({
     onClose();
   };
 
+  function handlePromoteSubtask(subtaskId: string) {
+    const created = onPromoteSubtask(subtaskId);
+    if (created) setPromoteToast({ title: created.title, taskId: created.id, subtaskId });
+  }
+
   const { detached, category: draftCategory, ...draftFields } = draft;
   // The task's scope (and its categoryId) never changes here — a category
   // edit is applied via onCategoryChange on Done, like every other field,
@@ -162,6 +181,12 @@ export function TaskDetailDrawer({
     ...task,
     ...draftFields,
     repeatSourceId: detached ? undefined : task.repeatSourceId,
+    // Hide the just-promoted subtask right away rather than waiting on the
+    // parent to re-render with an updated task.subtasks — the toast and the
+    // row disappearing are meant to happen together.
+    subtasks: promoteToast
+      ? task.subtasks?.filter((s) => s.id !== promoteToast.subtaskId)
+      : task.subtasks,
   };
 
   return (
@@ -226,6 +251,7 @@ export function TaskDetailDrawer({
           onToggleSubtask={onToggleSubtask}
           onRemoveSubtask={onRemoveSubtask}
           onEditSubtaskTitle={onEditSubtaskTitle}
+          onPromoteSubtask={handlePromoteSubtask}
           bucketCategories={bucketCategories.map((c) => c.name)}
           bucketCategoryName={draftCategory}
           onCategoryChange={(category) => setDraft((d) => ({ ...d, category }))}
@@ -281,6 +307,17 @@ export function TaskDetailDrawer({
           </>
         )}
       </footer>
+      {promoteToast && (
+        <PromoteUndoToast
+          key={promoteToast.taskId}
+          title={promoteToast.title}
+          onUndo={() => {
+            onUndoPromoteSubtask(promoteToast.taskId);
+            setPromoteToast(null);
+          }}
+          onDismiss={() => setPromoteToast(null)}
+        />
+      )}
     </aside>
   );
 }

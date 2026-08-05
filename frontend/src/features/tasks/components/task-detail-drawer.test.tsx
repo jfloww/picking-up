@@ -20,6 +20,8 @@ const noopHandlers = {
   onToggleSubtask: (_id: string) => {},
   onRemoveSubtask: (_id: string) => {},
   onEditSubtaskTitle: (_id: string, _title: string) => {},
+  onPromoteSubtask: (_subtaskId: string) => undefined,
+  onUndoPromoteSubtask: (_taskId: string) => {},
   onCategoryChange: (_category: string) => {},
 };
 
@@ -775,5 +777,86 @@ describe("bucket-scoped task", () => {
     fireEvent.blur(input);
     fireEvent.click(screen.getByText("Cancel"));
     expect(onCategoryChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("TaskDetailDrawer promote subtask to task", () => {
+  it("clicking the promote icon converts the subtask and shows an undo toast naming the promoted task", () => {
+    const task = makeTask({
+      id: "a",
+      title: "plan trip",
+      subtasks: [{ id: "s1", title: "book flights", done: false }],
+    });
+    const onPromoteSubtask = vi
+      .fn()
+      .mockReturnValue(makeTask({ id: "new-task", title: "book flights", done: false }));
+    render(<TaskDetailDrawer task={task} {...noopHandlers} onPromoteSubtask={onPromoteSubtask} />);
+
+    fireEvent.click(screen.getByLabelText("Move book flights out as its own task"));
+
+    expect(onPromoteSubtask).toHaveBeenCalledWith("s1");
+    expect(screen.getByText(/book flights/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+  });
+
+  it("clicking Undo calls onUndoPromoteSubtask with the promoted task's id", () => {
+    const task = makeTask({
+      id: "a",
+      title: "plan trip",
+      subtasks: [{ id: "s1", title: "book flights", done: false }],
+    });
+    const onPromoteSubtask = vi
+      .fn()
+      .mockReturnValue(makeTask({ id: "new-task", title: "book flights", done: false }));
+    const onUndoPromoteSubtask = vi.fn();
+    render(
+      <TaskDetailDrawer
+        task={task}
+        {...noopHandlers}
+        onPromoteSubtask={onPromoteSubtask}
+        onUndoPromoteSubtask={onUndoPromoteSubtask}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Move book flights out as its own task"));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    expect(onUndoPromoteSubtask).toHaveBeenCalledWith("new-task");
+  });
+
+  it("does not show a toast when promotion fails (onPromoteSubtask returns undefined)", () => {
+    const task = makeTask({
+      id: "a",
+      title: "plan trip",
+      subtasks: [{ id: "s1", title: "book flights", done: false }],
+    });
+    const onPromoteSubtask = vi.fn().mockReturnValue(undefined);
+    render(<TaskDetailDrawer task={task} {...noopHandlers} onPromoteSubtask={onPromoteSubtask} />);
+
+    fireEvent.click(screen.getByLabelText("Move book flights out as its own task"));
+
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("resets the toast when the drawer switches to a different task", () => {
+    const task = makeTask({
+      id: "a",
+      title: "plan trip",
+      subtasks: [{ id: "s1", title: "book flights", done: false }],
+    });
+    const otherTask = makeTask({ id: "b", title: "other task" });
+    const onPromoteSubtask = vi
+      .fn()
+      .mockReturnValue(makeTask({ id: "new-task", title: "book flights", done: false }));
+    const { rerender } = render(
+      <TaskDetailDrawer task={task} {...noopHandlers} onPromoteSubtask={onPromoteSubtask} />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Move book flights out as its own task"));
+    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+
+    rerender(<TaskDetailDrawer task={otherTask} {...noopHandlers} onPromoteSubtask={onPromoteSubtask} />);
+
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
 });
