@@ -75,9 +75,15 @@ export function TaskDetailFields({
   // person typing. Reset (not just lazily initialized) on task switch, same
   // as TaskDetailDrawer's own draft/confirmingDelete state below.
   const [notesExpanded, setNotesExpanded] = useState(drawer ? !!task.memo : true);
+  // Controlled, not defaultValue: the drawer swaps between tasks in place
+  // (no remount), so this local draft must re-sync to `task.memo` whenever
+  // the selected task changes — otherwise the textarea keeps showing the
+  // previous task's note text. Same pattern as TaskCategoryEditor's `value`.
+  const [memoValue, setMemoValue] = useState(task.memo ?? "");
 
   useEffect(() => {
     setNotesExpanded(drawer ? !!task.memo : true);
+    setMemoValue(task.memo ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.id]);
 
@@ -115,7 +121,8 @@ export function TaskDetailFields({
         <textarea
           ref={memoRef}
           autoFocus={drawer && !task.memo}
-          defaultValue={task.memo ?? ""}
+          value={memoValue}
+          onChange={(e) => setMemoValue(e.target.value)}
           onBlur={(e) => onMemoChange(e.target.value)}
           onInput={
             drawer
