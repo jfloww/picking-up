@@ -7,7 +7,9 @@
 :root {
   color-scheme: light;
   --radius: 0.625rem;
-  --background: #ffffff;
+  /* Slightly off pure white so the page reads calmer, not stark — card/
+     popover/sidebar stay #ffffff so elevated surfaces still pop above it. */
+  --background: #fafbfb;
   --foreground: #171a1c;
   --card: #ffffff;
   --card-foreground: #171a1c;
