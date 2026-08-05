@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { makeCategory, makeTask } from "../test-utils";
@@ -858,5 +858,31 @@ describe("TaskDetailDrawer promote subtask to task", () => {
     rerender(<TaskDetailDrawer task={otherTask} {...noopHandlers} onPromoteSubtask={onPromoteSubtask} />);
 
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("auto-dismisses the toast after 6 seconds, making the promoted row queryable again", () => {
+    vi.useFakeTimers();
+    try {
+      const task = makeTask({
+        id: "a",
+        title: "plan trip",
+        subtasks: [{ id: "s1", title: "book flights", done: false }],
+      });
+      const onPromoteSubtask = vi
+        .fn()
+        .mockReturnValue(makeTask({ id: "new-task", title: "book flights", done: false }));
+      render(<TaskDetailDrawer task={task} {...noopHandlers} onPromoteSubtask={onPromoteSubtask} />);
+
+      fireEvent.click(screen.getByLabelText("Move book flights out as its own task"));
+      expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+
+      act(() => {
+        vi.advanceTimersByTime(6000);
+      });
+
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

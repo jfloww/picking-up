@@ -13,6 +13,16 @@ describe("PromoteUndoToast", () => {
     expect(screen.getByText(/buy milk/)).toBeTruthy();
   });
 
+  it("announces itself to screen readers via role=status", () => {
+    render(<PromoteUndoToast title="buy milk" onUndo={() => {}} onDismiss={() => {}} />);
+    expect(screen.getByRole("status")).toBeTruthy();
+  });
+
+  it("moves focus to the Undo button on mount", () => {
+    render(<PromoteUndoToast title="buy milk" onUndo={() => {}} onDismiss={() => {}} />);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Undo" }));
+  });
+
   it("calls onUndo when Undo is clicked", () => {
     const onUndo = vi.fn();
     render(<PromoteUndoToast title="buy milk" onUndo={onUndo} onDismiss={() => {}} />);

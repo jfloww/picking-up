@@ -24,6 +24,21 @@ import type { Category, Scope, Task } from "./types";
 
 const SYNC_ERROR_MESSAGE = "Something didn't save. Reconnecting to check what's saved…";
 
+// Appends to the end of a day's untimed All Day To-Do list — the shared
+// ordering rule for a freshly created untimed task (addTask) and for a
+// subtask promoted out from under a timed parent (promoteSubtaskToTask's
+// timed-parent branch), which has no natural sibling to land next to.
+function nextUntimedOrderFor(tasks: Task[], date: string): number {
+  return (
+    Math.max(
+      0,
+      ...tasks
+        .filter((t) => t.scope.kind === "day" && t.scope.date === date && !t.time && !t.done)
+        .map((t) => t.order),
+    ) + 1
+  );
+}
+
 export interface TasksState {
   loaded: boolean;
   tasks: Task[];
@@ -218,21 +233,7 @@ export function TasksProvider({
       addTask(title, scope) {
         const trimmed = title.trim();
         if (!trimmed) return undefined;
-        const order =
-          scope.kind === "day"
-            ? Math.max(
-                0,
-                ...state.tasks
-                  .filter(
-                    (t) =>
-                      t.scope.kind === "day" &&
-                      t.scope.date === scope.date &&
-                      !t.time &&
-                      !t.done,
-                  )
-                  .map((t) => t.order),
-              ) + 1
-            : 0;
+        const order = scope.kind === "day" ? nextUntimedOrderFor(state.tasks, scope.date) : 0;
         const task: Task = {
           id: crypto.randomUUID(),
           title: trimmed,
@@ -543,15 +544,7 @@ export function TasksProvider({
           // untimed regardless, so there's no natural sibling to land
           // next to; append to the end of All Day To-Do for that day,
           // same as addTask's own default for a fresh untimed task.
-          order =
-            Math.max(
-              0,
-              ...state.tasks
-                .filter(
-                  (t) => t.scope.kind === "day" && t.scope.date === scope.date && !t.time && !t.done,
-                )
-                .map((t) => t.order),
-            ) + 1;
+          order = nextUntimedOrderFor(state.tasks, scope.date);
         } else {
           order = 0;
         }

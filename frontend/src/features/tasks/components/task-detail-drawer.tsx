@@ -106,8 +106,13 @@ export function TaskDetailDrawer({
   // deleting on the first click.
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   // subtaskId is tracked alongside the toast's title/taskId so the promoted
-  // row can be hidden immediately (optimistically) instead of waiting for
-  // the parent to re-render with a task.subtasks that no longer includes it.
+  // row can be filtered out of draftTask.subtasks below. In real usage the
+  // store update and setPromoteToast happen in the same synchronous handler,
+  // so this filter isn't closing a live timing gap — it exists because this
+  // file's tests drive onPromoteSubtask with a mocked handler that never
+  // touches a real store (without it, the test's static `task` prop would
+  // still show the promoted subtask), and as cheap insurance if the store's
+  // update path ever becomes genuinely asynchronous later.
   const [promoteToast, setPromoteToast] = useState<{
     title: string;
     taskId: string;
@@ -181,9 +186,9 @@ export function TaskDetailDrawer({
     ...task,
     ...draftFields,
     repeatSourceId: detached ? undefined : task.repeatSourceId,
-    // Hide the just-promoted subtask right away rather than waiting on the
-    // parent to re-render with an updated task.subtasks — the toast and the
-    // row disappearing are meant to happen together.
+    // See the promoteToast comment above: this filter is for test
+    // determinism against a mocked onPromoteSubtask, plus future-proofing
+    // against an async store, not a real rendering race today.
     subtasks: promoteToast
       ? task.subtasks?.filter((s) => s.id !== promoteToast.subtaskId)
       : task.subtasks,
