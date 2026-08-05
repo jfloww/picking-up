@@ -400,3 +400,81 @@ describe("DayAgenda reorder handle", () => {
     expect(onScheduleSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("DayAgenda done-today transition animation", () => {
+  it("does not animate a task that is already done on initial mount", async () => {
+    const t = makeTask({ id: "d", title: "already done", done: true, scope: { kind: "day", date: ANCHOR } });
+    renderAgenda(ANCHOR, [t]);
+    await waitFor(() => expect(screen.getByText("already done")).toBeTruthy());
+    const card = screen.getByTestId("agenda-d");
+    expect(card.className).not.toContain("animate-task-enter");
+    expect(card.className).not.toContain("animate-task-exit");
+  });
+
+  it("plays an exit animation in the old section right after checking a task, then an enter animation in Done Today", async () => {
+    const t = makeTask({ id: "u", title: "water plants", scope: { kind: "day", date: ANCHOR } });
+    renderAgenda(ANCHOR, [t]);
+    await waitFor(() => expect(screen.getByText("water plants")).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText("Toggle water plants"));
+
+    // still rendered in All Day To-Do, playing the exit animation
+    expect(screen.getByText("All Day To-Do")).toBeTruthy();
+    expect(screen.getByTestId("agenda-u").className).toContain("animate-task-exit");
+    expect(screen.queryByText("Done Today")).toBeNull();
+
+    // lands in Done Today playing the enter animation
+    await waitFor(() => expect(screen.getByText("Done Today")).toBeTruthy(), { timeout: 1000 });
+    expect(screen.getByTestId("agenda-u").className).toContain("animate-task-enter");
+
+    // settles with no animation class once the transition finishes
+    await waitFor(
+      () => expect(screen.getByTestId("agenda-u").className).not.toContain("animate-task-enter"),
+      { timeout: 1000 },
+    );
+  });
+
+  it("mirrors the animation when unchecking a Done Today task back to All Day To-Do", async () => {
+    const t = makeTask({ id: "d", title: "done item", done: true, scope: { kind: "day", date: ANCHOR } });
+    renderAgenda(ANCHOR, [t]);
+    await waitFor(() => expect(screen.getByText("Done Today")).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText("Toggle done item"));
+
+    expect(screen.getByText("Done Today")).toBeTruthy();
+    expect(screen.getByTestId("agenda-d").className).toContain("animate-task-exit");
+
+    await waitFor(() => expect(screen.getByText("All Day To-Do")).toBeTruthy(), { timeout: 1000 });
+    expect(screen.getByTestId("agenda-d").className).toContain("animate-task-enter");
+  });
+
+  it("never visibly lands in Done Today when checked then unchecked again before the exit animation finishes", async () => {
+    const t = makeTask({ id: "u", title: "water plants", scope: { kind: "day", date: ANCHOR } });
+    renderAgenda(ANCHOR, [t]);
+    await waitFor(() => expect(screen.getByText("water plants")).toBeTruthy());
+
+    // Re-query the checkbox before each click rather than reusing one
+    // reference — it re-renders to a new node on toggle, and firing a
+    // synthetic event on a stale/detached node is a silent no-op.
+    fireEvent.click(screen.getByLabelText("Toggle water plants")); // check
+    fireEvent.click(screen.getByLabelText("Toggle water plants")); // uncheck again, well before the 260ms exit finishes
+
+    // still rendered under All Day To-Do the whole time — never teleports
+    // through Done Today for a frame
+    expect(screen.getByText("All Day To-Do")).toBeTruthy();
+    expect(screen.queryByText("Done Today")).toBeNull();
+
+    // settles back into All Day To-Do with no stuck animation class once
+    // both the (cancelled-and-restarted) exit and the enter finish
+    await waitFor(
+      () => {
+        const className = screen.getByTestId("agenda-u").className;
+        expect(className).not.toContain("animate-task-exit");
+        expect(className).not.toContain("animate-task-enter");
+      },
+      { timeout: 2000 },
+    );
+    expect(screen.getByText("All Day To-Do")).toBeTruthy();
+    expect(screen.queryByText("Done Today")).toBeNull();
+  });
+});

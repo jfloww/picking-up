@@ -132,6 +132,8 @@
   --color-amber-foreground: var(--accent-amber-foreground);
   --color-amber-subtle: var(--accent-amber-subtle);
   --animate-task-complete: task-complete-pop 220ms ease-out;
+  --animate-task-exit: task-exit 260ms ease-in both;
+  --animate-task-enter: task-enter 260ms ease-out both;
   --animate-fade-up: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-hero-demo-row: hero-demo-row 7s ease infinite;
   --animate-hero-demo-dot: hero-demo-dot 7s ease infinite;
@@ -180,6 +182,28 @@
   }
   100% {
     transform: scale(1);
+  }
+}
+
+@keyframes task-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
+@keyframes task-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -261,7 +285,9 @@
   .animate-fade-up,
   .animate-hero-demo-row,
   .animate-hero-demo-dot,
-  .animate-hero-demo-title {
+  .animate-hero-demo-title,
+  .animate-task-exit,
+  .animate-task-enter {
     animation: none;
   }
 }

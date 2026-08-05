@@ -3,6 +3,8 @@
 import { GripVertical } from "lucide-react";
 import { useRef } from "react";
 
+import { cn } from "@/lib/utils";
+
 import { todayKey } from "../lib/dates";
 import { computeOrderBetween } from "../lib/reorder";
 import { compareTasksForDay, isPastToday, nowTime } from "../lib/times";
@@ -11,6 +13,7 @@ import { scopeKey, type Scope, type Task } from "../types";
 import { QuickAdd } from "./quick-add";
 import { TaskItem, taskItemHandlers } from "./task-item";
 import { useDragToReorder } from "./use-drag-to-reorder";
+import { useTaskTransitionClasses } from "./use-task-transition-classes";
 
 type GetDragHandlers = (
   id: string,
@@ -40,11 +43,14 @@ export function DayAgenda({
   const key = scopeKey(scope);
   const dayTasks = tasks.filter((t) => scopeKey(t.scope) === key);
 
-  const allDayToDo = [...dayTasks.filter((t) => !t.time && !t.done)].sort(
+  const transitions = useTaskTransitionClasses(dayTasks);
+  const isDone = (t: Task) => transitions.get(t.id)?.done ?? t.done;
+
+  const allDayToDo = [...dayTasks.filter((t) => !t.time && !isDone(t))].sort(
     (a, b) => a.order - b.order,
   );
-  const nextUp = [...dayTasks.filter((t) => !!t.time && !t.done)].sort(compareTasksForDay);
-  const doneToday = dayTasks.filter((t) => t.done);
+  const nextUp = [...dayTasks.filter((t) => !!t.time && !isDone(t))].sort(compareTasksForDay);
+  const doneToday = dayTasks.filter((t) => isDone(t));
 
   const today = todayKey();
   const isViewingToday = date === today;
@@ -101,7 +107,7 @@ export function DayAgenda({
               : undefined
           }
           data-testid={`agenda-${t.id}`}
-          className="flex touch-none items-center gap-1.5"
+          className={cn("flex touch-none items-center gap-1.5", transitions.get(t.id)?.animationClass)}
           {...getDragHandlers(t.id, t.title)}
         >
           {reorderable && (
