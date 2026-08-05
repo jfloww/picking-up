@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import type { NestBlockReason } from "../lib/nesting";
 import { useDragToSchedule } from "./use-drag-to-schedule";
 
 function mockRect(el: HTMLElement, rect: Partial<DOMRect>) {
@@ -19,36 +20,54 @@ function mockRect(el: HTMLElement, rect: Partial<DOMRect>) {
   } as DOMRect);
 }
 
-function Harness({ onSchedule }: { onSchedule: (id: string, time?: string) => void }) {
+function Harness({
+  onSchedule = () => {},
+  onNest = () => {},
+  onNestBlocked = () => {},
+  chipANestBlockReason,
+}: {
+  onSchedule?: (id: string, time?: string) => void;
+  onNest?: (sourceId: string, targetId: string) => void;
+  onNestBlocked?: (reason: NestBlockReason) => void;
+  chipANestBlockReason?: NestBlockReason;
+}) {
   const railRef = useRef<HTMLDivElement>(null);
   const allDayZoneRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<Record<string, HTMLElement | null>>({});
   const { dragState, getDragHandlers } = useDragToSchedule({
     railRef,
     allDayZoneRef,
+    cardRefs,
     hourHeight: 48,
     onSchedule,
+    onNest,
+    onNestBlocked,
   });
 
   return (
     <div>
       <div ref={allDayZoneRef} data-testid="all-day">
-        <div data-testid="chip-a" {...getDragHandlers("a", "Task A")}>
+        <div data-testid="chip-a" {...getDragHandlers("a", "Task A", chipANestBlockReason)}>
           <button type="button" onClick={() => onSchedule("clicked-title", undefined)}>
             Task A
           </button>
+        </div>
+        <div data-testid="chip-target" ref={(el) => { cardRefs.current["target"] = el; }}>
+          Target Task
         </div>
       </div>
       {/* A second, unrelated draggable item that shares the same hook instance
           (and therefore the same suppressClickRef) as chip-a, but is never
           itself dragged in these tests — used to prove the suppression flag
           doesn't leak across wrappers. */}
-      <div data-testid="chip-b" {...getDragHandlers("b", "Task B")}>
+      <div data-testid="chip-b" {...getDragHandlers("b", "Task B", undefined)}>
         <button type="button" onClick={() => onSchedule("clicked-title-b", undefined)}>
           Task B
         </button>
       </div>
       <div ref={railRef} data-testid="rail" />
       <div data-testid="preview">{dragState ? (dragState.previewTime ?? "clear") : "none"}</div>
+      <div data-testid="nest-target">{dragState?.nestTargetId ?? "none"}</div>
     </div>
   );
 }
@@ -177,5 +196,112 @@ describe("useDragToSchedule", () => {
     fireEvent.pointerCancel(chip, { pointerId: 1 });
     expect(onSchedule).not.toHaveBeenCalled();
     expect(screen.getByTestId("preview").textContent).toBe("none");
+  });
+});
+
+describe("useDragToSchedule nesting", () => {
+  function setupNest(nestBlockReason?: NestBlockReason) {
+    const onSchedule = vi.fn();
+    const onNest = vi.fn();
+    const onNestBlocked = vi.fn();
+    render(
+      <Harness
+        onSchedule={onSchedule}
+        onNest={onNest}
+        onNestBlocked={onNestBlocked}
+        chipANestBlockReason={nestBlockReason}
+      />,
+    );
+    const rail = screen.getByTestId("rail");
+    const allDay = screen.getByTestId("all-day");
+    const target = screen.getByTestId("chip-target");
+    mockRect(rail, { top: 2000, bottom: 3000, left: 0, right: 300 });
+    Object.defineProperty(rail, "scrollTop", { value: 0, writable: true });
+    mockRect(allDay, { top: 0, bottom: 200, left: 0, right: 300 });
+    mockRect(target, { top: 100, bottom: 150, left: 0, right: 300 });
+    return { onSchedule, onNest, onNestBlocked, chip: screen.getByTestId("chip-a") };
+  }
+
+  it("resolves to nest and highlights the hovered card when the dragged task is eligible", () => {
+    const { onNest, onSchedule, chip } = setupNest();
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 10, clientY: 120 });
+    expect(screen.getByTestId("nest-target").textContent).toBe("target");
+    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 10, clientY: 120 });
+    expect(onNest).toHaveBeenCalledWith("a", "target");
+    expect(onSchedule).not.toHaveBeenCalled();
+  });
+
+  it("resolves to nest-blocked instead of nesting when the dragged task already has subtasks", () => {
+    const { onNest, onNestBlocked, chip } = setupNest("has-subtasks");
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 10, clientY: 120 });
+    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 10, clientY: 120 });
+    expect(onNestBlocked).toHaveBeenCalledWith("has-subtasks");
+    expect(onNest).not.toHaveBeenCalled();
+  });
+
+  it("resolves to nest-blocked for a repeating task", () => {
+    const { onNestBlocked, chip } = setupNest("repeating");
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 10, clientY: 120 });
+    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 10, clientY: 120 });
+    expect(onNestBlocked).toHaveBeenCalledWith("repeating");
+  });
+
+  it("falls through to clearing the time when dropped in the all-day zone but not on a card", () => {
+    const { onSchedule, onNest, chip } = setupNest();
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 10, clientY: 190 }); // inside all-day, outside target's 100-150 rect
+    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 10, clientY: 190 });
+    expect(onSchedule).toHaveBeenCalledWith("a", undefined);
+    expect(onNest).not.toHaveBeenCalled();
+  });
+
+  it("excludes the dragged task's own card from nest hit-testing (self-drop falls through)", () => {
+    const onNest = vi.fn();
+    const onSchedule = vi.fn();
+
+    function SelfDropHarness() {
+      const railRef = useRef<HTMLDivElement>(null);
+      const allDayZoneRef = useRef<HTMLDivElement>(null);
+      const cardRefs = useRef<Record<string, HTMLElement | null>>({});
+      const { getDragHandlers } = useDragToSchedule({
+        railRef,
+        allDayZoneRef,
+        cardRefs,
+        hourHeight: 48,
+        onSchedule,
+        onNest,
+        onNestBlocked: () => {},
+      });
+      return (
+        <div>
+          <div ref={allDayZoneRef} data-testid="all-day">
+            <div
+              data-testid="chip-self"
+              ref={(el) => {
+                cardRefs.current["self"] = el;
+              }}
+              {...getDragHandlers("self", "Self Task", undefined)}
+            />
+          </div>
+          <div ref={railRef} data-testid="rail" />
+        </div>
+      );
+    }
+
+    render(<SelfDropHarness />);
+    const allDay = screen.getByTestId("all-day");
+    const chip = screen.getByTestId("chip-self");
+    mockRect(allDay, { top: 0, bottom: 200, left: 0, right: 300 });
+    mockRect(chip, { top: 50, bottom: 100, left: 0, right: 300 });
+
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 10, clientY: 75 }); // inside its own rect
+    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 10, clientY: 75 });
+
+    expect(onNest).not.toHaveBeenCalled();
+    expect(onSchedule).toHaveBeenCalledWith("self", undefined); // falls through to all-day-zone
   });
 });
