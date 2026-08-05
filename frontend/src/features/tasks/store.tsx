@@ -19,6 +19,7 @@ import { dayTasksForWeek, isValidTime } from "./lib/times";
 import { rolloverTasks } from "./lib/rollover";
 import { materializeRoutines } from "./lib/routines";
 import { nestBlockReasonFor } from "./lib/nesting";
+import { computeOrderBetween } from "./lib/reorder";
 import type { Category, Scope, Task } from "./types";
 
 const SYNC_ERROR_MESSAGE = "Something didn't save. Reconnecting to check what's saved…";
@@ -98,6 +99,7 @@ interface TasksContextValue extends TasksState {
   removeSubtask: (id: string, subtaskId: string) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
   convertTaskToSubtask: (id: string, targetId: string) => void;
+  promoteSubtaskToTask: (id: string, subtaskId: string) => Task | undefined;
   addBucketItem: (title: string, categoryId: string) => Task | undefined;
   setCategory: (id: string, categoryId: string) => void;
   createCategory: (name: string) => Promise<Category | undefined>;
@@ -513,6 +515,67 @@ export function TasksProvider({
 
         dispatch({ type: "removed", id });
         repo.remove(id).catch(handleSyncFailure);
+      },
+      promoteSubtaskToTask(id, subtaskId) {
+        const parent = state.tasks.find((t) => t.id === id);
+        if (!parent?.subtasks) return undefined;
+        const subtask = parent.subtasks.find((s) => s.id === subtaskId);
+        if (!subtask) return undefined;
+
+        const scope = parent.scope;
+        let order: number;
+        if (scope.kind === "day" && !parent.time) {
+          // Parent lives in All Day To-Do — insert the promoted task
+          // directly after it.
+          const nextSibling = state.tasks
+            .filter(
+              (t) =>
+                t.scope.kind === "day" &&
+                t.scope.date === scope.date &&
+                !t.time &&
+                !t.done &&
+                t.order > parent.order,
+            )
+            .sort((a, b) => a.order - b.order)[0];
+          order = computeOrderBetween(parent.order, nextSibling?.order);
+        } else if (scope.kind === "day") {
+          // Parent is timed (Next Up) — the promoted task is always
+          // untimed regardless, so there's no natural sibling to land
+          // next to; append to the end of All Day To-Do for that day,
+          // same as addTask's own default for a fresh untimed task.
+          order =
+            Math.max(
+              0,
+              ...state.tasks
+                .filter(
+                  (t) => t.scope.kind === "day" && t.scope.date === scope.date && !t.time && !t.done,
+                )
+                .map((t) => t.order),
+            ) + 1;
+        } else {
+          order = 0;
+        }
+
+        const task: Task = {
+          id: crypto.randomUUID(),
+          title: subtask.title,
+          done: subtask.done,
+          scope: parent.scope,
+          order,
+          createdAt: new Date().toISOString(),
+        };
+        const updatedParent: Task = {
+          ...parent,
+          subtasks: parent.subtasks.filter((s) => s.id !== subtaskId),
+        };
+
+        dispatch({ type: "added", task });
+        repo.create(task).catch(handleSyncFailure);
+
+        dispatch({ type: "updated", task: updatedParent });
+        repo.update(updatedParent).catch(handleSyncFailure);
+
+        return task;
       },
       removeTask(id) {
         const current = state.tasks.find((t) => t.id === id);
