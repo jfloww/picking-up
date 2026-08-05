@@ -18,6 +18,7 @@ import { todayKey, weekStartOf } from "./lib/dates";
 import { dayTasksForWeek, isValidTime } from "./lib/times";
 import { rolloverTasks } from "./lib/rollover";
 import { materializeRoutines } from "./lib/routines";
+import { nestBlockReasonFor } from "./lib/nesting";
 import type { Category, Scope, Task } from "./types";
 
 const SYNC_ERROR_MESSAGE = "Something didn't save. Reconnecting to check what's saved…";
@@ -96,6 +97,7 @@ interface TasksContextValue extends TasksState {
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
+  convertTaskToSubtask: (id: string, targetId: string) => void;
   addBucketItem: (title: string, categoryId: string) => Task | undefined;
   setCategory: (id: string, categoryId: string) => void;
   createCategory: (name: string) => Promise<Category | undefined>;
@@ -491,6 +493,26 @@ export function TasksProvider({
         };
         dispatch({ type: "updated", task });
         repo.update(task).catch(handleSyncFailure);
+      },
+      convertTaskToSubtask(id, targetId) {
+        if (id === targetId) return;
+        const source = state.tasks.find((t) => t.id === id);
+        const target = state.tasks.find((t) => t.id === targetId);
+        if (!source || !target) return;
+        if (nestBlockReasonFor(source)) return;
+
+        const updatedTarget: Task = {
+          ...target,
+          subtasks: [
+            ...(target.subtasks ?? []),
+            { id: crypto.randomUUID(), title: source.title, done: source.done },
+          ],
+        };
+        dispatch({ type: "updated", task: updatedTarget });
+        repo.update(updatedTarget).catch(handleSyncFailure);
+
+        dispatch({ type: "removed", id });
+        repo.remove(id).catch(handleSyncFailure);
       },
       removeTask(id) {
         const current = state.tasks.find((t) => t.id === id);

@@ -6,6 +6,7 @@ import { useRef } from "react";
 import { cn } from "@/lib/utils";
 
 import { todayKey } from "../lib/dates";
+import { nestBlockReasonFor, type NestBlockReason } from "../lib/nesting";
 import { computeOrderBetween } from "../lib/reorder";
 import { compareTasksForDay, isPastToday, nowTime } from "../lib/times";
 import { useTasks } from "../store";
@@ -13,11 +14,13 @@ import { scopeKey, type Scope, type Task } from "../types";
 import { QuickAdd } from "./quick-add";
 import { TaskItem, taskItemHandlers } from "./task-item";
 import { useDragToReorder } from "./use-drag-to-reorder";
+import type { DragState } from "./use-drag-to-schedule";
 import { useTaskTransitionClasses } from "./use-task-transition-classes";
 
 type GetDragHandlers = (
   id: string,
   title: string,
+  nestBlockReason: NestBlockReason | undefined,
 ) => {
   onPointerDown: (e: React.PointerEvent) => void;
   onPointerMove: (e: React.PointerEvent) => void;
@@ -31,11 +34,15 @@ export function DayAgenda({
   onSelectTask,
   agendaZoneRef,
   getDragHandlers,
+  cardRefs,
+  dragState,
 }: {
   date: string;
   onSelectTask?: (id: string) => void;
   agendaZoneRef: React.RefObject<HTMLDivElement | null>;
   getDragHandlers: GetDragHandlers;
+  cardRefs: React.RefObject<Record<string, HTMLElement | null>>;
+  dragState: DragState | null;
 }) {
   const actions = useTasks();
   const { tasks, addTask } = actions;
@@ -99,16 +106,29 @@ export function DayAgenda({
           <div data-testid="reorder-indicator" className="h-0.5 rounded-full bg-brand" />
         )}
         <div
-          ref={
-            reorderable
-              ? (el) => {
-                  reorderItemRefs.current[t.id] = el;
-                }
-              : undefined
-          }
+          ref={(el) => {
+            // cardRefs is a long-lived ref owned by DailyView (not rebuilt
+            // per render), so entries must be actively cleaned up on
+            // unmount rather than relying on a later render to overwrite
+            // them — otherwise every task ever rendered this session
+            // leaves a dead key behind for resolve() to iterate over.
+            if (el) {
+              cardRefs.current[t.id] = el;
+            } else {
+              delete cardRefs.current[t.id];
+            }
+            if (reorderable) {
+              reorderItemRefs.current[t.id] = el;
+            }
+          }}
           data-testid={`agenda-${t.id}`}
-          className={cn("flex touch-none items-center gap-1.5", transitions.get(t.id)?.animationClass)}
-          {...getDragHandlers(t.id, t.title)}
+          className={cn(
+            "flex touch-none items-center gap-1.5",
+            transitions.get(t.id)?.animationClass,
+            dragState?.nestTargetId === t.id &&
+              (dragState.nestBlockReason ? "ring-2 ring-muted-foreground/40" : "ring-2 ring-brand"),
+          )}
+          {...getDragHandlers(t.id, t.title, nestBlockReasonFor(t))}
         >
           {reorderable && (
             <button

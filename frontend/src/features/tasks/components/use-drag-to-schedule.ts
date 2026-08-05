@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
+import type { NestBlockReason } from "../lib/nesting";
 import { yToSnappedTime } from "../lib/times";
 
 const DRAG_THRESHOLD_PX = 10;
@@ -14,53 +15,87 @@ export interface DragState {
   pointerX: number;
   pointerY: number;
   previewTime: string | null;
+  nestTargetId: string | null;
+  nestBlockReason: NestBlockReason | undefined;
 }
 
 interface DragGesture {
   id: string;
   title: string;
+  nestBlockReason: NestBlockReason | undefined;
   pointerId: number;
   startX: number;
   startY: number;
   moved: boolean;
 }
 
-interface Resolution {
-  overAllDay: boolean;
-  time: string | null;
-}
+type Resolution =
+  | { kind: "nest"; targetId: string }
+  | { kind: "nest-blocked"; targetId: string; reason: NestBlockReason }
+  | { kind: "clear-time" }
+  | { kind: "schedule"; time: string }
+  | { kind: "outside" };
 
 export function useDragToSchedule(options: {
   railRef: React.RefObject<HTMLDivElement | null>;
   allDayZoneRef: React.RefObject<HTMLDivElement | null>;
+  cardRefs: React.RefObject<Record<string, HTMLElement | null>>;
   hourHeight: number;
   onSchedule: (id: string, time: string | undefined) => void;
+  onNest: (sourceId: string, targetId: string) => void;
+  onNestBlocked: (reason: NestBlockReason) => void;
 }) {
-  const { railRef, allDayZoneRef, hourHeight, onSchedule } = options;
+  const { railRef, allDayZoneRef, cardRefs, hourHeight, onSchedule, onNest, onNestBlocked } = options;
   const [dragState, setDragState] = useState<DragState | null>(null);
   const gestureRef = useRef<DragGesture | null>(null);
   const suppressClickRef = useRef(false);
 
   const resolve = useCallback(
-    (clientX: number, clientY: number): Resolution => {
+    (
+      clientX: number,
+      clientY: number,
+      sourceId: string,
+      nestBlockReason: NestBlockReason | undefined,
+    ): Resolution => {
+      // Cards are only live drop targets while the pointer is within the
+      // agenda's own scroll container — the agenda list scrolls, so a card
+      // scrolled above/below the visible area still has a real (if
+      // off-screen) bounding rect and would otherwise stay a live nest
+      // target even while the pointer is over the header or footer.
+      // Mirrors useDragToReorder's containment check.
       const allDayEl = allDayZoneRef.current;
-      if (allDayEl) {
-        const r = allDayEl.getBoundingClientRect();
-        if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
-          return { overAllDay: true, time: null };
+      const allDayRect = allDayEl?.getBoundingClientRect();
+      const insideAllDayZone = !!allDayRect &&
+        clientX >= allDayRect.left &&
+        clientX <= allDayRect.right &&
+        clientY >= allDayRect.top &&
+        clientY <= allDayRect.bottom;
+
+      // Most specific target first: a card is more specific than the
+      // broader zone (all-day zone / rail) it visually sits inside.
+      if (insideAllDayZone) {
+        for (const [id, el] of Object.entries(cardRefs.current)) {
+          if (id === sourceId || !el) continue;
+          const r = el.getBoundingClientRect();
+          if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+            return nestBlockReason
+              ? { kind: "nest-blocked", targetId: id, reason: nestBlockReason }
+              : { kind: "nest", targetId: id };
+          }
         }
+        return { kind: "clear-time" };
       }
       const railEl = railRef.current;
       if (railEl) {
         const r = railEl.getBoundingClientRect();
         if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
           const y = clientY - r.top + railEl.scrollTop;
-          return { overAllDay: false, time: yToSnappedTime(y, hourHeight) };
+          return { kind: "schedule", time: yToSnappedTime(y, hourHeight) };
         }
       }
-      return { overAllDay: false, time: null };
+      return { kind: "outside" };
     },
-    [allDayZoneRef, railRef, hourHeight],
+    [allDayZoneRef, railRef, cardRefs, hourHeight],
   );
 
   const autoScroll = useCallback(
@@ -80,13 +115,14 @@ export function useDragToSchedule(options: {
   );
 
   const getDragHandlers = useCallback(
-    (id: string, title: string) => ({
+    (id: string, title: string, nestBlockReason: NestBlockReason | undefined) => ({
       onPointerDown: (e: React.PointerEvent) => {
         if (e.button !== 0) return;
         if ((e.target as HTMLElement).closest("input, textarea")) return;
         gestureRef.current = {
           id,
           title,
+          nestBlockReason,
           pointerId: e.pointerId,
           startX: e.clientX,
           startY: e.clientY,
@@ -114,13 +150,16 @@ export function useDragToSchedule(options: {
         }
 
         autoScroll(e.clientY);
-        const { time } = resolve(e.clientX, e.clientY);
+        const resolution = resolve(e.clientX, e.clientY, gesture.id, gesture.nestBlockReason);
         setDragState({
           id: gesture.id,
           title: gesture.title,
           pointerX: e.clientX,
           pointerY: e.clientY,
-          previewTime: time,
+          previewTime: resolution.kind === "schedule" ? resolution.time : null,
+          nestTargetId:
+            resolution.kind === "nest" || resolution.kind === "nest-blocked" ? resolution.targetId : null,
+          nestBlockReason: resolution.kind === "nest-blocked" ? resolution.reason : undefined,
         });
       },
       onPointerUp: (e: React.PointerEvent) => {
@@ -142,11 +181,22 @@ export function useDragToSchedule(options: {
           setTimeout(() => {
             suppressClickRef.current = false;
           }, 0);
-          const { overAllDay, time } = resolve(e.clientX, e.clientY);
-          if (overAllDay) {
-            onSchedule(gesture.id, undefined);
-          } else if (time !== null) {
-            onSchedule(gesture.id, time);
+          const resolution = resolve(e.clientX, e.clientY, gesture.id, gesture.nestBlockReason);
+          switch (resolution.kind) {
+            case "nest":
+              onNest(gesture.id, resolution.targetId);
+              break;
+            case "nest-blocked":
+              onNestBlocked(resolution.reason);
+              break;
+            case "clear-time":
+              onSchedule(gesture.id, undefined);
+              break;
+            case "schedule":
+              onSchedule(gesture.id, resolution.time);
+              break;
+            case "outside":
+              break;
           }
         }
         setDragState(null);
@@ -165,7 +215,7 @@ export function useDragToSchedule(options: {
         }
       },
     }),
-    [resolve, autoScroll, onSchedule],
+    [resolve, autoScroll, onSchedule, onNest, onNestBlocked],
   );
 
   return { dragState, getDragHandlers };

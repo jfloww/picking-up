@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 import { todayKey } from "../lib/dates";
+import { nestBlockReasonFor, type NestBlockReason } from "../lib/nesting";
 import { compareTasksForDay, isPastToday, layoutTimedTasks, nowTime, timeToMinutes } from "../lib/times";
 import { useTasks } from "../store";
 import { scopeKey, type Scope } from "../types";
@@ -24,6 +25,7 @@ const toOffset = (time: string) => (timeToMinutes(time) * HOUR_HEIGHT) / 60;
 type GetDragHandlers = (
   id: string,
   title: string,
+  nestBlockReason: NestBlockReason | undefined,
 ) => {
   onPointerDown: (e: React.PointerEvent) => void;
   onPointerMove: (e: React.PointerEvent) => void;
@@ -147,7 +149,7 @@ export function DayTimeline({
                           ? (t.durationMinutes * HOUR_HEIGHT) / 60
                           : undefined,
                       }}
-                      {...getDragHandlers(t.id, t.title)}
+                      {...getDragHandlers(t.id, t.title, nestBlockReasonFor(t))}
                     >
                       <ul>
                         <TaskItem
@@ -198,7 +200,7 @@ export function DayTimeline({
                         ? (t.durationMinutes * HOUR_HEIGHT) / 60
                         : undefined,
                     }}
-                    {...getDragHandlers(t.id, t.title)}
+                    {...getDragHandlers(t.id, t.title, nestBlockReasonFor(t))}
                   >
                     <ul>
                       <TaskItem

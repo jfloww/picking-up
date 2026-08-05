@@ -319,7 +319,15 @@ describe("DayTimeline", () => {
           date={todayKey()}
           railRef={railRef}
           getDragHandlers={noopGetDragHandlers}
-          dragState={{ id: "x", title: "dragging", pointerX: 0, pointerY: 0, previewTime: "09:30" }}
+          dragState={{
+            id: "x",
+            title: "dragging",
+            pointerX: 0,
+            pointerY: 0,
+            previewTime: "09:30",
+            nestTargetId: null,
+            nestBlockReason: undefined,
+          }}
         />
       </TasksProvider>,
     );

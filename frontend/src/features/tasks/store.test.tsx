@@ -641,6 +641,112 @@ describe("TasksProvider", () => {
       ]);
       await waitFor(() => expect(repo.tasks[0].subtasks).toHaveLength(1));
     });
+
+    it("convertTaskToSubtask moves a simple task into the target's subtasks and removes it", async () => {
+      const source = makeTask({ id: "s", title: "buy milk", scope: { kind: "day", date: todayKey() } });
+      const target = makeTask({ id: "t", title: "groceries", scope: { kind: "day", date: todayKey() } });
+      const { repo, result } = setup(fakeRepository([source, target]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.convertTaskToSubtask("s", "t"));
+
+      expect(result.current.tasks.find((t) => t.id === "s")).toBeUndefined();
+      const updatedTarget = result.current.tasks.find((t) => t.id === "t");
+      expect(updatedTarget?.subtasks).toHaveLength(1);
+      expect(updatedTarget?.subtasks![0]).toMatchObject({ title: "buy milk", done: false });
+      await waitFor(() => expect(repo.tasks.find((t) => t.id === "s")).toBeUndefined());
+      await waitFor(() =>
+        expect(repo.tasks.find((t) => t.id === "t")?.subtasks).toHaveLength(1),
+      );
+    });
+
+    it("convertTaskToSubtask preserves the source task's done state", async () => {
+      const source = makeTask({
+        id: "s",
+        title: "done already",
+        done: true,
+        scope: { kind: "day", date: todayKey() },
+      });
+      const target = makeTask({ id: "t", title: "list", scope: { kind: "day", date: todayKey() } });
+      const { result } = setup(fakeRepository([source, target]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.convertTaskToSubtask("s", "t"));
+
+      expect(result.current.tasks.find((t) => t.id === "t")?.subtasks![0].done).toBe(true);
+    });
+
+    it("convertTaskToSubtask appends to any existing subtasks on the target", async () => {
+      const source = makeTask({ id: "s", title: "new item", scope: { kind: "day", date: todayKey() } });
+      const target = makeTask({
+        id: "t",
+        title: "list",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [{ id: "existing", title: "already here", done: false }],
+      });
+      const { result } = setup(fakeRepository([source, target]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.convertTaskToSubtask("s", "t"));
+
+      const updatedTarget = result.current.tasks.find((t) => t.id === "t");
+      expect(updatedTarget?.subtasks).toHaveLength(2);
+      expect(updatedTarget?.subtasks!.map((s) => s.title)).toEqual(["already here", "new item"]);
+    });
+
+    it("convertTaskToSubtask is a no-op when the source task already has subtasks", async () => {
+      const source = makeTask({
+        id: "s",
+        title: "has kids",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [{ id: "sub1", title: "step 1", done: false }],
+      });
+      const target = makeTask({ id: "t", title: "list", scope: { kind: "day", date: todayKey() } });
+      const { result } = setup(fakeRepository([source, target]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.convertTaskToSubtask("s", "t"));
+
+      expect(result.current.tasks.find((t) => t.id === "s")).toBeTruthy();
+      expect(result.current.tasks.find((t) => t.id === "t")?.subtasks ?? []).toHaveLength(0);
+    });
+
+    it("convertTaskToSubtask is a no-op when the source task is a repeat anchor or occurrence", async () => {
+      const anchor = makeTask({
+        id: "anchor",
+        title: "weekly review",
+        scope: { kind: "day", date: todayKey() },
+        repeatWeekdays: [4],
+      });
+      const occurrence = makeTask({
+        id: "occ",
+        title: "gym",
+        scope: { kind: "day", date: todayKey() },
+        repeatSourceId: "some-other-anchor",
+      });
+      const target = makeTask({ id: "t", title: "list", scope: { kind: "day", date: todayKey() } });
+      const { result } = setup(fakeRepository([anchor, occurrence, target]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => {
+        result.current.convertTaskToSubtask("anchor", "t");
+        result.current.convertTaskToSubtask("occ", "t");
+      });
+
+      expect(result.current.tasks.find((t) => t.id === "anchor")).toBeTruthy();
+      expect(result.current.tasks.find((t) => t.id === "occ")).toBeTruthy();
+      expect(result.current.tasks.find((t) => t.id === "t")?.subtasks ?? []).toHaveLength(0);
+    });
+
+    it("convertTaskToSubtask is a no-op when dropped onto itself", async () => {
+      const source = makeTask({ id: "s", title: "self", scope: { kind: "day", date: todayKey() } });
+      const { result } = setup(fakeRepository([source]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.convertTaskToSubtask("s", "s"));
+
+      expect(result.current.tasks.find((t) => t.id === "s")).toBeTruthy();
+    });
   });
 
   describe("bucket list actions", () => {
