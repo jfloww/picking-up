@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, X } from "lucide-react";
+import { ArrowUpRight, Plus, X } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,11 +17,13 @@ function DrawerSubtaskRow({
   onToggle,
   onRemove,
   onEditTitle,
+  onPromote,
 }: {
   subtask: Subtask;
   onToggle: (subtaskId: string) => void;
   onRemove: (subtaskId: string) => void;
   onEditTitle: (subtaskId: string, title: string) => void;
+  onPromote?: (subtaskId: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(subtask.title);
@@ -83,6 +85,16 @@ function DrawerSubtaskRow({
           {subtask.title}
         </button>
       )}
+      {onPromote && (
+        <button
+          type="button"
+          onClick={() => onPromote(subtask.id)}
+          aria-label={`Move ${subtask.title} out as its own task`}
+          className="flex size-6 shrink-0 items-center justify-center rounded-md text-subtle opacity-0 outline-none transition-opacity duration-200 hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover:opacity-100 group-focus-within:opacity-100"
+        >
+          <ArrowUpRight className="size-3.5" />
+        </button>
+      )}
       <button
         type="button"
         onClick={() => onRemove(subtask.id)}
@@ -101,12 +113,14 @@ function DrawerSubtaskList({
   onToggle,
   onRemove,
   onEditTitle,
+  onPromote,
 }: {
   subtasks: Subtask[];
   onAdd: (title: string) => void;
   onToggle: (subtaskId: string) => void;
   onRemove: (subtaskId: string) => void;
   onEditTitle: (subtaskId: string, title: string) => void;
+  onPromote?: (subtaskId: string) => void;
 }) {
   const active = subtasks.filter((s) => !s.done);
   const completed = subtasks.filter((s) => s.done);
@@ -122,6 +136,7 @@ function DrawerSubtaskList({
               onToggle={onToggle}
               onRemove={onRemove}
               onEditTitle={onEditTitle}
+              onPromote={onPromote}
             />
           ))}
         </ul>
@@ -145,6 +160,7 @@ export function SubtaskList({
   onToggle,
   onRemove,
   onEditTitle,
+  onPromote,
   drawer = false,
 }: {
   subtasks: Subtask[];
@@ -152,6 +168,7 @@ export function SubtaskList({
   onToggle: (subtaskId: string) => void;
   onRemove: (subtaskId: string) => void;
   onEditTitle: (subtaskId: string, title: string) => void;
+  onPromote?: (subtaskId: string) => void;
   drawer?: boolean;
 }) {
   if (drawer) {
@@ -162,6 +179,7 @@ export function SubtaskList({
         onToggle={onToggle}
         onRemove={onRemove}
         onEditTitle={onEditTitle}
+        onPromote={onPromote}
       />
     );
   }

@@ -400,3 +400,42 @@ describe("TaskDetailFields bucket category", () => {
     expect(onCategoryChange).toHaveBeenCalledWith("To Read");
   });
 });
+
+describe("TaskDetailFields promote subtask", () => {
+  it("shows a promote icon per subtask in drawer variant when onPromoteSubtask is provided, and calls it with the subtask id", () => {
+    const onPromoteSubtask = vi.fn();
+    render(
+      <TaskDetailFields
+        task={makeTask({ subtasks: [{ id: "s1", title: "book flights", done: false }] })}
+        {...noopHandlers}
+        variant="drawer"
+        onPromoteSubtask={onPromoteSubtask}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("Move book flights out as its own task"));
+    expect(onPromoteSubtask).toHaveBeenCalledWith("s1");
+  });
+
+  it("does not show a promote icon when onPromoteSubtask is not provided", () => {
+    render(
+      <TaskDetailFields
+        task={makeTask({ subtasks: [{ id: "s1", title: "book flights", done: false }] })}
+        {...noopHandlers}
+        variant="drawer"
+      />,
+    );
+    expect(screen.queryByLabelText("Move book flights out as its own task")).toBeNull();
+  });
+
+  it("does not show a promote icon in the non-drawer (default) variant, even when onPromoteSubtask is provided", () => {
+    const onPromoteSubtask = vi.fn();
+    render(
+      <TaskDetailFields
+        task={makeTask({ subtasks: [{ id: "s1", title: "book flights", done: false }] })}
+        {...noopHandlers}
+        onPromoteSubtask={onPromoteSubtask}
+      />,
+    );
+    expect(screen.queryByLabelText("Move book flights out as its own task")).toBeNull();
+  });
+});
