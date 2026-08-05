@@ -35,13 +35,19 @@ Oracle Autonomous DB.
   exists in this repo today. A repeatable setup script plus a short
   "pull, migrate, restart" runbook gets to a live URL fastest; automating
   it is explicitly deferred, not forgotten.
-- **DuckDNS (free subdomain), not a purchased domain — for now.** Backend
-  auth cookies are marked `secure`, so production requires real HTTPS,
-  which requires a publicly resolvable hostname for Let's Encrypt. A free
-  DuckDNS hostname (e.g. `pickingup.duckdns.org`) pointed at
-  `129.213.191.36` gets there at zero cost and zero lock-in — swapping in
-  a real domain later only touches DNS + one nginx `server_name` + one
-  certbot re-run, not the deployment mechanics.
+- **DuckDNS (free subdomain), not a purchased domain — for now.** Vercel
+  (the frontend server) talks to Django over the public internet carrying
+  bearer tokens and login credentials, so production requires real
+  backend HTTPS to avoid exposing them in transit — which requires a
+  publicly resolvable hostname for Let's Encrypt. (This is not about the
+  frontend's auth cookies: those are set by Next.js on the Vercel domain,
+  per `frontend/src/lib/auth/cookies.ts`, and their `secure` flag depends
+  on Vercel's own HTTPS, not the backend's — the browser never talks to
+  Django directly in this app's BFF architecture.) A free DuckDNS hostname
+  (e.g. `pickingup.duckdns.org`) pointed at `129.213.191.36` gets there at
+  zero cost and zero lock-in — swapping in a real domain later only
+  touches DNS + one nginx `server_name` + one certbot re-run, not the
+  deployment mechanics.
 - **Whitenoise for Django static files, not an nginx static-file path.**
   This app's static footprint is just Django admin/DRF-browsable-API
   assets — one middleware line is simpler than keeping an nginx location
@@ -99,7 +105,11 @@ Oracle Autonomous DB.
    `DJANGO_SECRET_KEY` (freshly generated per the existing
    `.env.example` instructions), `DJANGO_DEBUG=False`,
    `DJANGO_ALLOWED_HOSTS=<duckdns-host>`,
-   `DJANGO_CORS_ALLOWED_ORIGINS=https://<vercel-domain>`, plus the
+   `DJANGO_CORS_ALLOWED_ORIGINS=https://<vercel-domain>`,
+   `DJANGO_CSRF_TRUSTED_ORIGINS=https://<duckdns-host>`,
+   `GOOGLE_OAUTH_CLIENT_ID=<same client ID as the frontend's
+   NEXT_PUBLIC_GOOGLE_CLIENT_ID>` (Google sign-in ships returning a 503
+   without it — see `backend/apps/accounts/views.py`), plus the
    `ORACLE_DB_USER`/`ORACLE_DB_PASSWORD`/`ORACLE_DB_DSN` values already
    known from the July setup (`key/db-settings.txt` has the DSN;
    credentials come from wherever they were originally recorded — not
@@ -112,10 +122,16 @@ Oracle Autonomous DB.
 6. **gunicorn as a systemd service** (`/etc/systemd/system/gunicorn.service`):
    runs `backend/.venv/bin/gunicorn config.wsgi:application` bound to
    `127.0.0.1:8000`, `WorkingDirectory=.../backend`, `EnvironmentFile=` the
-   production `.env` (gunicorn/systemd don't read `.env` via
-   `django-environ` the same way `manage.py runserver` does at the shell
-   level — needs an explicit `EnvironmentFile=` line or a wrapper), `Restart=always`,
-   enabled + started via `systemctl enable --now gunicorn`.
+   production `.env`, `Restart=always`, enabled + started via `systemctl
+   enable --now gunicorn`. (`EnvironmentFile=` is actually redundant here —
+   `settings.py` loads `.env` via `environ.Env.read_env(BASE_DIR / ".env")`,
+   a path derived from `__file__`, so it's read identically regardless of
+   how the process is started. The line is harmless belt-and-braces,
+   *except* that systemd's `EnvironmentFile` does its own shell-like
+   unquoting, so a `DJANGO_SECRET_KEY` containing `#`, `$`, `&`, `(`, `)`
+   — which `get_random_secret_key()` can produce — can make the unit fail
+   to start with a confusing error visible only in `journalctl`, not
+   Django. Single-quote such values in `.env`.)
 7. **nginx reverse proxy**: a server block proxying `<duckdns-host>` to
    `127.0.0.1:8000` — nginx only proxies here; no static-file location
    block is needed since whitenoise serves static files directly from the
@@ -145,8 +161,13 @@ Oracle Autonomous DB.
 
 ## Cross-configuration (the two sides have to agree with each other)
 
-- Backend `.env`: `DJANGO_CORS_ALLOWED_ORIGINS` must equal the Vercel
-  URL exactly (scheme + host).
+- Backend `.env`: `DJANGO_CORS_ALLOWED_ORIGINS` should be kept equal to the
+  Vercel URL (scheme + host) as hygiene, but this is optional
+  defense-in-depth, not load-bearing — CORS is a browser enforcement
+  mechanism, and the browser never calls Django directly in this app's BFF
+  architecture (only Next.js server-side code does, via
+  `DJANGO_API_BASE_URL`), so this setting has no effect on whether the app
+  actually works.
 - Google Cloud Console → OAuth client → "Authorized JavaScript origins":
   add the Vercel production URL (today only local dev origins are
   authorized, per the comment already in `backend/.env.example`).

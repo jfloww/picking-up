@@ -659,3 +659,12 @@ class ProductionStaticFilesTests(SimpleTestCase):
             settings.STORAGES["default"]["BACKEND"],
             "django.core.files.storage.FileSystemStorage",
         )
+
+    def test_secure_proxy_ssl_header_trusts_nginxs_forwarded_proto(self):
+        # nginx terminates TLS and proxies to gunicorn over plain HTTP; without
+        # this, request.is_secure() is always False behind the proxy and admin
+        # login fails CSRF's origin check.
+        self.assertEqual(
+            settings.SECURE_PROXY_SSL_HEADER,
+            ("HTTP_X_FORWARDED_PROTO", "https"),
+        )

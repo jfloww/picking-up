@@ -29,6 +29,14 @@ if not DEBUG and SECRET_KEY == _INSECURE_DEFAULT_SECRET_KEY:
 
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
+# nginx terminates TLS and proxies to gunicorn over plain HTTP, setting
+# X-Forwarded-Proto so Django knows the original request was HTTPS —
+# without this, request.is_secure() is always False behind the proxy, and
+# CsrfViewMiddleware rejects same-origin POSTs (e.g. admin login) with
+# "Origin checking failed" because it computes an http:// expected origin.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
