@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Picking-up app icon</title>
+  <desc id="desc">An ivory P joined to an upward blue check on a charcoal rounded square.</desc>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="75%">
+      <stop offset="0" stop-color="#111419"/>
+      <stop offset="1" stop-color="#08090b"/>
+    </radialGradient>
+    <linearGradient id="ivory" x1="0" y1="0" x2="0.72" y2="1">
+      <stop offset="0" stop-color="#f8f5f0"/>
+      <stop offset="1" stop-color="#ece9e3"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#5aa1e9"/>
+      <stop offset="1" stop-color="#68b4f8"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="1008" height="1008" rx="132" fill="url(#bg)"/>
+  <path
+    d="M350 737V286Q350 245 391 245H565C704 245 770 326 770 424C770 524 704 594 565 594H522L390 730"
+    fill="none"
+    stroke="url(#ivory)"
+    stroke-width="84"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M346 751L418 823L558 670"
+    fill="none"
+    stroke="url(#blue)"
+    stroke-width="80"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
