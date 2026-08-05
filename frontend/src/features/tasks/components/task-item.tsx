@@ -32,6 +32,8 @@ interface TaskItemActions {
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
+  promoteSubtaskToTask: (id: string, subtaskId: string) => Task | undefined;
+  convertTaskToSubtask: (id: string, targetId: string) => void;
   setCategory: (id: string, categoryId: string) => void;
   createCategory: (name: string) => Promise<Category | undefined>;
 }
@@ -82,6 +84,8 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onRemoveSubtask: (subtaskId: string) => actions.removeSubtask(id, subtaskId),
     onEditSubtaskTitle: (subtaskId: string, title: string) =>
       actions.editSubtaskTitle(id, subtaskId, title),
+    onPromoteSubtask: (subtaskId: string) => actions.promoteSubtaskToTask(id, subtaskId),
+    onUndoPromoteSubtask: (taskId: string) => actions.convertTaskToSubtask(taskId, id),
     // The editor works in category names (create-or-reuse UX); resolve to
     // a stable id here before handing off to the store, which only ever
     // deals in categoryId.

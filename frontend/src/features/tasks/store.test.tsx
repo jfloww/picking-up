@@ -747,6 +747,122 @@ describe("TasksProvider", () => {
 
       expect(result.current.tasks.find((t) => t.id === "s")).toBeTruthy();
     });
+
+    it("promoteSubtaskToTask creates a standalone task in the parent's scope, preserving done state, and removes the subtask", async () => {
+      const parent = makeTask({
+        id: "p",
+        title: "plan trip",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [{ id: "s1", title: "book flights", done: true }],
+      });
+      const { repo, result } = setup(fakeRepository([parent]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      let created: ReturnType<typeof result.current.promoteSubtaskToTask>;
+      act(() => {
+        created = result.current.promoteSubtaskToTask("p", "s1");
+      });
+
+      expect(created?.title).toBe("book flights");
+      expect(created?.done).toBe(true);
+      expect(created?.scope).toEqual({ kind: "day", date: todayKey() });
+      expect(result.current.tasks.find((t) => t.id === "p")?.subtasks).toEqual([]);
+      expect(result.current.tasks.some((t) => t.id === created?.id)).toBe(true);
+      await waitFor(() => expect(repo.tasks.some((t) => t.id === created?.id)).toBe(true));
+      await waitFor(() => expect(repo.tasks.find((t) => t.id === "p")?.subtasks).toEqual([]));
+    });
+
+    it("promoteSubtaskToTask inserts directly after an untimed parent (All Day To-Do)", async () => {
+      const parent = makeTask({
+        id: "p",
+        title: "plan trip",
+        scope: { kind: "day", date: todayKey() },
+        order: 1,
+        subtasks: [{ id: "s1", title: "book flights", done: false }],
+      });
+      const sibling = makeTask({
+        id: "sib",
+        title: "later item",
+        scope: { kind: "day", date: todayKey() },
+        order: 2,
+      });
+      const { result } = setup(fakeRepository([parent, sibling]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      let created: ReturnType<typeof result.current.promoteSubtaskToTask>;
+      act(() => {
+        created = result.current.promoteSubtaskToTask("p", "s1");
+      });
+
+      expect(created!.order).toBeGreaterThan(1);
+      expect(created!.order).toBeLessThan(2);
+    });
+
+    it("promoteSubtaskToTask appends to the end of All Day To-Do when the parent is timed", async () => {
+      const parent = makeTask({
+        id: "p",
+        title: "meeting",
+        scope: { kind: "day", date: todayKey() },
+        time: "09:00",
+        subtasks: [{ id: "s1", title: "prep notes", done: false }],
+      });
+      const existing = makeTask({
+        id: "e",
+        title: "existing all-day item",
+        scope: { kind: "day", date: todayKey() },
+        order: 3,
+      });
+      const { result } = setup(fakeRepository([parent, existing]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      let created: ReturnType<typeof result.current.promoteSubtaskToTask>;
+      act(() => {
+        created = result.current.promoteSubtaskToTask("p", "s1");
+      });
+
+      expect(created!.order).toBe(4);
+    });
+
+    it("promoteSubtaskToTask defaults to order 0 for a bucket-scoped parent", async () => {
+      const parent = makeTask({
+        id: "p",
+        title: "someday",
+        scope: { kind: "bucket", categoryId: "cat-1" },
+        subtasks: [{ id: "s1", title: "research", done: false }],
+      });
+      const { result } = setup(fakeRepository([parent]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      let created: ReturnType<typeof result.current.promoteSubtaskToTask>;
+      act(() => {
+        created = result.current.promoteSubtaskToTask("p", "s1");
+      });
+
+      expect(created!.order).toBe(0);
+      expect(created!.scope).toEqual({ kind: "bucket", categoryId: "cat-1" });
+    });
+
+    it("promoteSubtaskToTask is a no-op when the parent or subtask isn't found", async () => {
+      const parent = makeTask({
+        id: "p",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [{ id: "s1", title: "x", done: false }],
+      });
+      const { result } = setup(fakeRepository([parent]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      let a: ReturnType<typeof result.current.promoteSubtaskToTask>;
+      let b: ReturnType<typeof result.current.promoteSubtaskToTask>;
+      act(() => {
+        a = result.current.promoteSubtaskToTask("missing", "s1");
+        b = result.current.promoteSubtaskToTask("p", "missing");
+      });
+
+      expect(a).toBeUndefined();
+      expect(b).toBeUndefined();
+      expect(result.current.tasks).toHaveLength(1);
+      expect(result.current.tasks[0].subtasks).toHaveLength(1);
+    });
   });
 
   describe("bucket list actions", () => {
