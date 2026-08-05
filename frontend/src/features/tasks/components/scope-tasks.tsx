@@ -153,12 +153,16 @@ export function ScopeTasks({
                       }
                     : undefined
                 }
-                className="flex items-start gap-1.5"
+                className="flex items-stretch gap-1.5"
               >
                 <button
                   type="button"
                   aria-label={`Reorder ${t.title}`}
-                  className="mt-1 flex size-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-subtle hover:bg-muted/60 hover:text-foreground active:cursor-grabbing"
+                  // No fixed height: stretches to match the card's height via
+                  // items-stretch above, so a two-line (metadata + title) card
+                  // gets a taller handle spanning both lines, not just the
+                  // first one.
+                  className="flex w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-subtle hover:bg-muted/60 hover:text-foreground active:cursor-grabbing"
                   {...getDragHandlers(t.id, t.title, dayDate!, !!t.time)}
                 >
                   <GripVertical className="size-3.5" />

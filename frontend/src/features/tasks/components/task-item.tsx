@@ -245,26 +245,39 @@ export function TaskItem({
             </div>
           )}
           {!hasMeta && (
-            <span onClick={(e) => e.stopPropagation()} className="contents">
-              <Checkbox
-                checked={task.done}
-                onCheckedChange={onToggle}
-                aria-label={`Toggle ${task.title}`}
-                className={cn("mr-1.5 size-[13px] border-subtle", DONE_CHECKBOX_CLASS)}
-              />
+            <span className="flex items-center gap-1.5">
+              <span onClick={(e) => e.stopPropagation()} className="contents">
+                <Checkbox
+                  checked={task.done}
+                  onCheckedChange={onToggle}
+                  aria-label={`Toggle ${task.title}`}
+                  className={cn("size-[13px] border-subtle", DONE_CHECKBOX_CLASS)}
+                />
+              </span>
+              <button
+                type="button"
+                onClick={selectOrToggle}
+                className={cn(
+                  "min-w-0 flex-1 truncate text-left text-[12.5px] leading-[1.35]",
+                  task.done && "text-muted-foreground line-through",
+                )}
+              >
+                {task.title}
+              </button>
             </span>
           )}
-          <button
-            type="button"
-            onClick={selectOrToggle}
-            className={cn(
-              "text-left text-[12.5px] leading-[1.35]",
-              hasMeta ? "mt-1 block w-full" : "inline",
-              task.done && "text-muted-foreground line-through",
-            )}
-          >
-            {task.title}
-          </button>
+          {hasMeta && (
+            <button
+              type="button"
+              onClick={selectOrToggle}
+              className={cn(
+                "mt-1 block w-full truncate text-left text-[12.5px] leading-[1.35]",
+                task.done && "text-muted-foreground line-through",
+              )}
+            >
+              {task.title}
+            </button>
+          )}
         </div>
       </li>
     );
