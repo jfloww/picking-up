@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
+import { isRoutineTask } from "../lib/nesting";
 import type { Task } from "../types";
 import { SubtaskList } from "./subtask-list";
 import { TaskCategoryEditor } from "./task-category-editor";
@@ -64,11 +65,7 @@ export function TaskDetailFields({
   const drawer = variant === "drawer";
   const showRepeat =
     task.scope.kind !== "bucket" && (task.repeatWeekdays !== undefined || task.scope.kind === "day");
-  // Note: checked against length, not `!== undefined` — TaskDetailDrawer's
-  // buffered draft always spreads repeatWeekdays as an array (defaulting to
-  // []) for a non-routine task, so an emptiness check (not just definedness)
-  // is required for this to correctly detect non-routine tasks there too.
-  const isRoutine = (task.repeatWeekdays?.length ?? 0) > 0 || task.repeatSourceId !== undefined;
+  const isRoutine = isRoutineTask(task);
   const memoRef = useRef<HTMLTextAreaElement>(null);
   // Sticky once opened: starts expanded only if there's already a note, so
   // clearing the text mid-edit never yanks the textarea away from under the

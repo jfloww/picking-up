@@ -2,13 +2,24 @@ import type { Task } from "../types";
 
 export type NestBlockReason = "has-subtasks" | "repeating";
 
+// Shared "is this task part of a repeat series" predicate — a task either
+// defines its own repeat weekdays, or is an occurrence generated from
+// another task's series (repeatSourceId). Note: checked against length, not
+// `!== undefined` — some callers' buffered drafts always spread
+// repeatWeekdays as an array (defaulting to []) for a non-routine task, so
+// an emptiness check (not just definedness) is required to correctly
+// detect non-routine tasks there too.
+export function isRoutineTask(task: Task): boolean {
+  return (task.repeatWeekdays?.length ?? 0) > 0 || task.repeatSourceId !== undefined;
+}
+
 // A Subtask can only hold a title and done state (types.ts) — a task with
 // its own subtasks, or one that's part of a repeat series (removing it has
 // side effects on the rest of the series, not just data loss), can't be
 // converted into a subtask at all.
 export function nestBlockReasonFor(task: Task): NestBlockReason | undefined {
   if ((task.subtasks?.length ?? 0) > 0) return "has-subtasks";
-  if ((task.repeatWeekdays?.length ?? 0) > 0 || task.repeatSourceId !== undefined) return "repeating";
+  if (isRoutineTask(task)) return "repeating";
   return undefined;
 }
 

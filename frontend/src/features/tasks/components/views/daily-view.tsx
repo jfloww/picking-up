@@ -29,7 +29,7 @@ export function DailyView({ anchor }: CalendarViewProps) {
     targetTitle: string;
     lostFields: string[];
   } | null>(null);
-  const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
+  const [blockedMessage, setBlockedMessage] = useState<{ text: string; at: number } | null>(null);
 
   useEffect(() => {
     if (!blockedMessage) return;
@@ -56,7 +56,7 @@ export function DailyView({ anchor }: CalendarViewProps) {
   }
 
   function handleNestBlocked(reason: NestBlockReason) {
-    setBlockedMessage(nestBlockMessage(reason));
+    setBlockedMessage({ text: nestBlockMessage(reason), at: Date.now() });
   }
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
@@ -87,53 +87,55 @@ export function DailyView({ anchor }: CalendarViewProps) {
 
   return (
     <>
-      {blockedMessage && (
-        <div className="shrink-0 px-10 pt-3">
-          <Alert variant="destructive">
-            <AlertTitle>{blockedMessage}</AlertTitle>
-            <AlertAction>
-              <button
-                type="button"
-                onClick={() => setBlockedMessage(null)}
-                className="text-xs text-destructive/70 underline hover:text-destructive"
-              >
-                Dismiss
-              </button>
-            </AlertAction>
-          </Alert>
+      <div className="flex h-full min-h-0 flex-col">
+        {blockedMessage && (
+          <div className="shrink-0 px-10 pt-3">
+            <Alert variant="destructive">
+              <AlertTitle>{blockedMessage.text}</AlertTitle>
+              <AlertAction>
+                <button
+                  type="button"
+                  onClick={() => setBlockedMessage(null)}
+                  className="text-xs text-destructive/70 underline hover:text-destructive"
+                >
+                  Dismiss
+                </button>
+              </AlertAction>
+            </Alert>
+          </div>
+        )}
+        <div
+          data-testid="daily-layout"
+          className="grid min-h-0 flex-1 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] overflow-hidden bg-background"
+        >
+          <section
+            data-testid="timeline-panel"
+            aria-label="Daily timeline"
+            className="min-h-0 min-w-0 border-r border-border bg-background"
+          >
+            <DayTimeline
+              date={anchor}
+              onSelectTask={handleSelectTask}
+              railRef={railRef}
+              getDragHandlers={getDragHandlers}
+              dragState={dragState}
+            />
+          </section>
+          <aside
+            data-testid="agenda-panel"
+            aria-label="Daily task list"
+            className="min-h-0 min-w-0 bg-card/50"
+          >
+            <DayAgenda
+              date={anchor}
+              onSelectTask={handleSelectTask}
+              agendaZoneRef={agendaZoneRef}
+              getDragHandlers={getDragHandlers}
+              cardRefs={cardRefs}
+              dragState={dragState}
+            />
+          </aside>
         </div>
-      )}
-      <div
-        data-testid="daily-layout"
-        className="grid h-full min-h-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] overflow-hidden bg-background"
-      >
-        <section
-          data-testid="timeline-panel"
-          aria-label="Daily timeline"
-          className="min-h-0 min-w-0 border-r border-border bg-background"
-        >
-          <DayTimeline
-            date={anchor}
-            onSelectTask={handleSelectTask}
-            railRef={railRef}
-            getDragHandlers={getDragHandlers}
-            dragState={dragState}
-          />
-        </section>
-        <aside
-          data-testid="agenda-panel"
-          aria-label="Daily task list"
-          className="min-h-0 min-w-0 bg-card/50"
-        >
-          <DayAgenda
-            date={anchor}
-            onSelectTask={handleSelectTask}
-            agendaZoneRef={agendaZoneRef}
-            getDragHandlers={getDragHandlers}
-            cardRefs={cardRefs}
-            dragState={dragState}
-          />
-        </aside>
       </div>
 
       {selectedTask && (

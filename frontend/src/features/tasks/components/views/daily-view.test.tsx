@@ -475,4 +475,37 @@ describe("DailyView drag-to-nest-subtask", () => {
     dragOnto("s");
     expect(screen.getByTestId("agenda-t").className).toContain("ring-brand");
   });
+
+  it("clears the ring highlight when the pointer drags out of the target card during the same gesture", async () => {
+    const source = makeTask({ id: "s", title: "buy milk", scope: { kind: "day", date: ANCHOR } });
+    const target = makeTask({ id: "t", title: "groceries", scope: { kind: "day", date: ANCHOR } });
+    await setupCards(source, target);
+    await waitFor(() => expect(screen.getByTestId("agenda-s")).toBeTruthy());
+
+    const sourceEl = dragOnto("s");
+    expect(screen.getByTestId("agenda-t").className).toContain("ring-brand");
+
+    // Move well outside every drop zone (day-agenda zone bottom: 500, rail
+    // x-range 0-300) — the ring should clear along with it.
+    fireEvent.pointerMove(sourceEl, { pointerId: 1, clientX: 410, clientY: 600 });
+    expect(screen.getByTestId("agenda-t").className).not.toContain("ring-brand");
+
+    fireEvent.pointerUp(sourceEl, { pointerId: 1, clientX: 410, clientY: 600 });
+  });
+
+  it("shows the blocked (muted) ring variant instead of ring-brand when dragging an ineligible task over a target", async () => {
+    const source = makeTask({
+      id: "s",
+      title: "planning",
+      scope: { kind: "day", date: ANCHOR },
+      subtasks: [{ id: "sub1", title: "step 1", done: false }],
+    });
+    const target = makeTask({ id: "t", title: "project", scope: { kind: "day", date: ANCHOR } });
+    await setupCards(source, target);
+    await waitFor(() => expect(screen.getByTestId("agenda-s")).toBeTruthy());
+
+    dragOnto("s");
+    expect(screen.getByTestId("agenda-t").className).toContain("ring-muted-foreground");
+    expect(screen.getByTestId("agenda-t").className).not.toContain("ring-brand");
+  });
 });

@@ -304,4 +304,23 @@ describe("useDragToSchedule nesting", () => {
     expect(onNest).not.toHaveBeenCalled();
     expect(onSchedule).toHaveBeenCalledWith("self", undefined); // falls through to all-day-zone
   });
+
+  it("does not nest-resolve a card scrolled outside the all-day zone's bounds, even if the pointer geometrically overlaps its rect", () => {
+    const { onNest, onSchedule, chip } = setupNest();
+    const target = screen.getByTestId("chip-target");
+    // Reposition the target below the all-day zone's own bottom (200) -
+    // simulating a card scrolled out of the agenda's visible/scrollable
+    // area, which (per jsdom, and real browsers) still has a real
+    // bounding rect even though the pointer can't actually reach it there.
+    mockRect(target, { top: 250, bottom: 300, left: 0, right: 300 });
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 10, clientY: 10 });
+    // Overlaps target's (now out-of-zone) rect geometrically, but the
+    // pointer itself is outside the all-day zone (bottom: 200) and outside
+    // the rail (top: 2000) too -> should resolve to "outside", not nest.
+    fireEvent.pointerMove(chip, { pointerId: 1, clientX: 10, clientY: 275 });
+    expect(screen.getByTestId("nest-target").textContent).toBe("none");
+    fireEvent.pointerUp(chip, { pointerId: 1, clientX: 10, clientY: 275 });
+    expect(onNest).not.toHaveBeenCalled();
+    expect(onSchedule).not.toHaveBeenCalled();
+  });
 });

@@ -27,14 +27,18 @@ export function ConvertToSubtaskDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCancel}>
       <div
         role="alertdialog"
+        aria-modal="true"
         aria-labelledby="convert-to-subtask-title"
+        aria-describedby="convert-to-subtask-description"
         className="w-full max-w-sm rounded-lg border border-border bg-card p-5 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="convert-to-subtask-title" className="text-sm font-semibold text-foreground">
           Make &ldquo;{sourceTitle}&rdquo; a subtask of &ldquo;{targetTitle}&rdquo;?
         </h2>
-        <p className="mt-2 text-xs text-muted-foreground">This will lose: {lostFields.join(", ")}.</p>
+        <p id="convert-to-subtask-description" className="mt-2 text-xs text-muted-foreground">
+          This will lose: {lostFields.join(", ")}.
+        </p>
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"

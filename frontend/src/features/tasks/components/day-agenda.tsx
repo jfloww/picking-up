@@ -107,7 +107,16 @@ export function DayAgenda({
         )}
         <div
           ref={(el) => {
-            cardRefs.current[t.id] = el;
+            // cardRefs is a long-lived ref owned by DailyView (not rebuilt
+            // per render), so entries must be actively cleaned up on
+            // unmount rather than relying on a later render to overwrite
+            // them — otherwise every task ever rendered this session
+            // leaves a dead key behind for resolve() to iterate over.
+            if (el) {
+              cardRefs.current[t.id] = el;
+            } else {
+              delete cardRefs.current[t.id];
+            }
             if (reorderable) {
               reorderItemRefs.current[t.id] = el;
             }

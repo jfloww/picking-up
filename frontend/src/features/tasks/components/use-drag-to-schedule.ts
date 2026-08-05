@@ -57,23 +57,33 @@ export function useDragToSchedule(options: {
       sourceId: string,
       nestBlockReason: NestBlockReason | undefined,
     ): Resolution => {
+      // Cards are only live drop targets while the pointer is within the
+      // agenda's own scroll container — the agenda list scrolls, so a card
+      // scrolled above/below the visible area still has a real (if
+      // off-screen) bounding rect and would otherwise stay a live nest
+      // target even while the pointer is over the header or footer.
+      // Mirrors useDragToReorder's containment check.
+      const allDayEl = allDayZoneRef.current;
+      const allDayRect = allDayEl?.getBoundingClientRect();
+      const insideAllDayZone = !!allDayRect &&
+        clientX >= allDayRect.left &&
+        clientX <= allDayRect.right &&
+        clientY >= allDayRect.top &&
+        clientY <= allDayRect.bottom;
+
       // Most specific target first: a card is more specific than the
       // broader zone (all-day zone / rail) it visually sits inside.
-      for (const [id, el] of Object.entries(cardRefs.current)) {
-        if (id === sourceId || !el) continue;
-        const r = el.getBoundingClientRect();
-        if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
-          return nestBlockReason
-            ? { kind: "nest-blocked", targetId: id, reason: nestBlockReason }
-            : { kind: "nest", targetId: id };
+      if (insideAllDayZone) {
+        for (const [id, el] of Object.entries(cardRefs.current)) {
+          if (id === sourceId || !el) continue;
+          const r = el.getBoundingClientRect();
+          if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+            return nestBlockReason
+              ? { kind: "nest-blocked", targetId: id, reason: nestBlockReason }
+              : { kind: "nest", targetId: id };
+          }
         }
-      }
-      const allDayEl = allDayZoneRef.current;
-      if (allDayEl) {
-        const r = allDayEl.getBoundingClientRect();
-        if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
-          return { kind: "clear-time" };
-        }
+        return { kind: "clear-time" };
       }
       const railEl = railRef.current;
       if (railEl) {
