@@ -93,7 +93,14 @@ export function GoogleSignInButton() {
         <Script
           src="https://accounts.google.com/gsi/client"
           strategy="afterInteractive"
-          onLoad={() => setScriptLoaded(true)}
+          // onReady (not onLoad): next/script only fires onLoad the first
+          // time this script ever loads in the tab's session. After
+          // logout does a client-side nav back to /login, this component
+          // remounts with the script already cached — onLoad never fires
+          // again, so the button silently never (re-)initializes. onReady
+          // fires on every mount once the script is ready, covering both
+          // the first load and every later remount.
+          onReady={() => setScriptLoaded(true)}
         />
         <div ref={containerRef} />
         {error ? (
