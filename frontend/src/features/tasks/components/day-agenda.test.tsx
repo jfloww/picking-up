@@ -36,6 +36,8 @@ function renderAgenda(
         onSelectTask={onSelectTask}
         agendaZoneRef={agendaZoneRef}
         getDragHandlers={noopGetDragHandlers}
+        cardRefs={{ current: {} }}
+        dragState={null}
       />
     </TasksProvider>,
   );
@@ -262,7 +264,13 @@ describe("DayAgenda reorder handle", () => {
     const repo = fakeRepository([first, second]);
     render(
       <TasksProvider repository={repo} categoryRepository={fakeCategoryRepository()}>
-        <DayAgenda date={ANCHOR} agendaZoneRef={{ current: null }} getDragHandlers={noopGetDragHandlers} />
+        <DayAgenda
+          date={ANCHOR}
+          agendaZoneRef={{ current: null }}
+          getDragHandlers={noopGetDragHandlers}
+          cardRefs={{ current: {} }}
+          dragState={null}
+        />
       </TasksProvider>,
     );
     await waitFor(() => expect(screen.getByText("first")).toBeTruthy());
@@ -297,7 +305,13 @@ describe("DayAgenda reorder handle", () => {
     const repo = fakeRepository([first, second]);
     render(
       <TasksProvider repository={repo} categoryRepository={fakeCategoryRepository()}>
-        <DayAgenda date={ANCHOR} agendaZoneRef={{ current: null }} getDragHandlers={noopGetDragHandlers} />
+        <DayAgenda
+          date={ANCHOR}
+          agendaZoneRef={{ current: null }}
+          getDragHandlers={noopGetDragHandlers}
+          cardRefs={{ current: {} }}
+          dragState={null}
+        />
       </TasksProvider>,
     );
     await waitFor(() => expect(screen.getByText("first")).toBeTruthy());
@@ -337,7 +351,13 @@ describe("DayAgenda reorder handle", () => {
     const repo = fakeRepository([a, b, c]);
     render(
       <TasksProvider repository={repo} categoryRepository={fakeCategoryRepository()}>
-        <DayAgenda date={ANCHOR} agendaZoneRef={{ current: null }} getDragHandlers={noopGetDragHandlers} />
+        <DayAgenda
+          date={ANCHOR}
+          agendaZoneRef={{ current: null }}
+          getDragHandlers={noopGetDragHandlers}
+          cardRefs={{ current: {} }}
+          dragState={null}
+        />
       </TasksProvider>,
     );
     await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
@@ -388,7 +408,13 @@ describe("DayAgenda reorder handle", () => {
     const t = makeTask({ id: "t", title: "todo item", scope: { kind: "day", date: ANCHOR } });
     render(
       <TasksProvider repository={fakeRepository([t])} categoryRepository={fakeCategoryRepository()}>
-        <DayAgenda date={ANCHOR} agendaZoneRef={{ current: null }} getDragHandlers={getDragHandlers} />
+        <DayAgenda
+          date={ANCHOR}
+          agendaZoneRef={{ current: null }}
+          getDragHandlers={getDragHandlers}
+          cardRefs={{ current: {} }}
+          dragState={null}
+        />
       </TasksProvider>,
     );
     await waitFor(() => expect(screen.getByText("todo item")).toBeTruthy());

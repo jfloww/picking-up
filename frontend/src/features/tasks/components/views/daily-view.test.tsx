@@ -348,3 +348,131 @@ describe("DailyView drag-to-schedule (cross-column)", () => {
     await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
   });
 });
+
+describe("DailyView drag-to-nest-subtask", () => {
+  async function setupCards(source: ReturnType<typeof makeTask>, target: ReturnType<typeof makeTask>) {
+    renderView(vi.fn(), [source, target]);
+    // TasksProvider loads tasks asynchronously (repo.list() resolves via a
+    // microtask), so agenda-${target.id} doesn't exist synchronously after
+    // render — wait for it before mocking its rect, matching every other
+    // test in this file.
+    await waitFor(() => expect(screen.getByTestId(`agenda-${target.id}`)).toBeTruthy());
+    const rail = screen.getByTestId("hour-rail");
+    mockRect(rail, { top: 2000, bottom: 3000, left: 0, right: 300 });
+    Object.defineProperty(rail, "scrollTop", { value: 0, writable: true });
+    mockRect(screen.getByTestId("day-agenda"), { top: 0, bottom: 500, left: 400, right: 700 });
+    mockRect(screen.getByTestId(`agenda-${target.id}`), { top: 100, bottom: 150, left: 400, right: 700 });
+  }
+
+  function dragOnto(sourceId: string) {
+    const sourceEl = screen.getByTestId(`agenda-${sourceId}`);
+    fireEvent.pointerDown(sourceEl, { pointerId: 1, clientX: 410, clientY: 10 });
+    fireEvent.pointerMove(sourceEl, { pointerId: 1, clientX: 410, clientY: 120 });
+    return sourceEl;
+  }
+
+  it("converts a simple dragged task into a subtask immediately, no confirmation", async () => {
+    const source = makeTask({ id: "s", title: "buy milk", scope: { kind: "day", date: ANCHOR } });
+    const target = makeTask({ id: "t", title: "groceries", scope: { kind: "day", date: ANCHOR } });
+    await setupCards(source, target);
+    await waitFor(() => expect(screen.getByTestId("agenda-s")).toBeTruthy());
+
+    const sourceEl = dragOnto("s");
+    fireEvent.pointerUp(sourceEl, { pointerId: 1, clientX: 410, clientY: 120 });
+
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("agenda-s")).toBeNull());
+
+    fireEvent.click(screen.getByText("groceries"));
+    expect(await screen.findByText("buy milk")).toBeTruthy();
+  });
+
+  it("shows a confirmation dialog for a task with extra fields, and converts on Confirm", async () => {
+    const source = makeTask({
+      id: "s",
+      title: "call plumber",
+      memo: "ask about pricing",
+      scope: { kind: "day", date: ANCHOR },
+    });
+    const target = makeTask({ id: "t", title: "house stuff", scope: { kind: "day", date: ANCHOR } });
+    await setupCards(source, target);
+    await waitFor(() => expect(screen.getByTestId("agenda-s")).toBeTruthy());
+
+    const sourceEl = dragOnto("s");
+    fireEvent.pointerUp(sourceEl, { pointerId: 1, clientX: 410, clientY: 120 });
+
+    expect(await screen.findByRole("alertdialog")).toBeTruthy();
+    expect(screen.getByText(/note/)).toBeTruthy();
+    expect(screen.getByTestId("agenda-s")).toBeTruthy(); // not converted yet
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(screen.queryByTestId("agenda-s")).toBeNull());
+  });
+
+  it("cancelling the confirmation dialog leaves the task unchanged", async () => {
+    const source = makeTask({
+      id: "s",
+      title: "call plumber",
+      memo: "ask about pricing",
+      scope: { kind: "day", date: ANCHOR },
+    });
+    const target = makeTask({ id: "t", title: "house stuff", scope: { kind: "day", date: ANCHOR } });
+    await setupCards(source, target);
+    await waitFor(() => expect(screen.getByTestId("agenda-s")).toBeTruthy());
+
+    const sourceEl = dragOnto("s");
+    fireEvent.pointerUp(sourceEl, { pointerId: 1, clientX: 410, clientY: 120 });
+    expect(await screen.findByRole("alertdialog")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.getByTestId("agenda-s")).toBeTruthy();
+  });
+
+  it("shows a blocked message and does not convert when the dragged task already has subtasks", async () => {
+    const source = makeTask({
+      id: "s",
+      title: "planning",
+      scope: { kind: "day", date: ANCHOR },
+      subtasks: [{ id: "sub1", title: "step 1", done: false }],
+    });
+    const target = makeTask({ id: "t", title: "project", scope: { kind: "day", date: ANCHOR } });
+    await setupCards(source, target);
+    await waitFor(() => expect(screen.getByTestId("agenda-s")).toBeTruthy());
+
+    const sourceEl = dragOnto("s");
+    fireEvent.pointerUp(sourceEl, { pointerId: 1, clientX: 410, clientY: 120 });
+
+    expect(await screen.findByText(/already has subtasks/)).toBeTruthy();
+    expect(screen.getByTestId("agenda-s")).toBeTruthy();
+  });
+
+  it("shows a blocked message for a repeating task and does not convert", async () => {
+    const source = makeTask({
+      id: "s",
+      title: "weekly review",
+      scope: { kind: "day", date: ANCHOR },
+      repeatWeekdays: [4],
+    });
+    const target = makeTask({ id: "t", title: "misc", scope: { kind: "day", date: ANCHOR } });
+    await setupCards(source, target);
+    await waitFor(() => expect(screen.getByTestId("agenda-s")).toBeTruthy());
+
+    const sourceEl = dragOnto("s");
+    fireEvent.pointerUp(sourceEl, { pointerId: 1, clientX: 410, clientY: 120 });
+
+    expect(await screen.findByText(/detached from their series/)).toBeTruthy();
+    expect(screen.getByTestId("agenda-s")).toBeTruthy();
+  });
+
+  it("highlights the hovered target card while dragging an eligible task", async () => {
+    const source = makeTask({ id: "s", title: "buy milk", scope: { kind: "day", date: ANCHOR } });
+    const target = makeTask({ id: "t", title: "groceries", scope: { kind: "day", date: ANCHOR } });
+    await setupCards(source, target);
+    await waitFor(() => expect(screen.getByTestId("agenda-s")).toBeTruthy());
+
+    dragOnto("s");
+    expect(screen.getByTestId("agenda-t").className).toContain("ring-brand");
+  });
+});
