@@ -285,7 +285,9 @@
   .animate-fade-up,
   .animate-hero-demo-row,
   .animate-hero-demo-dot,
-  .animate-hero-demo-title {
+  .animate-hero-demo-title,
+  .animate-task-exit,
+  .animate-task-enter {
     animation: none;
   }
 }

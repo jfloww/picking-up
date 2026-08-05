@@ -447,4 +447,34 @@ describe("DayAgenda done-today transition animation", () => {
     await waitFor(() => expect(screen.getByText("All Day To-Do")).toBeTruthy(), { timeout: 1000 });
     expect(screen.getByTestId("agenda-d").className).toContain("animate-task-enter");
   });
+
+  it("never visibly lands in Done Today when checked then unchecked again before the exit animation finishes", async () => {
+    const t = makeTask({ id: "u", title: "water plants", scope: { kind: "day", date: ANCHOR } });
+    renderAgenda(ANCHOR, [t]);
+    await waitFor(() => expect(screen.getByText("water plants")).toBeTruthy());
+
+    // Re-query the checkbox before each click rather than reusing one
+    // reference — it re-renders to a new node on toggle, and firing a
+    // synthetic event on a stale/detached node is a silent no-op.
+    fireEvent.click(screen.getByLabelText("Toggle water plants")); // check
+    fireEvent.click(screen.getByLabelText("Toggle water plants")); // uncheck again, well before the 260ms exit finishes
+
+    // still rendered under All Day To-Do the whole time — never teleports
+    // through Done Today for a frame
+    expect(screen.getByText("All Day To-Do")).toBeTruthy();
+    expect(screen.queryByText("Done Today")).toBeNull();
+
+    // settles back into All Day To-Do with no stuck animation class once
+    // both the (cancelled-and-restarted) exit and the enter finish
+    await waitFor(
+      () => {
+        const className = screen.getByTestId("agenda-u").className;
+        expect(className).not.toContain("animate-task-exit");
+        expect(className).not.toContain("animate-task-enter");
+      },
+      { timeout: 2000 },
+    );
+    expect(screen.getByText("All Day To-Do")).toBeTruthy();
+    expect(screen.queryByText("Done Today")).toBeNull();
+  });
 });

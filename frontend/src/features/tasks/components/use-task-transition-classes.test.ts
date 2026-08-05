@@ -43,7 +43,7 @@ describe("useTaskTransitionClasses", () => {
     expect(result.current.get("t")).toEqual({ done: true });
   });
 
-  it("restarts the transition from the current state when toggled again mid-animation", () => {
+  it("keeps animating out of the currently-rendered section when toggled again mid-animation", () => {
     const task = makeTask({ id: "t", done: false });
     const { result, rerender } = renderHook(({ tasks }) => useTaskTransitionClasses(tasks), {
       initialProps: { tasks: [task] },
@@ -56,7 +56,10 @@ describe("useTaskTransitionClasses", () => {
       vi.advanceTimersByTime(100); // still mid-exit
     });
     rerender({ tasks: [{ ...task, done: false }] }); // toggled back before the exit finished
-    expect(result.current.get("t")).toEqual({ done: true, animationClass: "animate-task-exit" });
+    // Still animating out of the section it was already exiting (oldDone
+    // stays false) rather than teleporting through Done Today via the live
+    // previous value (which would have been true here).
+    expect(result.current.get("t")).toEqual({ done: false, animationClass: "animate-task-exit" });
 
     act(() => {
       vi.advanceTimersByTime(260);
@@ -67,5 +70,39 @@ describe("useTaskTransitionClasses", () => {
       vi.advanceTimersByTime(260);
     });
     expect(result.current.get("t")).toEqual({ done: false });
+  });
+
+  it("bypasses the transition delay entirely when prefers-reduced-motion is set", () => {
+    const matchMediaSpy = vi.spyOn(window, "matchMedia").mockImplementation(
+      (query: string) =>
+        ({
+          matches: query === "(prefers-reduced-motion: reduce)",
+          media: query,
+          onchange: null,
+          addListener: () => {},
+          removeListener: () => {},
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          dispatchEvent: () => true,
+        }) as MediaQueryList,
+    );
+
+    const task = makeTask({ id: "t", done: false });
+    const { result, rerender } = renderHook(({ tasks }) => useTaskTransitionClasses(tasks), {
+      initialProps: { tasks: [task] },
+    });
+    expect(result.current.get("t")).toEqual({ done: false });
+
+    rerender({ tasks: [{ ...task, done: true }] });
+    // No exit/enter phases at all — the live value shows up immediately
+    // with no animation class.
+    expect(result.current.get("t")).toEqual({ done: true });
+
+    act(() => {
+      vi.advanceTimersByTime(260);
+    });
+    expect(result.current.get("t")).toEqual({ done: true });
+
+    matchMediaSpy.mockRestore();
   });
 });
