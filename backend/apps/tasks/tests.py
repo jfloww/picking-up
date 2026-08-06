@@ -540,6 +540,57 @@ class BackfillTaskOrderMigrationTests(TransactionTestCase):
         self.assertLess(by_title["second"], by_title["third"])
 
 
+class BackfillTaskTimestampsMigrationTests(TransactionTestCase):
+    def test_backfills_parsed_timestamps_and_falls_back_to_updated_at_on_bad_data(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0007_task_timestamps_shadow_fields")])
+
+        old_state = executor.loader.project_state([("tasks", "0007_task_timestamps_shadow_fields")])
+        OldUser = old_state.apps.get_model("auth", "User")
+        OldTask = old_state.apps.get_model("tasks", "Task")
+
+        user = OldUser.objects.create(username="ts@example.com", email="ts@example.com")
+
+        valid = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="valid", scope_kind="day",
+            scope_value="2026-07-27", created_at="2026-07-27T09:00:00.000Z",
+            completed_at="2026-07-27T10:00:00.000Z",
+        )
+        garbage_created = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="garbage created", scope_kind="day",
+            scope_value="2026-07-27", created_at="not-a-date",
+        )
+        garbage_completed = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="garbage completed", scope_kind="day",
+            scope_value="2026-07-27", created_at="2026-07-27T09:00:00.000Z",
+            completed_at="also-not-a-date",
+        )
+        never_completed = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="never completed", scope_kind="day",
+            scope_value="2026-07-27", created_at="2026-07-27T09:00:00.000Z",
+            completed_at=None,
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0009_task_timestamps_finalize")])
+
+        new_state = executor.loader.project_state([("tasks", "0009_task_timestamps_finalize")])
+        NewTask = new_state.apps.get_model("tasks", "Task")
+
+        new_valid = NewTask.objects.get(id=valid.id)
+        self.assertEqual(new_valid.created_at.isoformat(), "2026-07-27T09:00:00+00:00")
+        self.assertEqual(new_valid.completed_at.isoformat(), "2026-07-27T10:00:00+00:00")
+
+        new_garbage_created = NewTask.objects.get(id=garbage_created.id)
+        self.assertEqual(new_garbage_created.created_at, new_garbage_created.updated_at)
+
+        new_garbage_completed = NewTask.objects.get(id=garbage_completed.id)
+        self.assertEqual(new_garbage_completed.completed_at, new_garbage_completed.updated_at)
+
+        new_never_completed = NewTask.objects.get(id=never_completed.id)
+        self.assertIsNone(new_never_completed.completed_at)
+
+
 class CategoryApiTests(TestCase):
     def test_list_only_returns_the_authenticated_users_own_categories_ordered_by_created_at(self):
         owner, owner_client = auth_client("cat-list-owner@example.com")
