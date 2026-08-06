@@ -599,6 +599,14 @@ class BackfillTaskOrderMigrationTests(TransactionTestCase):
         self.assertLess(by_title["first"], by_title["second"])
         self.assertLess(by_title["second"], by_title["third"])
 
+        # Roll every app migration back to its latest state so later tests in
+        # the suite (which use the real `apps.tasks.models.Task`/`Category`,
+        # not this historical snapshot) run against the real schema.
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", None)])
+        call_command_migrate = __import__("django.core.management", fromlist=["call_command"]).call_command
+        call_command_migrate("migrate")
+
 
 class BackfillTaskTimestampsMigrationTests(TransactionTestCase):
     def test_backfills_parsed_timestamps_and_falls_back_to_updated_at_on_bad_data(self):
@@ -619,6 +627,10 @@ class BackfillTaskTimestampsMigrationTests(TransactionTestCase):
         garbage_created = OldTask.objects.create(
             id=uuid_module.uuid4(), user_id=user.id, title="garbage created", scope_kind="day",
             scope_value="2026-07-27", created_at="not-a-date",
+        )
+        empty_created = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="empty created", scope_kind="day",
+            scope_value="2026-07-27", created_at="",
         )
         garbage_completed = OldTask.objects.create(
             id=uuid_module.uuid4(), user_id=user.id, title="garbage completed", scope_kind="day",
@@ -653,6 +665,9 @@ class BackfillTaskTimestampsMigrationTests(TransactionTestCase):
         new_garbage_created = NewTask.objects.get(id=garbage_created.id)
         self.assertEqual(new_garbage_created.created_at, new_garbage_created.updated_at)
 
+        new_empty_created = NewTask.objects.get(id=empty_created.id)
+        self.assertEqual(new_empty_created.created_at, new_empty_created.updated_at)
+
         new_garbage_completed = NewTask.objects.get(id=garbage_completed.id)
         self.assertEqual(new_garbage_completed.completed_at, new_garbage_completed.updated_at)
 
@@ -664,6 +679,43 @@ class BackfillTaskTimestampsMigrationTests(TransactionTestCase):
 
         new_out_of_range_completed = NewTask.objects.get(id=out_of_range_completed.id)
         self.assertEqual(new_out_of_range_completed.completed_at, new_out_of_range_completed.updated_at)
+
+    def test_row_inserted_between_0008_and_0009_with_null_shadow_created_at_is_backfilled_not_fatal(self):
+        # Simulates the deploy race: gunicorn restarts only after `migrate`
+        # finishes, so the still-running old server process (which only
+        # writes the string `created_at` column) can insert a new Task row
+        # in the gap between 0008's backfill running and 0009 running. That
+        # row's `created_at_dt` shadow column stays NULL. 0009 must
+        # self-heal this defensively rather than hard-failing when it makes
+        # `created_at` NOT NULL (and, on Oracle, doing so *after* the
+        # RemoveField ops in the same migration have already auto-committed,
+        # which would otherwise destroy the original string data).
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0008_backfill_task_timestamps")])
+
+        state_0008 = executor.loader.project_state([("tasks", "0008_backfill_task_timestamps")])
+        OldUser = state_0008.apps.get_model("auth", "User")
+        OldTask = state_0008.apps.get_model("tasks", "Task")
+
+        user = OldUser.objects.create(username="race@example.com", email="race@example.com")
+        # Insert directly into the shadow-column state the race would
+        # produce: this row is created AFTER 0008's backfill already ran,
+        # so nothing has populated created_at_dt/completed_at_dt for it.
+        race_row = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="race row", scope_kind="day",
+            scope_value="2026-07-27", created_at="2026-07-27T09:00:00.000Z",
+            created_at_dt=None, completed_at_dt=None,
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0009_task_timestamps_finalize")])
+
+        new_state = executor.loader.project_state([("tasks", "0009_task_timestamps_finalize")])
+        NewTask = new_state.apps.get_model("tasks", "Task")
+
+        new_race_row = NewTask.objects.get(id=race_row.id)
+        self.assertIsNotNone(new_race_row.created_at)
+        self.assertEqual(new_race_row.created_at, new_race_row.updated_at)
 
 
 class CategoryApiTests(TestCase):

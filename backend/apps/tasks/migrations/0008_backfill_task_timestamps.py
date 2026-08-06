@@ -44,6 +44,10 @@ def backfill_timestamps(apps, schema_editor):
         else:
             task.completed_at_dt = None
 
+        # `updated_at` is deliberately excluded from update_fields: it's an
+        # auto_now field, so a plain save() would stamp it with "now" on
+        # write, clobbering the very value this row's own fallback logic
+        # above just read from it.
         task.save(update_fields=["created_at_dt", "completed_at_dt"])
 
 
