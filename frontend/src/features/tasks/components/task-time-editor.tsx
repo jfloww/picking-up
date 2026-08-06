@@ -1,18 +1,10 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useId } from "react";
 
 import { cn } from "@/lib/utils";
 
-const DURATION_PRESETS: { minutes: number; label: string }[] = [
-  { minutes: 15, label: "15m" },
-  { minutes: 30, label: "30m" },
-  { minutes: 45, label: "45m" },
-  { minutes: 60, label: "1h" },
-  { minutes: 90, label: "1.5h" },
-  { minutes: 120, label: "2h" },
-];
+import { addMinutesToTime, timeToMinutes } from "../lib/times";
 
 export function TaskTimeEditor({
   time,
@@ -27,33 +19,47 @@ export function TaskTimeEditor({
   onDurationChange: (durationMinutes?: number) => void;
   variant?: "default" | "drawer";
 }) {
-  const durationPresetsId = useId();
   const drawer = variant === "drawer";
+  const endTime = time && durationMinutes ? addMinutesToTime(time, durationMinutes) : "";
 
-  const durationInput = (
+  // Start always updates. If an End was already set, keep End's absolute
+  // clock time fixed (recompute duration) rather than sliding End with
+  // Start — matches how people think in Start/End terms, not duration
+  // terms. If the new Start would land at or after that End, the
+  // duration clears instead of going negative or blocking the edit —
+  // Start must always be freely re-timeable.
+  function handleStartChange(newTime: string | undefined) {
+    onTimeChange(newTime);
+    if (newTime && time && durationMinutes !== undefined) {
+      const oldEnd = addMinutesToTime(time, durationMinutes);
+      const newDuration = timeToMinutes(oldEnd) - timeToMinutes(newTime);
+      onDurationChange(newDuration > 0 ? newDuration : undefined);
+    }
+  }
+
+  // End's displayed value is always derived from time+durationMinutes,
+  // never buffered locally — so an invalid pick (at or before Start)
+  // simply isn't committed, and the field reverts to the last valid End
+  // on the next render. No error message needed.
+  function handleEndChange(newEnd: string) {
+    if (!newEnd || !time) return;
+    const duration = timeToMinutes(newEnd) - timeToMinutes(time);
+    if (duration <= 0) return;
+    onDurationChange(duration);
+  }
+
+  const endInput = (
     <input
-      type="number"
-      min={1}
-      step={5}
-      list={durationPresetsId}
-      value={durationMinutes ?? ""}
-      onChange={(e) => onDurationChange(e.target.value ? Number(e.target.value) : undefined)}
-      placeholder="Duration"
-      aria-label="Task duration"
+      type="time"
+      min={time}
+      value={endTime}
+      onChange={(e) => handleEndChange(e.target.value)}
+      aria-label="Task end time"
       className={cn(
-        "w-16 rounded-md border border-input bg-transparent px-1.5 py-0.5 text-xs outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring/50",
-        drawer && "w-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm focus-visible:ring-0",
+        "rounded-md border border-input bg-transparent px-1.5 py-0.5 text-xs outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring/50",
+        drawer ? "w-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm focus-visible:ring-0" : "w-24",
       )}
     />
-  );
-  const durationDatalist = (
-    <datalist id={durationPresetsId}>
-      {DURATION_PRESETS.map(({ minutes, label }) => (
-        <option key={minutes} value={minutes}>
-          {label}
-        </option>
-      ))}
-    </datalist>
   );
 
   if (drawer) {
@@ -65,17 +71,16 @@ export function TaskTimeEditor({
           <input
             type="time"
             value={time ?? ""}
-            onChange={(e) => onTimeChange(e.target.value || undefined)}
+            onChange={(e) => handleStartChange(e.target.value || undefined)}
             aria-label="Task time"
             className="w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring/50"
           />
         </label>
         {time && (
           <label className="flex flex-col gap-1.5">
-            <span className={fieldLabelClass}>Duration</span>
+            <span className={fieldLabelClass}>End</span>
             <div className="flex items-center gap-1.5 rounded-md border border-input px-2.5 py-1.5 transition-colors duration-200 focus-within:ring-2 focus-within:ring-ring/50">
-              {durationInput}
-              <span className="shrink-0 text-sm text-subtle">min</span>
+              {endInput}
               <button
                 type="button"
                 onClick={() => onTimeChange(undefined)}
@@ -84,7 +89,6 @@ export function TaskTimeEditor({
               >
                 <X className="size-3.5" />
               </button>
-              {durationDatalist}
             </div>
           </label>
         )}
@@ -98,20 +102,12 @@ export function TaskTimeEditor({
         <input
           type="time"
           value={time ?? ""}
-          onChange={(e) => onTimeChange(e.target.value || undefined)}
+          onChange={(e) => handleStartChange(e.target.value || undefined)}
           aria-label="Task time"
           className="rounded-md border border-input bg-transparent px-1.5 py-0.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         />
       </label>
-      {time && (
-        <label className="flex flex-col gap-1">
-          <div className="flex items-center gap-1">
-            {durationInput}
-            <span className="text-xs text-subtle">min</span>
-            {durationDatalist}
-          </div>
-        </label>
-      )}
+      {time && <label className="flex flex-col gap-1">{endInput}</label>}
       {time && (
         <button
           type="button"

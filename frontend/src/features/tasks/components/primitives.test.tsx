@@ -395,7 +395,7 @@ describe("TaskItem v2", () => {
       />,
     );
     fireEvent.click(screen.getByText("dentist"));
-    fireEvent.change(screen.getByLabelText("Task duration"), { target: { value: "45" } });
+    fireEvent.change(screen.getByLabelText("Task end time"), { target: { value: "09:45" } });
     expect(onDurationChange).toHaveBeenCalledWith(45);
   });
 
