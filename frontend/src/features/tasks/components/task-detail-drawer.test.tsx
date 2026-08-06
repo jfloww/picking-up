@@ -115,10 +115,10 @@ describe("TaskDetailDrawer", () => {
     expect(screen.getAllByLabelText("Task time")).toHaveLength(1);
   });
 
-  it("shows exactly one duration select, next to the time, not duplicated", () => {
+  it("shows exactly one end-time input, next to Start, not duplicated", () => {
     const timedTask = makeTask({ id: "a", title: "write tests", time: "14:00" });
     render(<TaskDetailDrawer task={timedTask} {...noopHandlers} />);
-    expect(screen.getAllByLabelText("Task duration")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Task end time")).toHaveLength(1);
   });
 
   it("threads upcomingRepeatDates through to TaskDetailFields", () => {
@@ -149,8 +149,8 @@ describe("TaskDetailDrawer", () => {
       fireEvent.click(screen.getByRole("checkbox"));
       fireEvent.click(screen.getByRole("button", { name: "Priority" }));
       fireEvent.click(screen.getByRole("button", { name: "Background" }));
-      fireEvent.change(screen.getByLabelText("Task duration"), { target: { value: "45" } });
       fireEvent.change(screen.getByLabelText("Task time"), { target: { value: "10:30" } });
+      fireEvent.change(screen.getByLabelText("Task end time"), { target: { value: "11:15" } });
       fireEvent.click(screen.getByText("Add a note…"));
       fireEvent.change(screen.getByPlaceholderText("Memo"), { target: { value: "updated" } });
       fireEvent.blur(screen.getByPlaceholderText("Memo"));
@@ -199,8 +199,8 @@ describe("TaskDetailDrawer", () => {
       fireEvent.click(screen.getByRole("checkbox"));
       fireEvent.click(screen.getByRole("button", { name: "Priority" }));
       fireEvent.click(screen.getByRole("button", { name: "Background" }));
-      fireEvent.change(screen.getByLabelText("Task duration"), { target: { value: "45" } });
       fireEvent.change(screen.getByLabelText("Task time"), { target: { value: "10:30" } });
+      fireEvent.change(screen.getByLabelText("Task end time"), { target: { value: "11:15" } });
       fireEvent.change(screen.getByPlaceholderText("Memo"), { target: { value: "updated" } });
       fireEvent.blur(screen.getByPlaceholderText("Memo"));
       fireEvent.click(screen.getByLabelText("Repeat on Monday"));
@@ -727,10 +727,10 @@ describe("bucket-scoped task", () => {
     scope: { kind: "bucket", categoryId: toEat.id },
   });
 
-  it("hides Start, Duration, and Repeat", () => {
+  it("hides Start, End, and Repeat", () => {
     render(<TaskDetailDrawer task={bucketTask} {...noopHandlers} />);
     expect(screen.queryByLabelText("Task time")).toBeNull();
-    expect(screen.queryByLabelText("Task duration")).toBeNull();
+    expect(screen.queryByLabelText("Task end time")).toBeNull();
     expect(screen.queryByLabelText("Repeat on Monday")).toBeNull();
   });
 

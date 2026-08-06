@@ -31,31 +31,30 @@ describe("TaskTimeEditor", () => {
     expect(onTimeChange).toHaveBeenCalledWith(undefined);
   });
 
-  it("shows the duration input only when a time is set", () => {
+  it("shows the end-time input only when a time is set", () => {
     const { rerender } = render(<TaskTimeEditor {...noopHandlers} />);
-    expect(screen.queryByLabelText("Task duration")).toBeNull();
+    expect(screen.queryByLabelText("Task end time")).toBeNull();
 
     rerender(<TaskTimeEditor time="14:00" {...noopHandlers} />);
-    expect(screen.getByLabelText("Task duration")).toBeTruthy();
+    expect(screen.getByLabelText("Task end time")).toBeTruthy();
   });
 
-  it("is a number input that offers the duration presets as suggestions, not a hard cap", () => {
+  it("is a time input, not a number", () => {
     render(<TaskTimeEditor time="14:00" durationMinutes={90} {...noopHandlers} />);
-    const input = screen.getByLabelText("Task duration") as HTMLInputElement;
-    expect(input.type).toBe("number");
-    expect(input.value).toBe("90");
-
-    const datalist = document.getElementById(input.list!.id) as HTMLDataListElement;
-    const labels = Array.from(datalist.options).map((o) => o.textContent);
-    expect(labels).toEqual(["15m", "30m", "45m", "1h", "1.5h", "2h"]);
+    expect((screen.getByLabelText("Task end time") as HTMLInputElement).type).toBe("time");
   });
 
-  it("defaults to an empty duration when durationMinutes is unset", () => {
+  it("derives End from Start + durationMinutes", () => {
+    render(<TaskTimeEditor time="14:00" durationMinutes={90} {...noopHandlers} />);
+    expect((screen.getByLabelText("Task end time") as HTMLInputElement).value).toBe("15:30");
+  });
+
+  it("defaults to an empty End when durationMinutes is unset", () => {
     render(<TaskTimeEditor time="14:00" {...noopHandlers} />);
-    expect((screen.getByLabelText("Task duration") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("Task end time") as HTMLInputElement).value).toBe("");
   });
 
-  it("calls onDurationChange with a typed number, including values well past the presets", () => {
+  it("calls onDurationChange with the minutes between Start and a valid new End", () => {
     const onDurationChange = vi.fn();
     render(
       <TaskTimeEditor
@@ -65,36 +64,75 @@ describe("TaskTimeEditor", () => {
         onDurationChange={onDurationChange}
       />,
     );
-    const input = screen.getByLabelText("Task duration");
-    fireEvent.change(input, { target: { value: "60" } });
+    fireEvent.change(screen.getByLabelText("Task end time"), { target: { value: "15:00" } });
     expect(onDurationChange).toHaveBeenCalledWith(60);
-
-    fireEvent.change(input, { target: { value: "300" } }); // 5h, past every preset
-    expect(onDurationChange).toHaveBeenCalledWith(300);
-
-    fireEvent.change(input, { target: { value: "" } });
-    expect(onDurationChange).toHaveBeenCalledWith(undefined);
   });
 
-  it("gives each instance its own datalist id, so two open editors never collide", () => {
+  it("rejects an End at or before Start — does not call onDurationChange", () => {
+    const onDurationChange = vi.fn();
     render(
-      <>
-        <TaskTimeEditor time="09:00" {...noopHandlers} />
-        <TaskTimeEditor time="10:00" {...noopHandlers} />
-      </>,
+      <TaskTimeEditor
+        time="14:00"
+        durationMinutes={30}
+        {...noopHandlers}
+        onDurationChange={onDurationChange}
+      />,
     );
-    const [first, second] = screen.getAllByLabelText("Task duration") as HTMLInputElement[];
-    expect(first.list!.id).not.toBe(second.list!.id);
+    fireEvent.change(screen.getByLabelText("Task end time"), { target: { value: "13:30" } }); // before Start
+    fireEvent.change(screen.getByLabelText("Task end time"), { target: { value: "14:00" } }); // equal to Start
+    expect(onDurationChange).not.toHaveBeenCalled();
+  });
+
+  it("has a min attribute on End matching Start, as a native-picker hint", () => {
+    render(<TaskTimeEditor time="14:00" {...noopHandlers} />);
+    expect((screen.getByLabelText("Task end time") as HTMLInputElement).min).toBe("14:00");
+  });
+
+  describe("editing Start", () => {
+    it("keeps End's clock time fixed, recomputing duration", () => {
+      const onDurationChange = vi.fn();
+      render(
+        <TaskTimeEditor
+          time="14:00"
+          durationMinutes={60} // End = 15:00
+          {...noopHandlers}
+          onDurationChange={onDurationChange}
+        />,
+      );
+      fireEvent.change(screen.getByLabelText("Task time"), { target: { value: "14:30" } });
+      expect(onDurationChange).toHaveBeenCalledWith(30); // 14:30 -> 15:00
+    });
+
+    it("clears the duration if the new Start would be at or after the existing End", () => {
+      const onDurationChange = vi.fn();
+      render(
+        <TaskTimeEditor
+          time="14:00"
+          durationMinutes={60} // End = 15:00
+          {...noopHandlers}
+          onDurationChange={onDurationChange}
+        />,
+      );
+      fireEvent.change(screen.getByLabelText("Task time"), { target: { value: "15:00" } });
+      expect(onDurationChange).toHaveBeenCalledWith(undefined);
+    });
+
+    it("does not touch duration when no duration was set yet", () => {
+      const onDurationChange = vi.fn();
+      render(<TaskTimeEditor time="14:00" {...noopHandlers} onDurationChange={onDurationChange} />);
+      fireEvent.change(screen.getByLabelText("Task time"), { target: { value: "15:00" } });
+      expect(onDurationChange).not.toHaveBeenCalled();
+    });
   });
 
   describe("drawer variant", () => {
-    it("lays out Start narrower than Duration, roughly 38/62, not an even 50/50 split", () => {
+    it("lays out Start narrower than End, roughly 38/62, not an even 50/50 split", () => {
       render(<TaskTimeEditor time="14:00" {...noopHandlers} variant="drawer" />);
       const grid = screen.getByLabelText("Task time").closest("div.grid");
       expect(grid!.className).toContain("grid-cols-[minmax(0,3fr)_minmax(0,5fr)]");
     });
 
-    it("has no separate 'Clear' text button — clearing lives inside the Duration field", () => {
+    it("has no separate 'Clear' text button — clearing lives inside the End field", () => {
       render(<TaskTimeEditor time="14:00" {...noopHandlers} variant="drawer" />);
       expect(screen.queryByText("Clear")).toBeNull();
       expect(screen.getByLabelText("Clear duration")).toBeTruthy();
@@ -109,9 +147,9 @@ describe("TaskTimeEditor", () => {
       expect(onTimeChange).toHaveBeenCalledWith(undefined);
     });
 
-    it("hides the Duration field and its clear control when no time is set", () => {
+    it("hides the End field and its clear control when no time is set", () => {
       render(<TaskTimeEditor {...noopHandlers} variant="drawer" />);
-      expect(screen.queryByLabelText("Task duration")).toBeNull();
+      expect(screen.queryByLabelText("Task end time")).toBeNull();
       expect(screen.queryByLabelText("Clear duration")).toBeNull();
     });
   });
