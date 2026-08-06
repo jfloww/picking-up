@@ -570,6 +570,15 @@ class BackfillTaskTimestampsMigrationTests(TransactionTestCase):
             scope_value="2026-07-27", created_at="2026-07-27T09:00:00.000Z",
             completed_at=None,
         )
+        out_of_range_created = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="out of range created", scope_kind="day",
+            scope_value="2026-07-27", created_at="2026-13-45T25:99:99",
+        )
+        out_of_range_completed = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="out of range completed", scope_kind="day",
+            scope_value="2026-07-27", created_at="2026-07-27T09:00:00.000Z",
+            completed_at="2026-99-99T99:99:99",
+        )
 
         executor = MigrationExecutor(connection)
         executor.migrate([("tasks", "0009_task_timestamps_finalize")])
@@ -589,6 +598,12 @@ class BackfillTaskTimestampsMigrationTests(TransactionTestCase):
 
         new_never_completed = NewTask.objects.get(id=never_completed.id)
         self.assertIsNone(new_never_completed.completed_at)
+
+        new_out_of_range_created = NewTask.objects.get(id=out_of_range_created.id)
+        self.assertEqual(new_out_of_range_created.created_at, new_out_of_range_created.updated_at)
+
+        new_out_of_range_completed = NewTask.objects.get(id=out_of_range_completed.id)
+        self.assertEqual(new_out_of_range_completed.completed_at, new_out_of_range_completed.updated_at)
 
 
 class CategoryApiTests(TestCase):

@@ -11,7 +11,11 @@ def backfill_timestamps(apps, schema_editor):
     Task = apps.get_model("tasks", "Task")
 
     for task in Task.objects.all():
-        created = parse_datetime(task.created_at or "")
+        try:
+            created = parse_datetime(task.created_at or "")
+        except (ValueError, TypeError):
+            created = None
+
         if created is None:
             logger.warning(
                 "Task %s: unparseable created_at %r, falling back to updated_at",
@@ -23,7 +27,11 @@ def backfill_timestamps(apps, schema_editor):
         task.created_at_dt = created
 
         if task.completed_at:
-            completed = parse_datetime(task.completed_at)
+            try:
+                completed = parse_datetime(task.completed_at)
+            except (ValueError, TypeError):
+                completed = None
+
             if completed is None:
                 logger.warning(
                     "Task %s: unparseable completed_at %r, falling back to updated_at",
