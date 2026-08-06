@@ -1,8 +1,10 @@
 import uuid
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import Category, Task
@@ -87,7 +89,6 @@ class TaskApiTests(TestCase):
                 done=True,
                 rolled_from_kind="day",
                 rolled_from_value="2026-07-20",
-                completed_at="2026-07-27T09:00:00.000Z",
                 time="09:30",
                 due_date="2026-08-01",
                 subtasks=[{"id": "s1", "title": "buy wood", "done": False}],
@@ -107,7 +108,8 @@ class TaskApiTests(TestCase):
         self.assertTrue(stored.done)
         self.assertEqual(stored.rolled_from_kind, "day")
         self.assertEqual(stored.rolled_from_value, "2026-07-20")
-        self.assertEqual(stored.completed_at, "2026-07-27T09:00:00.000Z")
+        self.assertIsNotNone(stored.completed_at)
+        self.assertLess(timezone.now() - stored.completed_at, timedelta(seconds=5))
         self.assertEqual(stored.time, "09:30")
         self.assertEqual(stored.due_date, "2026-08-01")
         self.assertEqual(stored.subtasks, [{"id": "s1", "title": "buy wood", "done": False}])
@@ -302,15 +304,20 @@ class TaskApiTests(TestCase):
 
     def test_list_is_ordered_by_created_at(self):
         owner, client = auth_client()
-        client.post(
-            "/api/tasks/",
-            make_task_payload(id=str(uuid.uuid4()), title="second", created_at="2026-07-27T10:00:00.000Z"),
-            format="json",
+        first_id = str(uuid.uuid4())
+        second_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=first_id, title="second"), format="json")
+        client.post("/api/tasks/", make_task_payload(id=second_id, title="first"), format="json")
+
+        # created_at is server-controlled now, so invert the stored order
+        # directly at the DB level (bypassing the read-only serializer field)
+        # to prove the list endpoint sorts by the created_at column itself,
+        # not by request/insertion order.
+        Task.objects.filter(id=first_id).update(
+            created_at=datetime(2026, 7, 27, 10, 0, tzinfo=dt_timezone.utc)
         )
-        client.post(
-            "/api/tasks/",
-            make_task_payload(id=str(uuid.uuid4()), title="first", created_at="2026-07-27T09:00:00.000Z"),
-            format="json",
+        Task.objects.filter(id=second_id).update(
+            created_at=datetime(2026, 7, 27, 9, 0, tzinfo=dt_timezone.utc)
         )
 
         response = client.get("/api/tasks/")
@@ -333,13 +340,66 @@ class TaskApiTests(TestCase):
             400,
         )
         self.assertEqual(
-            client.post("/api/tasks/", make_task_payload(completed_at="x" * 33), format="json").status_code,
-            400,
-        )
-        self.assertEqual(
             client.post("/api/tasks/", make_task_payload(duration_minutes=-5), format="json").status_code,
             400,
         )
+
+    def test_create_ignores_a_client_supplied_created_at(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        before = timezone.now()
+
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(id=task_id, created_at="2020-01-01T00:00:00.000Z"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertGreaterEqual(stored.created_at, before)
+
+    def test_patching_done_to_true_sets_completed_at(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=task_id, done=False), format="json")
+        before = timezone.now()
+
+        response = client.patch(f"/api/tasks/{task_id}/", {"done": True}, format="json")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertTrue(stored.done)
+        self.assertIsNotNone(stored.completed_at)
+        self.assertGreaterEqual(stored.completed_at, before)
+
+    def test_patching_done_to_false_clears_completed_at(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=task_id, done=True), format="json")
+        self.assertIsNotNone(Task.objects.get(id=task_id).completed_at)
+
+        response = client.patch(f"/api/tasks/{task_id}/", {"done": False}, format="json")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertFalse(stored.done)
+        self.assertIsNone(stored.completed_at)
+
+    def test_patching_an_explicit_completed_at_is_silently_dropped_not_rejected(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=task_id, done=False), format="json")
+
+        response = client.patch(
+            f"/api/tasks/{task_id}/",
+            {"completed_at": "2020-01-01T00:00:00.000Z"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertIsNone(stored.completed_at)
 
     def test_create_rejects_a_subtask_missing_a_required_key(self):
         owner, client = auth_client()

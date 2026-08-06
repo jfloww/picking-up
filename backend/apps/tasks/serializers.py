@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import SCOPE_KIND_CHOICES, Category, Task
@@ -29,9 +30,6 @@ class TaskSerializer(serializers.ModelSerializer):
     )
     rolled_from_value = serializers.CharField(
         required=False, allow_null=True, allow_blank=True, default=None, max_length=20,
-    )
-    completed_at = serializers.CharField(
-        required=False, allow_null=True, allow_blank=True, default=None, max_length=32,
     )
     time = serializers.CharField(
         required=False, allow_null=True, allow_blank=True, default=None, max_length=5,
@@ -82,6 +80,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "background",
             "order",
         )
+        read_only_fields = ("created_at", "completed_at")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -100,6 +99,11 @@ class TaskSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("A task with this id already exists.")
         return value
 
+    def create(self, validated_data):
+        if validated_data.get("done"):
+            validated_data["completed_at"] = timezone.now()
+        return super().create(validated_data)
+
     def update(self, instance, validated_data):
         # `id` is identity, not a mutable field — the URL's pk is authoritative
         # on PUT. Without this, DRF's default ModelSerializer.update() would
@@ -107,4 +111,6 @@ class TaskSerializer(serializers.ModelSerializer):
         # UPDATE ... WHERE id = <that other id>, silently overwriting
         # whatever row already has that id (see task-1 security review).
         validated_data.pop("id", None)
+        if "done" in validated_data and validated_data["done"] != instance.done:
+            validated_data["completed_at"] = timezone.now() if validated_data["done"] else None
         return super().update(instance, validated_data)
