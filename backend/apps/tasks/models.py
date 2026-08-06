@@ -48,8 +48,8 @@ class Task(models.Model):
         max_length=10, blank=True, null=True, choices=SCOPE_KIND_CHOICES
     )
     rolled_from_value = models.CharField(max_length=20, blank=True, null=True)
-    created_at = models.CharField(max_length=32)
-    completed_at = models.CharField(max_length=32, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     time = models.CharField(max_length=5, blank=True, null=True)
     due_date = models.CharField(max_length=10, blank=True, null=True)
     subtasks = models.JSONField(default=list, blank=True)

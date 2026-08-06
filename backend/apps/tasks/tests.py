@@ -1,8 +1,10 @@
 import uuid
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import Category, Task
@@ -87,7 +89,6 @@ class TaskApiTests(TestCase):
                 done=True,
                 rolled_from_kind="day",
                 rolled_from_value="2026-07-20",
-                completed_at="2026-07-27T09:00:00.000Z",
                 time="09:30",
                 due_date="2026-08-01",
                 subtasks=[{"id": "s1", "title": "buy wood", "done": False}],
@@ -107,7 +108,8 @@ class TaskApiTests(TestCase):
         self.assertTrue(stored.done)
         self.assertEqual(stored.rolled_from_kind, "day")
         self.assertEqual(stored.rolled_from_value, "2026-07-20")
-        self.assertEqual(stored.completed_at, "2026-07-27T09:00:00.000Z")
+        self.assertIsNotNone(stored.completed_at)
+        self.assertLess(timezone.now() - stored.completed_at, timedelta(seconds=5))
         self.assertEqual(stored.time, "09:30")
         self.assertEqual(stored.due_date, "2026-08-01")
         self.assertEqual(stored.subtasks, [{"id": "s1", "title": "buy wood", "done": False}])
@@ -302,15 +304,20 @@ class TaskApiTests(TestCase):
 
     def test_list_is_ordered_by_created_at(self):
         owner, client = auth_client()
-        client.post(
-            "/api/tasks/",
-            make_task_payload(id=str(uuid.uuid4()), title="second", created_at="2026-07-27T10:00:00.000Z"),
-            format="json",
+        first_id = str(uuid.uuid4())
+        second_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=first_id, title="second"), format="json")
+        client.post("/api/tasks/", make_task_payload(id=second_id, title="first"), format="json")
+
+        # created_at is server-controlled now, so invert the stored order
+        # directly at the DB level (bypassing the read-only serializer field)
+        # to prove the list endpoint sorts by the created_at column itself,
+        # not by request/insertion order.
+        Task.objects.filter(id=first_id).update(
+            created_at=datetime(2026, 7, 27, 10, 0, tzinfo=dt_timezone.utc)
         )
-        client.post(
-            "/api/tasks/",
-            make_task_payload(id=str(uuid.uuid4()), title="first", created_at="2026-07-27T09:00:00.000Z"),
-            format="json",
+        Task.objects.filter(id=second_id).update(
+            created_at=datetime(2026, 7, 27, 9, 0, tzinfo=dt_timezone.utc)
         )
 
         response = client.get("/api/tasks/")
@@ -333,13 +340,66 @@ class TaskApiTests(TestCase):
             400,
         )
         self.assertEqual(
-            client.post("/api/tasks/", make_task_payload(completed_at="x" * 33), format="json").status_code,
-            400,
-        )
-        self.assertEqual(
             client.post("/api/tasks/", make_task_payload(duration_minutes=-5), format="json").status_code,
             400,
         )
+
+    def test_create_ignores_a_client_supplied_created_at(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        before = timezone.now()
+
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(id=task_id, created_at="2020-01-01T00:00:00.000Z"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertGreaterEqual(stored.created_at, before)
+
+    def test_patching_done_to_true_sets_completed_at(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=task_id, done=False), format="json")
+        before = timezone.now()
+
+        response = client.patch(f"/api/tasks/{task_id}/", {"done": True}, format="json")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertTrue(stored.done)
+        self.assertIsNotNone(stored.completed_at)
+        self.assertGreaterEqual(stored.completed_at, before)
+
+    def test_patching_done_to_false_clears_completed_at(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=task_id, done=True), format="json")
+        self.assertIsNotNone(Task.objects.get(id=task_id).completed_at)
+
+        response = client.patch(f"/api/tasks/{task_id}/", {"done": False}, format="json")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertFalse(stored.done)
+        self.assertIsNone(stored.completed_at)
+
+    def test_patching_an_explicit_completed_at_is_silently_dropped_not_rejected(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=task_id, done=False), format="json")
+
+        response = client.patch(
+            f"/api/tasks/{task_id}/",
+            {"completed_at": "2020-01-01T00:00:00.000Z"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertIsNone(stored.completed_at)
 
     def test_create_rejects_a_subtask_missing_a_required_key(self):
         owner, client = auth_client()
@@ -538,6 +598,124 @@ class BackfillTaskOrderMigrationTests(TransactionTestCase):
         by_title = {t.title: t.order for t in NewTask.objects.filter(user_id=user.id)}
         self.assertLess(by_title["first"], by_title["second"])
         self.assertLess(by_title["second"], by_title["third"])
+
+        # Roll every app migration back to its latest state so later tests in
+        # the suite (which use the real `apps.tasks.models.Task`/`Category`,
+        # not this historical snapshot) run against the real schema.
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", None)])
+        call_command_migrate = __import__("django.core.management", fromlist=["call_command"]).call_command
+        call_command_migrate("migrate")
+
+
+class BackfillTaskTimestampsMigrationTests(TransactionTestCase):
+    def test_backfills_parsed_timestamps_and_falls_back_to_updated_at_on_bad_data(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0007_task_timestamps_shadow_fields")])
+
+        old_state = executor.loader.project_state([("tasks", "0007_task_timestamps_shadow_fields")])
+        OldUser = old_state.apps.get_model("auth", "User")
+        OldTask = old_state.apps.get_model("tasks", "Task")
+
+        user = OldUser.objects.create(username="ts@example.com", email="ts@example.com")
+
+        valid = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="valid", scope_kind="day",
+            scope_value="2026-07-27", created_at="2026-07-27T09:00:00.000Z",
+            completed_at="2026-07-27T10:00:00.000Z",
+        )
+        garbage_created = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="garbage created", scope_kind="day",
+            scope_value="2026-07-27", created_at="not-a-date",
+        )
+        empty_created = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="empty created", scope_kind="day",
+            scope_value="2026-07-27", created_at="",
+        )
+        garbage_completed = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="garbage completed", scope_kind="day",
+            scope_value="2026-07-27", created_at="2026-07-27T09:00:00.000Z",
+            completed_at="also-not-a-date",
+        )
+        never_completed = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="never completed", scope_kind="day",
+            scope_value="2026-07-27", created_at="2026-07-27T09:00:00.000Z",
+            completed_at=None,
+        )
+        out_of_range_created = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="out of range created", scope_kind="day",
+            scope_value="2026-07-27", created_at="2026-13-45T25:99:99",
+        )
+        out_of_range_completed = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="out of range completed", scope_kind="day",
+            scope_value="2026-07-27", created_at="2026-07-27T09:00:00.000Z",
+            completed_at="2026-99-99T99:99:99",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0009_task_timestamps_finalize")])
+
+        new_state = executor.loader.project_state([("tasks", "0009_task_timestamps_finalize")])
+        NewTask = new_state.apps.get_model("tasks", "Task")
+
+        new_valid = NewTask.objects.get(id=valid.id)
+        self.assertEqual(new_valid.created_at.isoformat(), "2026-07-27T09:00:00+00:00")
+        self.assertEqual(new_valid.completed_at.isoformat(), "2026-07-27T10:00:00+00:00")
+
+        new_garbage_created = NewTask.objects.get(id=garbage_created.id)
+        self.assertEqual(new_garbage_created.created_at, new_garbage_created.updated_at)
+
+        new_empty_created = NewTask.objects.get(id=empty_created.id)
+        self.assertEqual(new_empty_created.created_at, new_empty_created.updated_at)
+
+        new_garbage_completed = NewTask.objects.get(id=garbage_completed.id)
+        self.assertEqual(new_garbage_completed.completed_at, new_garbage_completed.updated_at)
+
+        new_never_completed = NewTask.objects.get(id=never_completed.id)
+        self.assertIsNone(new_never_completed.completed_at)
+
+        new_out_of_range_created = NewTask.objects.get(id=out_of_range_created.id)
+        self.assertEqual(new_out_of_range_created.created_at, new_out_of_range_created.updated_at)
+
+        new_out_of_range_completed = NewTask.objects.get(id=out_of_range_completed.id)
+        self.assertEqual(new_out_of_range_completed.completed_at, new_out_of_range_completed.updated_at)
+
+    def test_row_inserted_between_0008_and_0009_with_null_shadow_created_at_is_backfilled_not_fatal(self):
+        # Simulates the deploy race: gunicorn restarts only after `migrate`
+        # finishes, so the still-running old server process (which only
+        # writes the string `created_at` column) can insert a new Task row
+        # in the gap between 0008's backfill running and 0009 running. That
+        # row's `created_at_dt` shadow column stays NULL. 0009 must
+        # self-heal this defensively rather than hard-failing when it makes
+        # `created_at` NOT NULL (and, on Oracle, doing so *after* the
+        # RemoveField ops in the same migration have already auto-committed,
+        # which would otherwise destroy the original string data).
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0008_backfill_task_timestamps")])
+
+        state_0008 = executor.loader.project_state([("tasks", "0008_backfill_task_timestamps")])
+        OldUser = state_0008.apps.get_model("auth", "User")
+        OldTask = state_0008.apps.get_model("tasks", "Task")
+
+        user = OldUser.objects.create(username="race@example.com", email="race@example.com")
+        # Insert directly into the shadow-column state the race would
+        # produce: this row is created AFTER 0008's backfill already ran,
+        # so nothing has populated created_at_dt/completed_at_dt for it.
+        race_row = OldTask.objects.create(
+            id=uuid_module.uuid4(), user_id=user.id, title="race row", scope_kind="day",
+            scope_value="2026-07-27", created_at="2026-07-27T09:00:00.000Z",
+            created_at_dt=None, completed_at_dt=None,
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0009_task_timestamps_finalize")])
+
+        new_state = executor.loader.project_state([("tasks", "0009_task_timestamps_finalize")])
+        NewTask = new_state.apps.get_model("tasks", "Task")
+
+        new_race_row = NewTask.objects.get(id=race_row.id)
+        self.assertIsNotNone(new_race_row.created_at)
+        self.assertEqual(new_race_row.created_at, new_race_row.updated_at)
 
 
 class CategoryApiTests(TestCase):
