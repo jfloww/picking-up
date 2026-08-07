@@ -150,6 +150,36 @@ export function fakeRepository(
         ? { occurrence: updatedOccurrence, anchor: updatedAnchor }
         : { occurrence: updatedOccurrence };
     },
+    async deleteOccurrence(command) {
+      const occurrence = state.tasks.find((t) => t.id === command.occurrenceId);
+      if (!occurrence || occurrence.version !== command.occurrenceVersion) {
+        throw new TaskVersionConflictError();
+      }
+      let updatedAnchor: Task | undefined;
+      const anchorId = occurrence.repeatSourceId;
+      if (anchorId) {
+        const anchor = state.tasks.find((t) => t.id === anchorId);
+        if (anchor) {
+          const date =
+            occurrence.scope.kind === "day"
+              ? occurrence.scope.date
+              : occurrence.scope.kind === "week" && occurrence.rolledFrom?.kind === "day"
+                ? occurrence.rolledFrom.date
+                : undefined;
+          const existing = new Set(anchor.excludedDates ?? []);
+          updatedAnchor =
+            date && !existing.has(date)
+              ? { ...anchor, version: anchor.version + 1, excludedDates: [...(anchor.excludedDates ?? []), date] }
+              : anchor;
+        }
+      }
+      state.tasks = state.tasks
+        .filter((t) => t.id !== occurrence.id)
+        .map((t) => (updatedAnchor && t.id === updatedAnchor.id ? updatedAnchor : t));
+      return updatedAnchor
+        ? { removedTaskId: occurrence.id, anchor: updatedAnchor }
+        : { removedTaskId: occurrence.id };
+    },
   };
 }
 

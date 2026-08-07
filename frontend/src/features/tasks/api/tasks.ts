@@ -199,3 +199,32 @@ export async function requestDetachTask(
     status: response.status,
   };
 }
+
+export interface DeleteOccurrenceRequest {
+  occurrenceVersion: number;
+}
+
+export interface DeleteOccurrenceResponse {
+  removedTaskId: string;
+  anchor?: Task;
+  status: number;
+}
+
+export async function requestDeleteOccurrence(
+  occurrenceId: string,
+  command: DeleteOccurrenceRequest,
+): Promise<DeleteOccurrenceResponse> {
+  const response = await taskMutationRequest(
+    `/api/tasks/${occurrenceId}/commands/delete-occurrence/`,
+    {
+      method: "POST",
+      body: JSON.stringify({ occurrence_version: command.occurrenceVersion }),
+    },
+  );
+  const payload = (await response.json()) as { removed_task_id: string; anchor?: ApiTask };
+  return {
+    removedTaskId: payload.removed_task_id,
+    anchor: payload.anchor ? fromApiPayload(payload.anchor) : undefined,
+    status: response.status,
+  };
+}

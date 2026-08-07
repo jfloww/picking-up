@@ -167,6 +167,40 @@ describe("createLocalStorageRepository", () => {
     ).rejects.toBeInstanceOf(TaskVersionConflictError);
   });
 
+  it("deleteOccurrence removes the task and excludes its date on the anchor", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const anchor: Task = {
+      ...task,
+      id: "anchor",
+      scope: { kind: "day", date: "2026-07-01" },
+      repeatWeekdays: [4],
+    };
+    const occurrence: Task = {
+      ...task,
+      id: "occ",
+      scope: { kind: "day", date: "2026-07-16" },
+      repeatSourceId: "anchor",
+    };
+    await repo.create(anchor);
+    await repo.create(occurrence);
+
+    const result = await repo.deleteOccurrence({ occurrenceId: "occ", occurrenceVersion: 1 });
+
+    expect(result.removedTaskId).toBe("occ");
+    expect(result.anchor?.excludedDates).toEqual(["2026-07-16"]);
+    expect(await repo.list()).toEqual([result.anchor]);
+  });
+
+  it("deleteOccurrence throws TaskVersionConflictError on a stale version", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const occurrence = { ...task, id: "occ" };
+    await repo.create(occurrence);
+
+    await expect(
+      repo.deleteOccurrence({ occurrenceId: "occ", occurrenceVersion: 99 }),
+    ).rejects.toBeInstanceOf(TaskVersionConflictError);
+  });
+
   it("returns [] for missing, corrupt, or non-array data", async () => {
     expect(
       await createLocalStorageRepository(fakeStorage()).list(),

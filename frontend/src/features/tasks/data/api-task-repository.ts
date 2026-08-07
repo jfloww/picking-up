@@ -3,6 +3,7 @@ import {
   createLocalStorageRepository,
   STORAGE_KEY,
   TaskVersionConflictError,
+  type DeleteOccurrenceResult,
   type DetachTaskResult,
   type NestTaskResult,
   type PromoteSubtaskResult,
@@ -171,6 +172,18 @@ export function createApiTaskRepository(
       });
       await guardTaskMutation(response, redirectToLogin);
       return (await response.json()) as DetachTaskResult;
+    },
+    async deleteOccurrence(command) {
+      const response = await taskFetch(
+        `/api/tasks/${command.occurrenceId}/commands/delete-occurrence`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(command),
+        },
+      );
+      await guardTaskMutation(response, redirectToLogin);
+      return (await response.json()) as DeleteOccurrenceResult;
     },
   };
 }

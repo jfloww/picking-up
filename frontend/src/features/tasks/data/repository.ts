@@ -51,6 +51,16 @@ export interface DetachTaskResult {
   anchor?: Task;
 }
 
+export interface DeleteOccurrenceCommand {
+  occurrenceId: string;
+  occurrenceVersion: number;
+}
+
+export interface DeleteOccurrenceResult {
+  removedTaskId: string;
+  anchor?: Task;
+}
+
 export class TaskVersionConflictError extends Error {
   // RF-005 review finding: the server's 409 body carries a machine code and
   // (for a genuine staleness conflict) the task's current version, so a
@@ -78,6 +88,7 @@ export interface TaskRepository {
   nestTask(command: NestTaskCommand): Promise<NestTaskResult>;
   promoteSubtask(command: PromoteSubtaskCommand): Promise<PromoteSubtaskResult>;
   detachTask(command: DetachTaskCommand): Promise<DetachTaskResult>;
+  deleteOccurrence(command: DeleteOccurrenceCommand): Promise<DeleteOccurrenceResult>;
 }
 
 function isScope(value: unknown): boolean {
@@ -377,6 +388,39 @@ export function createLocalStorageRepository(
       return updatedAnchor
         ? { occurrence: updatedOccurrence, anchor: updatedAnchor }
         : { occurrence: updatedOccurrence };
+    },
+    async deleteOccurrence(command) {
+      const tasks = read();
+      const occurrence = tasks.find((t) => t.id === command.occurrenceId);
+      if (!occurrence || occurrence.version !== command.occurrenceVersion) {
+        throw new TaskVersionConflictError();
+      }
+      let updatedAnchor: Task | undefined;
+      const anchorId = occurrence.repeatSourceId;
+      if (anchorId) {
+        const anchor = tasks.find((t) => t.id === anchorId);
+        if (anchor) {
+          const date =
+            occurrence.scope.kind === "day"
+              ? occurrence.scope.date
+              : occurrence.scope.kind === "week" && occurrence.rolledFrom?.kind === "day"
+                ? occurrence.rolledFrom.date
+                : undefined;
+          const existing = new Set(anchor.excludedDates ?? []);
+          updatedAnchor =
+            date && !existing.has(date)
+              ? { ...anchor, version: anchor.version + 1, excludedDates: [...(anchor.excludedDates ?? []), date] }
+              : anchor;
+        }
+      }
+      write(
+        tasks
+          .filter((t) => t.id !== occurrence.id)
+          .map((t) => (updatedAnchor && t.id === updatedAnchor.id ? updatedAnchor : t)),
+      );
+      return updatedAnchor
+        ? { removedTaskId: occurrence.id, anchor: updatedAnchor }
+        : { removedTaskId: occurrence.id };
     },
   };
 }

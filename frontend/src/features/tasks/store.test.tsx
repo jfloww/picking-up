@@ -385,6 +385,51 @@ describe("TasksProvider", () => {
       );
     });
 
+    it("removeTask records a rolled-over occurrence's original day in the anchor's excludedDates", async () => {
+      // Same as "records the occurrence's date..." above, but the occurrence
+      // has rolled into week scope (rolledFrom pointing at the original
+      // day) rather than staying day-scoped — the optimistic anchor update
+      // must use rolledFrom.date here, matching detachFromRoutine's rule.
+      const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
+      const occurrence = makeTask({
+        id: "occ",
+        scope: { kind: "week", weekStart: weekStartOf("2026-07-16") },
+        rolledFrom: { kind: "day", date: "2026-07-16" },
+        repeatSourceId: "anchor",
+      });
+      const { result } = setup(fakeRepository([anchor, occurrence]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.removeTask("occ"));
+
+      // Asserted synchronously, right after act() and before the queued
+      // command resolves — this is the optimistic frame, not the
+      // post-resolution state.
+      expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual(["2026-07-16"]);
+    });
+
+    it("removeTask calls repo.deleteOccurrence for a task with a repeat source, applying the anchor from the response", async () => {
+      const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
+      const occurrence = makeTask({
+        id: "occ",
+        scope: { kind: "day", date: "2026-07-16" },
+        repeatSourceId: "anchor",
+      });
+      const { repo, result } = setup(fakeRepository([anchor, occurrence]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const deleteSpy = vi.spyOn(repo, "deleteOccurrence");
+      const removeSpy = vi.spyOn(repo, "remove");
+
+      act(() => result.current.removeTask("occ"));
+
+      await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith({ occurrenceId: "occ", occurrenceVersion: 1 }));
+      expect(removeSpy).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual(["2026-07-16"]),
+      );
+      expect(result.current.tasks.find((t) => t.id === "occ")).toBeUndefined();
+    });
+
     it("removing a task that was already standalone (no repeatSourceId) does not touch any anchor", async () => {
       const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
       const standalone = makeTask({ id: "solo", scope: { kind: "day", date: "2026-07-16" } });
@@ -394,6 +439,18 @@ describe("TasksProvider", () => {
       act(() => result.current.removeTask("solo"));
 
       expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toBeUndefined();
+    });
+
+    it("removeTask calls repo.remove (not deleteOccurrence) for a task with no repeat source", async () => {
+      const task = makeTask({ id: "solo" });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const deleteSpy = vi.spyOn(repo, "deleteOccurrence");
+
+      act(() => result.current.removeTask("solo"));
+
+      await waitFor(() => expect(result.current.tasks).toHaveLength(0));
+      expect(deleteSpy).not.toHaveBeenCalled();
     });
 
     it("deleting today's occurrence, then reloading from the repository, does not resurrect it", async () => {
