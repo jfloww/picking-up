@@ -687,6 +687,31 @@ describe("TasksProvider", () => {
 
       expect(result.current.tasks.find((t) => t.id === "a")?.order).toBe(1);
     });
+
+    it("rescheduleTaskToDay calls repo.rescheduleTask once and applies the anchor from the response for a repeat occurrence", async () => {
+      const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
+      const occurrence = makeTask({
+        id: "occ",
+        scope: { kind: "day", date: "2026-07-16" },
+        repeatSourceId: "anchor",
+      });
+      const { repo, result } = setup(fakeRepository([anchor, occurrence]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const rescheduleSpy = vi.spyOn(repo, "rescheduleTask");
+
+      act(() => result.current.rescheduleTaskToDay("occ", "2026-07-20"));
+
+      await waitFor(() =>
+        expect(rescheduleSpy).toHaveBeenCalledWith({ taskId: "occ", taskVersion: 1, date: "2026-07-20" }),
+      );
+      await waitFor(() =>
+        expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual(["2026-07-16"]),
+      );
+      expect(result.current.tasks.find((t) => t.id === "occ")?.scope).toEqual({
+        kind: "day",
+        date: "2026-07-20",
+      });
+    });
   });
 
   describe("time and subtask actions", () => {

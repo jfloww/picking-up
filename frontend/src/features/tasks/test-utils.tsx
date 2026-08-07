@@ -1,6 +1,8 @@
 import type { CategoryRepository } from "./data/category-repository";
 import { TaskVersionConflictError, type TaskRepository } from "./data/repository";
+import { weekStartOf } from "./lib/dates";
 import { promotedSubtaskOrder } from "./lib/reorder";
+import { dayTasksForWeek } from "./lib/times";
 import type { Category, Task } from "./types";
 
 export function makeTask(overrides: Partial<Task> = {}): Task {
@@ -179,6 +181,61 @@ export function fakeRepository(
       return updatedAnchor
         ? { removedTaskId: occurrence.id, anchor: updatedAnchor }
         : { removedTaskId: occurrence.id };
+    },
+    async rescheduleTask(command) {
+      const task = state.tasks.find((t) => t.id === command.taskId);
+      if (!task || task.version !== command.taskVersion) {
+        throw new TaskVersionConflictError();
+      }
+      const currentDate =
+        task.scope.kind === "day"
+          ? task.scope.date
+          : task.scope.kind === "week" && task.rolledFrom?.kind === "day"
+            ? task.rolledFrom.date
+            : undefined;
+      if (currentDate === undefined) {
+        throw new Error("Only a day-scoped or rolled-over week-scoped task can be rescheduled.");
+      }
+      if (currentDate === command.date) {
+        throw new Error("The task is already scheduled on this date.");
+      }
+
+      let updatedAnchor: Task | undefined;
+      const anchorId = task.repeatSourceId;
+      if (anchorId) {
+        const anchor = state.tasks.find((t) => t.id === anchorId);
+        if (anchor) {
+          const existing = new Set(anchor.excludedDates ?? []);
+          updatedAnchor = existing.has(currentDate)
+            ? anchor
+            : { ...anchor, version: anchor.version + 1, excludedDates: [...(anchor.excludedDates ?? []), currentDate] };
+        }
+      }
+
+      const order = task.time
+        ? task.order
+        : Math.max(
+            0,
+            ...dayTasksForWeek(state.tasks, command.date, weekStartOf(command.date))
+              .filter((t) => !t.time)
+              .map((t) => t.order),
+          ) + 1;
+
+      const updatedTask: Task = {
+        ...task,
+        version: task.version + 1,
+        scope: { kind: "day", date: command.date },
+        rolledFrom: undefined,
+        repeatSourceId: undefined,
+        order,
+      };
+
+      state.tasks = state.tasks.map((t) => {
+        if (t.id === updatedTask.id) return updatedTask;
+        if (updatedAnchor && t.id === updatedAnchor.id) return updatedAnchor;
+        return t;
+      });
+      return updatedAnchor ? { task: updatedTask, anchor: updatedAnchor } : { task: updatedTask };
     },
   };
 }

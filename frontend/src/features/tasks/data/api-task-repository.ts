@@ -7,6 +7,7 @@ import {
   type DetachTaskResult,
   type NestTaskResult,
   type PromoteSubtaskResult,
+  type RescheduleTaskResult,
   type TaskRepository,
 } from "./repository";
 
@@ -184,6 +185,15 @@ export function createApiTaskRepository(
       );
       await guardTaskMutation(response, redirectToLogin);
       return (await response.json()) as DeleteOccurrenceResult;
+    },
+    async rescheduleTask(command) {
+      const response = await taskFetch(`/api/tasks/${command.taskId}/commands/reschedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(command),
+      });
+      await guardTaskMutation(response, redirectToLogin);
+      return (await response.json()) as RescheduleTaskResult;
     },
   };
 }

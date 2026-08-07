@@ -228,3 +228,30 @@ export async function requestDeleteOccurrence(
     status: response.status,
   };
 }
+
+export interface RescheduleTaskRequest {
+  taskVersion: number;
+  date: string;
+}
+
+export interface RescheduleTaskResponse {
+  task: Task;
+  anchor?: Task;
+  status: number;
+}
+
+export async function requestRescheduleTask(
+  taskId: string,
+  command: RescheduleTaskRequest,
+): Promise<RescheduleTaskResponse> {
+  const response = await taskMutationRequest(`/api/tasks/${taskId}/commands/reschedule/`, {
+    method: "POST",
+    body: JSON.stringify({ task_version: command.taskVersion, date: command.date }),
+  });
+  const payload = (await response.json()) as { task: ApiTask; anchor?: ApiTask };
+  return {
+    task: fromApiPayload(payload.task),
+    anchor: payload.anchor ? fromApiPayload(payload.anchor) : undefined,
+    status: response.status,
+  };
+}

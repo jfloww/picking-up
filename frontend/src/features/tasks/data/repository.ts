@@ -1,5 +1,6 @@
+import { weekStartOf } from "../lib/dates";
 import { promotedSubtaskOrder } from "../lib/reorder";
-import { isValidTime } from "../lib/times";
+import { dayTasksForWeek, isValidTime } from "../lib/times";
 import type { Subtask, Task } from "../types";
 
 export const STORAGE_KEY = "picking-up.tasks.v1";
@@ -61,6 +62,17 @@ export interface DeleteOccurrenceResult {
   anchor?: Task;
 }
 
+export interface RescheduleTaskCommand {
+  taskId: string;
+  taskVersion: number;
+  date: string;
+}
+
+export interface RescheduleTaskResult {
+  task: Task;
+  anchor?: Task;
+}
+
 export class TaskVersionConflictError extends Error {
   // RF-005 review finding: the server's 409 body carries a machine code and
   // (for a genuine staleness conflict) the task's current version, so a
@@ -89,6 +101,7 @@ export interface TaskRepository {
   promoteSubtask(command: PromoteSubtaskCommand): Promise<PromoteSubtaskResult>;
   detachTask(command: DetachTaskCommand): Promise<DetachTaskResult>;
   deleteOccurrence(command: DeleteOccurrenceCommand): Promise<DeleteOccurrenceResult>;
+  rescheduleTask(command: RescheduleTaskCommand): Promise<RescheduleTaskResult>;
 }
 
 function isScope(value: unknown): boolean {
@@ -421,6 +434,64 @@ export function createLocalStorageRepository(
       return updatedAnchor
         ? { removedTaskId: occurrence.id, anchor: updatedAnchor }
         : { removedTaskId: occurrence.id };
+    },
+    async rescheduleTask(command) {
+      const tasks = read();
+      const task = tasks.find((t) => t.id === command.taskId);
+      if (!task || task.version !== command.taskVersion) {
+        throw new TaskVersionConflictError();
+      }
+      const currentDate =
+        task.scope.kind === "day"
+          ? task.scope.date
+          : task.scope.kind === "week" && task.rolledFrom?.kind === "day"
+            ? task.rolledFrom.date
+            : undefined;
+      if (currentDate === undefined) {
+        throw new Error("Only a day-scoped or rolled-over week-scoped task can be rescheduled.");
+      }
+      if (currentDate === command.date) {
+        throw new Error("The task is already scheduled on this date.");
+      }
+
+      let updatedAnchor: Task | undefined;
+      const anchorId = task.repeatSourceId;
+      if (anchorId) {
+        const anchor = tasks.find((t) => t.id === anchorId);
+        if (anchor) {
+          const existing = new Set(anchor.excludedDates ?? []);
+          updatedAnchor = existing.has(currentDate)
+            ? anchor
+            : { ...anchor, version: anchor.version + 1, excludedDates: [...(anchor.excludedDates ?? []), currentDate] };
+        }
+      }
+
+      const order = task.time
+        ? task.order
+        : Math.max(
+            0,
+            ...dayTasksForWeek(tasks, command.date, weekStartOf(command.date))
+              .filter((t) => !t.time)
+              .map((t) => t.order),
+          ) + 1;
+
+      const updatedTask: Task = {
+        ...task,
+        version: task.version + 1,
+        scope: { kind: "day", date: command.date },
+        rolledFrom: undefined,
+        repeatSourceId: undefined,
+        order,
+      };
+
+      write(
+        tasks.map((t) => {
+          if (t.id === updatedTask.id) return updatedTask;
+          if (updatedAnchor && t.id === updatedAnchor.id) return updatedAnchor;
+          return t;
+        }),
+      );
+      return updatedAnchor ? { task: updatedTask, anchor: updatedAnchor } : { task: updatedTask };
     },
   };
 }
