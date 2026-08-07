@@ -252,6 +252,9 @@ def delete_occurrence(
     occurrence = tasks[occurrence_key]
     _assert_versions({occurrence_key: occurrence_version}, tasks)
 
+    # Must run before occurrence.delete() below — it reads
+    # occurrence.repeat_source_id and the occurrence's effective date, both
+    # of which need the row to still exist and be unmutated.
     anchor = _append_anchor_exclusion(user, occurrence)
     removed_task_id = str(occurrence.id)
     occurrence.delete()
@@ -298,10 +301,18 @@ def reschedule_task(
         # Mirrors the frontend's current dayTasksForWeek-based scan: counts
         # both day-scoped tasks already on the destination date and
         # week-scoped tasks rolled over from it, including done tasks
-        # (position, not completion, drives this list). rolled_from_value
-        # alone pins the week — a calendar date belongs to exactly one
-        # week, so the frontend's extra weekStart match is redundant, not a
-        # distinct filter.
+        # (position, not completion, drives this list). Unlike the
+        # frontend, this query doesn't also require scope_value/weekStart
+        # to match the destination's current week: a week-scoped task that
+        # rolled off `date` and has since rolled forward again (weekStart
+        # now a later week, rolled_from_value still `date`) matches here
+        # but wouldn't match dayTasksForWeek on the frontend. There's no
+        # week_start_of helper on the backend today to close that gap, and
+        # it's harmless to leave open — the extra rows can only inflate the
+        # computed max(), so the rescheduled task still lands past every
+        # currently-visible sibling; it never causes an incorrect exclusion
+        # or lost order value, just a possibly-larger-than-strictly-
+        # necessary one.
         siblings = list(
             Task.objects.select_for_update()
             .filter(user=user)

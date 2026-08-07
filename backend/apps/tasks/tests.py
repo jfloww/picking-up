@@ -13,7 +13,13 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import Category, Task, normalize_category_name
-from .services import nest_task, promote_subtask
+from .services import (
+    delete_occurrence,
+    detach_task,
+    nest_task,
+    promote_subtask,
+    reschedule_task,
+)
 
 
 User = get_user_model()
@@ -1098,6 +1104,36 @@ class TaskCommandApiTests(TestCase):
         response = self.detach(other_task)
         self.assertEqual(response.status_code, 404)
 
+    def test_detach_rolls_back_anchor_exclusion_when_occurrence_save_fails(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+        original_save = Task.save
+
+        def fail_occurrence_save(instance, *args, **kwargs):
+            if instance.id == occurrence.id:
+                raise RuntimeError("occurrence save failed")
+            return original_save(instance, *args, **kwargs)
+
+        with patch.object(Task, "save", autospec=True, side_effect=fail_occurrence_save):
+            with self.assertRaisesRegex(RuntimeError, "occurrence save failed"):
+                detach_task(
+                    user=self.user,
+                    occurrence_id=occurrence.id,
+                    occurrence_version=occurrence.version,
+                    repeat_weekdays=None,
+                )
+
+        occurrence.refresh_from_db()
+        self.assertEqual(occurrence.repeat_source_id, anchor.id)
+        self.assertEqual(occurrence.version, 1)
+        anchor.refresh_from_db()
+        self.assertIsNone(anchor.excluded_dates)
+        self.assertEqual(anchor.version, 1)
+
     def test_delete_occurrence_removes_the_task_and_excludes_its_date_on_the_anchor(self):
         anchor = self.create_task(
             title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
@@ -1145,6 +1181,27 @@ class TaskCommandApiTests(TestCase):
         response = self.delete_occurrence(other_task)
         self.assertEqual(response.status_code, 404)
         self.assertTrue(Task.objects.filter(id=other_task.id).exists())
+
+    def test_delete_occurrence_rolls_back_anchor_exclusion_when_occurrence_delete_fails(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+
+        with patch.object(Task, "delete", side_effect=RuntimeError("delete failed")):
+            with self.assertRaisesRegex(RuntimeError, "delete failed"):
+                delete_occurrence(
+                    user=self.user,
+                    occurrence_id=occurrence.id,
+                    occurrence_version=occurrence.version,
+                )
+
+        self.assertTrue(Task.objects.filter(id=occurrence.id).exists())
+        anchor.refresh_from_db()
+        self.assertIsNone(anchor.excluded_dates)
+        self.assertEqual(anchor.version, 1)
 
     def test_promote_returns_404_for_a_missing_or_unowned_parent(self):
         missing = self.client.post(
@@ -1356,6 +1413,37 @@ class TaskCommandApiTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 404)
+
+    def test_reschedule_rolls_back_anchor_exclusion_when_task_save_fails(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+        original_save = Task.save
+
+        def fail_occurrence_save(instance, *args, **kwargs):
+            if instance.id == occurrence.id:
+                raise RuntimeError("reschedule save failed")
+            return original_save(instance, *args, **kwargs)
+
+        with patch.object(Task, "save", autospec=True, side_effect=fail_occurrence_save):
+            with self.assertRaisesRegex(RuntimeError, "reschedule save failed"):
+                reschedule_task(
+                    user=self.user,
+                    task_id=occurrence.id,
+                    task_version=occurrence.version,
+                    date="2026-07-20",
+                )
+
+        occurrence.refresh_from_db()
+        self.assertEqual(occurrence.scope_value, "2026-07-16")
+        self.assertIsNotNone(occurrence.repeat_source_id)
+        self.assertEqual(occurrence.version, 1)
+        anchor.refresh_from_db()
+        self.assertIsNone(anchor.excluded_dates)
+        self.assertEqual(anchor.version, 1)
 
 
 class BucketScopeTests(TestCase):
