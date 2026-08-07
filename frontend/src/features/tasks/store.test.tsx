@@ -283,6 +283,30 @@ describe("TasksProvider", () => {
       ]);
     });
 
+    it("detachFromRoutine records a rolled-over occurrence's original day in the anchor's excludedDates", async () => {
+      // Same as "records the occurrence's date..." above, but the occurrence
+      // has rolled into week scope (rolledFrom pointing at the original
+      // day) rather than staying day-scoped — the optimistic anchor update
+      // must use rolledFrom.date here, matching the authoritative
+      // repo.detachTask implementations and rescheduleTaskToDay's rule.
+      const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
+      const occurrence = makeTask({
+        id: "occ",
+        scope: { kind: "week", weekStart: weekStartOf("2026-07-16") },
+        rolledFrom: { kind: "day", date: "2026-07-16" },
+        repeatSourceId: "anchor",
+      });
+      const { result } = setup(fakeRepository([anchor, occurrence]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.detachFromRoutine("occ"));
+
+      // Asserted synchronously, right after act() and before the queued
+      // command resolves — this is the optimistic frame, not the
+      // post-resolution state (that's covered by the spy test below).
+      expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual(["2026-07-16"]);
+    });
+
     it("detachFromRoutine calls repo.detachTask once and applies both the occurrence and anchor from the response", async () => {
       const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
       const occurrence = makeTask({

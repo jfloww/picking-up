@@ -604,21 +604,29 @@ export function TasksProvider({
         const occurrenceGeneration = nextMutationGeneration(current.id);
         const anchorGeneration = anchorId ? nextMutationGeneration(anchorId) : undefined;
 
-        // Optimistically mirror the anchor's excludedDates update for the
-        // common case (an unrolled day-scoped occurrence) so the UI
+        // Optimistically mirror the anchor's excludedDates update so the UI
         // reflects the detach immediately, same as every other
-        // anchor-touching mutation in this store. The authoritative anchor
-        // from the command response — which also covers the rolled
-        // week-scope case buildTaskPatch doesn't need to reason about here
-        // — is applied once the command resolves below, regardless of
-        // whether this optimistic branch ran.
+        // anchor-touching mutation in this store. Uses the same broader
+        // effective-date rule as the authoritative repo.detachTask
+        // implementations (repository.ts/test-utils.tsx) and
+        // rescheduleTaskToDay below: a plain day-scoped occurrence, or a
+        // rolled-over week-scoped one, contributes its original day. The
+        // authoritative anchor from the command response is applied once
+        // the command resolves below, regardless of whether this
+        // optimistic branch ran.
         let optimisticAnchor: Task | undefined;
-        if (anchorId !== undefined && current.scope.kind === "day") {
+        const originalDate =
+          current.scope.kind === "day"
+            ? current.scope.date
+            : current.scope.kind === "week" && current.rolledFrom?.kind === "day"
+              ? current.rolledFrom.date
+              : undefined;
+        if (anchorId !== undefined && originalDate !== undefined) {
           const anchor = tasksRef.current.find((t) => t.id === anchorId);
-          if (anchor) {
+          if (anchor && !(anchor.excludedDates ?? []).includes(originalDate)) {
             optimisticAnchor = {
               ...anchor,
-              excludedDates: [...(anchor.excludedDates ?? []), current.scope.date],
+              excludedDates: [...(anchor.excludedDates ?? []), originalDate],
             };
           }
         }
