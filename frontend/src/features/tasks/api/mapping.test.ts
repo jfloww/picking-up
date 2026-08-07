@@ -18,7 +18,7 @@ const fullApiTask: ApiTask = {
   completed_at: "2026-07-27T09:00:00.000Z",
   time: "09:30",
   due_date: "2026-08-01",
-  subtasks: [{ id: "s1", title: "buy wood", done: false }],
+  subtasks: [{ id: "s1", title: "buy wood", done: false, memo: "cedar plank" }],
   repeat_weekdays: [1, 3, 5],
   repeat_source: "anchor-1",
   excluded_dates: ["2026-07-13"],
@@ -40,7 +40,7 @@ const fullTask: Task = {
   completedAt: "2026-07-27T09:00:00.000Z",
   time: "09:30",
   dueDate: "2026-08-01",
-  subtasks: [{ id: "s1", title: "buy wood", done: false }],
+  subtasks: [{ id: "s1", title: "buy wood", done: false, memo: "cedar plank" }],
   repeatWeekdays: [1, 3, 5],
   repeatSourceId: "anchor-1",
   excludedDates: ["2026-07-13"],
@@ -95,6 +95,17 @@ describe("fromApiPayload", () => {
     expect(task.background).toBeUndefined();
     expect(task.scope).toEqual({ kind: "week", weekStart: "2026-07-19" });
   });
+
+  it("maps a subtask's empty memo to undefined", () => {
+    const payload: ApiTask = {
+      ...fullApiTask,
+      subtasks: [{ id: "s1", title: "buy wood", done: false, memo: "" }],
+    };
+
+    const task = fromApiPayload(payload);
+
+    expect(task.subtasks?.[0].memo).toBeUndefined();
+  });
 });
 
 describe("toApiPayload", () => {
@@ -129,6 +140,17 @@ describe("toApiPayload", () => {
     expect(payload.background).toBeNull();
     expect(payload.scope_kind).toBe("month");
     expect(payload.scope_value).toBe("2026-07");
+  });
+
+  it("maps a subtask's undefined memo to an empty string", () => {
+    const task: Task = {
+      ...fullTask,
+      subtasks: [{ id: "s1", title: "buy wood", done: false }],
+    };
+
+    const payload = toApiPayload(task);
+
+    expect(payload.subtasks[0].memo).toBe("");
   });
 
   it("round-trips a year-scoped task", () => {

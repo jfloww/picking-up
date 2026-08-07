@@ -15,6 +15,7 @@ export interface Subtask {
   id: string;
   title: string;
   done: boolean;
+  memo?: string;
 }
 
 export interface Task {
@@ -27,7 +28,7 @@ export interface Task {
   createdAt: string;
   completedAt?: string;
   time?: string; // "HH:MM", 24h zero-padded; meaningful on day-scoped tasks
-  subtasks?: Subtask[]; // one level deep; no scope/memo/time of their own
+  subtasks?: Subtask[]; // one level deep; no scope/time of their own; may carry its own memo
   repeatWeekdays?: number[]; // 0=Sun..6=Sat; set only on the anchor task
   repeatSourceId?: string;   // set only on a task generated from an anchor
   excludedDates?: string[];  // day-scope dates ("YYYY-MM-DD") the anchor should not spawn for; set only on the anchor task
