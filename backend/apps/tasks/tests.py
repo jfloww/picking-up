@@ -48,6 +48,7 @@ def make_task_payload(**overrides):
         "done": False,
         "scope_kind": "day",
         "scope_value": "2026-07-27",
+        "order": 0.0,
         "bucket_category": None,
         "rolled_from_kind": None,
         "rolled_from_value": None,
@@ -610,7 +611,7 @@ class TaskApiTests(TestCase):
             "/api/tasks/", make_task_payload(id=str(uuid.uuid4())), format="json",
         )
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data["order"], 0)
+        self.assertEqual(response.data["order"], 1.0)
 
         task_id = response.data["id"]
         response = client.put(
@@ -621,6 +622,99 @@ class TaskApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["order"], 2.5)
+
+    def setUp(self):
+        self.user, self.client = auth_client("order-creation@example.com")
+
+    def create_task(self, **overrides):
+        """Create a task, optionally with a specific order value by bypassing the API."""
+        task_id = overrides.pop("id", str(uuid.uuid4()))
+        order = overrides.pop("order", None)
+        # If a specific order is provided, create directly in DB to set it exactly.
+        # Otherwise use the API which computes the order.
+        if order is not None:
+            # Build full payload with defaults, then override with specific values
+            payload = make_task_payload(id=task_id, **overrides)
+            # Remove read-only/server-controlled fields before creating
+            payload.pop("created_at", None)
+            payload.pop("id", None)  # Will set explicitly
+            payload.pop("order", None)  # Will set explicitly
+            task = Task.objects.create(
+                id=task_id,
+                user=self.user,
+                created_at=timezone.now(),
+                order=order,
+                **payload,
+            )
+            return task
+        else:
+            response = self.client.post(
+                "/api/tasks/",
+                make_task_payload(id=task_id, **overrides),
+                format="json",
+            )
+            self.assertEqual(response.status_code, 201, response.data)
+            return Task.objects.get(id=task_id)
+
+    def test_create_ignores_a_client_supplied_order_and_appends_past_existing_siblings(self):
+        self.create_task(title="existing", scope_value="2026-07-16", order=3.0)
+
+        response = self.client.post(
+            "/api/tasks/",
+            make_task_payload(title="new", scope_value="2026-07-16", order=999.0),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["order"], 4.0)
+
+    def test_create_ignores_done_siblings_when_computing_the_appended_order(self):
+        self.create_task(title="done sibling", scope_value="2026-07-16", order=10.0, done=True)
+
+        response = self.client.post(
+            "/api/tasks/",
+            make_task_payload(title="new", scope_value="2026-07-16"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["order"], 1.0)
+
+    def test_create_uses_order_zero_for_a_non_day_scope_regardless_of_client_input(self):
+        response = self.client.post(
+            "/api/tasks/",
+            make_task_payload(title="goal", scope_kind="month", scope_value="2026-07", order=42.0),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["order"], 0.0)
+
+    def test_create_leaves_a_routine_occurrences_client_supplied_order_untouched(self):
+        # Final-review finding: a routine-materialized occurrence
+        # (routines.ts) always requests order=0 so it sorts to the top of
+        # the day's list — long-standing, intentional behavior that
+        # predates this order-override rule entirely and that the rule
+        # unintentionally started overriding. A sibling with a much higher
+        # order already exists, so if perform_create appended past it
+        # (the general day-scope rule), the occurrence's order would come
+        # back as 6.0, not the client-supplied 0.0.
+        anchor = self.create_task(title="anchor", scope_value="2026-07-16", repeat_weekdays=[3])
+        self.create_task(title="existing sibling", scope_value="2026-07-16", order=5.0)
+
+        response = self.client.post(
+            "/api/tasks/",
+            make_task_payload(
+                title="occurrence",
+                scope_value="2026-07-16",
+                order=0.0,
+                repeat_source=str(anchor.id),
+            ),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["order"], 0.0)
 
 
 class TaskDomainValidationTests(TestCase):
@@ -987,14 +1081,34 @@ class TaskCommandApiTests(TestCase):
         self.user, self.client = auth_client("commands@example.com")
 
     def create_task(self, **overrides):
+        """Create a task, optionally with a specific order value by bypassing the API."""
         task_id = overrides.pop("id", str(uuid.uuid4()))
-        response = self.client.post(
-            "/api/tasks/",
-            make_task_payload(id=task_id, **overrides),
-            format="json",
-        )
-        self.assertEqual(response.status_code, 201, response.data)
-        return Task.objects.get(id=task_id)
+        order = overrides.pop("order", None)
+        # If a specific order is provided, create directly in DB to set it exactly.
+        # Otherwise use the API which computes the order.
+        if order is not None:
+            # Build full payload with defaults, then override with specific values
+            payload = make_task_payload(id=task_id, **overrides)
+            # Remove read-only/server-controlled fields before creating
+            payload.pop("created_at", None)
+            payload.pop("id", None)  # Will set explicitly
+            payload.pop("order", None)  # Will set explicitly
+            task = Task.objects.create(
+                id=task_id,
+                user=self.user,
+                created_at=timezone.now(),
+                order=order,
+                **payload,
+            )
+            return task
+        else:
+            response = self.client.post(
+                "/api/tasks/",
+                make_task_payload(id=task_id, **overrides),
+                format="json",
+            )
+            self.assertEqual(response.status_code, 201, response.data)
+            return Task.objects.get(id=task_id)
 
     def nest(self, source, target, **overrides):
         payload = {
@@ -1047,6 +1161,18 @@ class TaskCommandApiTests(TestCase):
         payload.update(overrides)
         return self.client.post(
             f"/api/tasks/{task.id}/commands/reschedule/",
+            payload,
+            format="json",
+        )
+
+    def reorder(self, task, insert_before_id, **overrides):
+        payload = {
+            "task_version": task.version,
+            "insert_before_id": insert_before_id,
+        }
+        payload.update(overrides)
+        return self.client.post(
+            f"/api/tasks/{task.id}/commands/reorder/",
             payload,
             format="json",
         )
@@ -1845,6 +1971,137 @@ class TaskCommandApiTests(TestCase):
         anchor.refresh_from_db()
         self.assertIsNone(anchor.excluded_dates)
         self.assertEqual(anchor.version, 1)
+
+    def test_reorder_moves_a_task_between_two_siblings(self):
+        first = self.create_task(title="first", scope_value="2026-07-16", order=1.0)
+        second = self.create_task(title="second", scope_value="2026-07-16", order=2.0)
+        third = self.create_task(title="third", scope_value="2026-07-16", order=3.0)
+
+        response = self.reorder(first, str(third.id))
+
+        self.assertEqual(response.status_code, 200, response.data)
+        first.refresh_from_db()
+        self.assertEqual(first.order, 2.5)
+        self.assertEqual(first.version, 2)
+        self.assertEqual(response.data["task"]["order"], 2.5)
+
+    def test_reorder_moves_a_task_to_the_end_with_a_null_insert_before_id(self):
+        first = self.create_task(title="first", scope_value="2026-07-16", order=1.0)
+        second = self.create_task(title="second", scope_value="2026-07-16", order=2.0)
+
+        response = self.reorder(first, None)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        first.refresh_from_db()
+        self.assertEqual(first.order, 3.0)
+
+    def test_reorder_inserting_before_the_first_sibling_uses_the_edge_gap(self):
+        first = self.create_task(title="first", scope_value="2026-07-16", order=1.0)
+        second = self.create_task(title="second", scope_value="2026-07-16", order=2.0)
+
+        response = self.reorder(second, str(first.id))
+
+        self.assertEqual(response.status_code, 200, response.data)
+        second.refresh_from_db()
+        self.assertEqual(second.order, 0.0)
+
+    def test_reorder_counts_a_done_sibling_rolled_over_from_this_day(self):
+        # Mirrors Weekly's rendering: a done, rolled-over week-scoped task is
+        # still a real sibling that must count towards "the end of the list."
+        rolled_over_done = self.create_task(
+            title="done and rolled over",
+            scope_kind="week",
+            scope_value="2026-07-20",
+            rolled_from_kind="day",
+            rolled_from_value="2026-07-16",
+            done=True,
+            order=5.0,
+        )
+        moving = self.create_task(title="moving", scope_value="2026-07-16", order=1.0)
+
+        response = self.reorder(moving, None)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        moving.refresh_from_db()
+        self.assertEqual(moving.order, 6.0)
+
+    def test_reorder_rejects_a_timed_task_as_not_reorderable(self):
+        timed = self.create_task(title="timed", scope_value="2026-07-16", time="09:00")
+
+        response = self.reorder(timed, None)
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "not_reorderable")
+
+    def test_reorder_rejects_a_month_scoped_task_as_not_reorderable(self):
+        goal = self.create_task(title="goal", scope_kind="month", scope_value="2026-07")
+
+        response = self.reorder(goal, None)
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "not_reorderable")
+
+    def test_reorder_rejects_a_nonexistent_neighbor_as_invalid(self):
+        task = self.create_task(title="alone", scope_value="2026-07-16")
+
+        response = self.reorder(task, str(uuid.uuid4()))
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "invalid_neighbor")
+
+    def test_reorder_rejects_a_neighbor_on_a_different_day_as_invalid(self):
+        task = self.create_task(title="here", scope_value="2026-07-16")
+        elsewhere = self.create_task(title="elsewhere", scope_value="2026-07-17")
+
+        response = self.reorder(task, str(elsewhere.id))
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "invalid_neighbor")
+
+    def test_reorder_rejects_a_timed_task_as_an_invalid_neighbor(self):
+        task = self.create_task(title="here", scope_value="2026-07-16")
+        timed_sibling = self.create_task(title="timed sibling", scope_value="2026-07-16", time="10:00")
+
+        response = self.reorder(task, str(timed_sibling.id))
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "invalid_neighbor")
+
+    def test_reorder_rejects_a_cross_owner_neighbor_as_invalid(self):
+        task = self.create_task(title="here", scope_value="2026-07-16")
+        other_user, other_client = auth_client("reorder-other@example.com")
+        other_task = Task.objects.create(
+            id=uuid.uuid4(), user=other_user, title="not yours",
+            scope_kind="day", scope_value="2026-07-16",
+        )
+
+        response = self.reorder(task, str(other_task.id))
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "invalid_neighbor")
+
+    def test_reorder_rejects_the_tasks_own_id_as_an_invalid_neighbor(self):
+        task = self.create_task(title="here", scope_value="2026-07-16")
+
+        response = self.reorder(task, str(task.id))
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "invalid_neighbor")
+
+    def test_reorder_returns_409_for_a_stale_version(self):
+        task = self.create_task(title="here", scope_value="2026-07-16")
+
+        response = self.reorder(task, None, task_version=task.version + 1)
+
+        self.assertEqual(response.status_code, 409, response.data)
+
+    def test_reorder_returns_404_for_a_missing_or_unowned_task(self):
+        response = self.client.post(
+            f"/api/tasks/{uuid.uuid4()}/commands/reorder/",
+            {"task_version": 1, "insert_before_id": None},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
 
 
 class BucketScopeTests(TestCase):

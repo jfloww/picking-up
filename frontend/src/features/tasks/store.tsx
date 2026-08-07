@@ -19,7 +19,7 @@ import { dayTasksForWeek, isValidTime } from "./lib/times";
 import { rolloverTasks } from "./lib/rollover";
 import { materializeRoutines } from "./lib/routines";
 import { nestBlockReasonFor } from "./lib/nesting";
-import { nextUntimedOrderFor, promotedSubtaskOrder } from "./lib/reorder";
+import { computeOrderBetween, nextUntimedOrderFor, promotedSubtaskOrder } from "./lib/reorder";
 import type { Category, Scope, Subtask, Task } from "./types";
 
 const SYNC_ERROR_MESSAGE = "Something didn't save. Reconnecting to check what's saved…";
@@ -253,7 +253,7 @@ interface TasksContextValue extends TasksState {
   setDuration: (id: string, durationMinutes: number | undefined) => void;
   setBackground: (id: string, background: boolean) => void;
   setDueDate: (id: string, dueDate: string | undefined) => void;
-  setOrder: (id: string, order: number) => void;
+  reorderTask: (id: string, insertBeforeId: string | null) => void;
   removeTask: (id: string) => void;
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
@@ -793,11 +793,76 @@ export function TasksProvider({
         const task: Task = { ...current, dueDate };
         persistUpdate(task);
       },
-      setOrder(id, order) {
+      reorderTask(id, insertBeforeId) {
         const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
-        const task: Task = { ...current, order };
-        persistUpdate(task);
+
+        // Optimistically compute the same order repo.reorderTask (and its
+        // authoritative mirrors in repository.ts/test-utils.tsx) would
+        // compute server-side: find the task's untimed siblings for its
+        // effective day via dayTasksForWeek, exclude itself, locate the
+        // before/after neighbor named by insertBeforeId (null means
+        // end-of-list), and interpolate with computeOrderBetween. Without
+        // this, the drop indicator/drag preview vanish the instant the
+        // pointer is released (use-drag-to-reorder's onPointerUp always
+        // clears drag state) while the list itself keeps showing the
+        // pre-drag order until the network round trip resolves — a
+        // visible snap-back then jump (final-review finding). If
+        // insertBeforeId doesn't name a valid sibling, this leaves the
+        // task unchanged and lets the command's rejection surface as the
+        // usual domain-conflict error instead of guessing an order.
+        const date =
+          current.scope.kind === "day"
+            ? current.scope.date
+            : current.scope.kind === "week" && current.rolledFrom?.kind === "day"
+              ? current.rolledFrom.date
+              : undefined;
+
+        let optimisticTask = current;
+        if (!current.time && date !== undefined) {
+          const siblings = dayTasksForWeek(tasksRef.current, date, weekStartOf(date))
+            .filter((t) => !t.time && t.id !== current.id)
+            .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+
+          let before: Task | undefined;
+          let after: Task | undefined;
+          let validInsertion = true;
+          if (insertBeforeId === null) {
+            before = siblings[siblings.length - 1];
+            after = undefined;
+          } else {
+            const matchIndex = siblings.findIndex((t) => t.id === insertBeforeId);
+            if (matchIndex === -1) {
+              validInsertion = false;
+            } else {
+              after = siblings[matchIndex];
+              before = matchIndex > 0 ? siblings[matchIndex - 1] : undefined;
+            }
+          }
+          if (validInsertion) {
+            optimisticTask = { ...current, order: computeOrderBetween(before?.order, after?.order) };
+          }
+        }
+
+        const generation = nextMutationGeneration(current.id);
+        applyCommandState([optimisticTask], []);
+
+        enqueueMutation(async () => {
+          const result = await repo.reorderTask({
+            taskId: current.id,
+            taskVersion: authoritativeVersionsRef.current.get(current.id) ?? current.version,
+            insertBeforeId,
+          });
+          authoritativeVersionsRef.current.set(result.task.id, result.task.version);
+          authoritativeTasksRef.current.set(result.task.id, result.task);
+
+          const currentTask = tasksRef.current.find((t) => t.id === result.task.id);
+          const reconciledTask =
+            currentTask && mutationGenerationsRef.current.get(result.task.id) !== generation
+              ? { ...currentTask, version: result.task.version }
+              : result.task;
+          applyCommandState([reconciledTask], []);
+        });
       },
       setCategory(id, categoryId) {
         const current = tasksRef.current.find((t) => t.id === id);

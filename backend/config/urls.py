@@ -11,6 +11,7 @@ from apps.tasks.views import (
     NestTaskCommandView,
     PromoteSubtaskCommandView,
     RescheduleTaskCommandView,
+    ReorderTaskCommandView,
     TaskDetailView,
     TaskListCreateView,
 )
@@ -44,6 +45,11 @@ urlpatterns = [
         "api/tasks/<uuid:pk>/commands/reschedule/",
         RescheduleTaskCommandView.as_view(),
         name="task-command-reschedule",
+    ),
+    path(
+        "api/tasks/<uuid:pk>/commands/reorder/",
+        ReorderTaskCommandView.as_view(),
+        name="task-command-reorder",
     ),
     path(
         "api/tasks/<uuid:pk>/commands/promote-subtask/",

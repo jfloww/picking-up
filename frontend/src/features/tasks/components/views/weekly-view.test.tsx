@@ -213,7 +213,7 @@ describe("WeeklyView", () => {
     expect(targetColumn.className).not.toContain("ring-brand");
   });
 
-  it("dragging an untimed task to a new position within its own day reorders it and calls setOrder, not rescheduleTaskToDay", async () => {
+  it("dragging an untimed task to a new position within its own day reorders it and calls reorderTask, not rescheduleTaskToDay", async () => {
     // Uses a date on/after the frozen "today" (2026-07-16), not "2026-07-14"
     // like most fixtures above: "2026-07-14" is before "today" and gets
     // converted to a week-scoped, rolled-over task by rollover logic on
@@ -296,10 +296,10 @@ describe("WeeklyView", () => {
     // "task a" is already immediately above "task b", so dropping it into
     // b's upper half resolves to insertBeforeId "b" — a position that is
     // mathematically a new order value but visually the same slot. Without
-    // the positional guard in onReorder this fires a real setOrder and a
-    // repo.update network write for a no-op drag. Uses a future-dated day
-    // so nothing rolls over on mount and every repo.update seen after load
-    // is attributable to this drag.
+    // the positional guard in onReorder this fires a real reorderTask and a
+    // repo.reorderTask network write for a no-op drag. Uses a future-dated day
+    // so nothing rolls over on mount and every repo.reorderTask call seen
+    // after load is attributable to this drag.
     const a = makeTask({ id: "a", title: "task a", order: 1, scope: { kind: "day", date: "2026-07-17" } });
     const b = makeTask({ id: "b", title: "task b", order: 5, scope: { kind: "day", date: "2026-07-17" } });
     const repo = fakeRepository([a, b]);
@@ -309,7 +309,7 @@ describe("WeeklyView", () => {
       </TasksProvider>,
     );
     await waitFor(() => expect(screen.getByRole("button", { name: "task a" })).toBeTruthy());
-    const updateSpy = vi.spyOn(repo, "update");
+    const reorderSpy = vi.spyOn(repo, "reorderTask");
 
     const column = screen.getByTestId("day-column-2026-07-17");
     vi.spyOn(column, "getBoundingClientRect").mockReturnValue({
@@ -330,7 +330,17 @@ describe("WeeklyView", () => {
     fireEvent.pointerMove(handle, { pointerId: 1, clientX: 50, clientY: 50 }); // b's upper half (40-60)
     fireEvent.pointerUp(handle, { pointerId: 1, clientX: 50, clientY: 50 });
 
-    expect(updateSpy).not.toHaveBeenCalled();
+    // The guard (if it fires) runs synchronously inside the pointerUp
+    // handler, but `enqueueMutation` defers the actual `repo.reorderTask`
+    // call by one microtask hop (`mutationQueueRef.current.then(...)`), so
+    // asserting `not.toHaveBeenCalled()` immediately after fireEvent would
+    // pass trivially regardless of whether the guard fired — the call just
+    // hasn't happened *yet* either way. Flushing past that hop first (a
+    // macrotask boundary always runs after any already-queued microtask)
+    // makes this assertion prove the guard actually suppressed the call,
+    // not just that it hasn't reached the repo within the same tick.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reorderSpy).not.toHaveBeenCalled();
     expect(repo.tasks.find((t) => t.id === "a")?.order).toBe(1);
     expect(screen.getByTestId("day-column-2026-07-17").textContent).toContain("task a");
   });

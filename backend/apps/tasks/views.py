@@ -17,16 +17,20 @@ from .serializers import (
     NestTaskCommandSerializer,
     PromoteSubtaskCommandSerializer,
     RescheduleTaskCommandSerializer,
+    ReorderTaskCommandSerializer,
     TaskSerializer,
 )
 from .services import (
     TaskCommandConflict,
     TaskCommandNotFound,
     TaskVersionConflict,
+    _lock_user,
+    _next_untimed_order_for_day,
     delete_occurrence,
     detach_task,
     nest_task,
     promote_subtask,
+    reorder_task,
     reschedule_task,
 )
 
@@ -100,7 +104,25 @@ class TaskListCreateView(generics.ListCreateAPIView):
         return Task.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        with transaction.atomic():
+            _lock_user(self.request.user)
+            if serializer.validated_data.get("repeat_source") is not None:
+                # Routine-materialized occurrences deliberately request order=0
+                # so they sort to the top of the day's list (routines.ts) — this
+                # predates and is unrelated to RF-005 phase 2's actual target
+                # (the ambiguous-concurrent-create race for genuine
+                # user-initiated creates), so their client-supplied order is
+                # left untouched rather than overridden.
+                serializer.save(user=self.request.user)
+                return
+            scope_kind = serializer.validated_data.get("scope_kind")
+            scope_value = serializer.validated_data.get("scope_value")
+            order = (
+                _next_untimed_order_for_day(self.request.user, scope_value)
+                if scope_kind == "day"
+                else 0.0
+            )
+            serializer.save(user=self.request.user, order=order)
 
 
 class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -299,6 +321,33 @@ class PromoteSubtaskCommandView(APIView):
                 "task": TaskSerializer(result.task, context={"request": request}).data,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+class ReorderTaskCommandView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, pk):
+        serializer = ReorderTaskCommandSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = reorder_task(
+                user=request.user,
+                task_id=pk,
+                task_version=data["task_version"],
+                insert_before_id=data["insert_before_id"],
+            )
+        except TaskCommandNotFound as exc:
+            raise NotFound from exc
+        except TaskVersionConflict as exc:
+            raise TaskVersionConflictResponse(exc.current_versions) from exc
+        except TaskCommandConflict as exc:
+            raise TaskCommandConflictResponse(exc) from exc
+
+        return Response(
+            {"task": TaskSerializer(result.task, context={"request": request}).data},
+            status=status.HTTP_200_OK,
         )
 
 

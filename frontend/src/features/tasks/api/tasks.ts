@@ -255,3 +255,28 @@ export async function requestRescheduleTask(
     status: response.status,
   };
 }
+
+export interface ReorderTaskRequest {
+  taskVersion: number;
+  insertBeforeId: string | null;
+}
+
+export interface ReorderTaskResponse {
+  task: Task;
+  status: number;
+}
+
+export async function requestReorderTask(
+  taskId: string,
+  command: ReorderTaskRequest,
+): Promise<ReorderTaskResponse> {
+  const response = await taskMutationRequest(`/api/tasks/${taskId}/commands/reorder/`, {
+    method: "POST",
+    body: JSON.stringify({
+      task_version: command.taskVersion,
+      insert_before_id: command.insertBeforeId,
+    }),
+  });
+  const payload = (await response.json()) as { task: ApiTask };
+  return { task: fromApiPayload(payload.task), status: response.status };
+}

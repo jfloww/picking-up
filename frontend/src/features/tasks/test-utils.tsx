@@ -1,7 +1,7 @@
 import type { CategoryRepository } from "./data/category-repository";
 import { TaskVersionConflictError, type TaskRepository } from "./data/repository";
 import { weekStartOf } from "./lib/dates";
-import { promotedSubtaskOrder } from "./lib/reorder";
+import { computeOrderBetween, promotedSubtaskOrder } from "./lib/reorder";
 import { dayTasksForWeek } from "./lib/times";
 import type { Category, Task } from "./types";
 
@@ -236,6 +236,46 @@ export function fakeRepository(
         return t;
       });
       return updatedAnchor ? { task: updatedTask, anchor: updatedAnchor } : { task: updatedTask };
+    },
+    async reorderTask(command) {
+      const task = state.tasks.find((t) => t.id === command.taskId);
+      if (!task || task.version !== command.taskVersion) {
+        throw new TaskVersionConflictError();
+      }
+      const date =
+        task.scope.kind === "day"
+          ? task.scope.date
+          : task.scope.kind === "week" && task.rolledFrom?.kind === "day"
+            ? task.rolledFrom.date
+            : undefined;
+      if (task.time || date === undefined) {
+        throw new Error("Only an untimed day-scoped or rolled-over week-scoped task can be reordered.");
+      }
+      const siblings = dayTasksForWeek(state.tasks, date, weekStartOf(date))
+        .filter((t) => !t.time && t.id !== task.id)
+        .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+
+      let before: Task | undefined;
+      let after: Task | undefined;
+      if (command.insertBeforeId === null) {
+        before = siblings[siblings.length - 1];
+        after = undefined;
+      } else {
+        const matchIndex = siblings.findIndex((t) => t.id === command.insertBeforeId);
+        if (matchIndex === -1) {
+          throw new Error("The neighbor task is not a valid insertion point.");
+        }
+        after = siblings[matchIndex];
+        before = matchIndex > 0 ? siblings[matchIndex - 1] : undefined;
+      }
+
+      const updatedTask: Task = {
+        ...task,
+        version: task.version + 1,
+        order: computeOrderBetween(before?.order, after?.order),
+      };
+      state.tasks = state.tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+      return { task: updatedTask };
     },
   };
 }

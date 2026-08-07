@@ -246,6 +246,42 @@ describe("createLocalStorageRepository", () => {
     ).rejects.toBeInstanceOf(TaskVersionConflictError);
   });
 
+  it("reorderTask computes the midpoint between the two neighbors around the insertion point", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const first: Task = { ...task, id: "f", scope: { kind: "day", date: "2026-07-16" }, order: 1 };
+    const second: Task = { ...task, id: "s", scope: { kind: "day", date: "2026-07-16" }, order: 2 };
+    const third: Task = { ...task, id: "t", scope: { kind: "day", date: "2026-07-16" }, order: 3 };
+    await repo.create(first);
+    await repo.create(second);
+    await repo.create(third);
+
+    const result = await repo.reorderTask({ taskId: "f", taskVersion: 1, insertBeforeId: "t" });
+
+    expect(result.task.order).toBe(2.5);
+  });
+
+  it("reorderTask appends past every sibling when insertBeforeId is null", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const first: Task = { ...task, id: "f", scope: { kind: "day", date: "2026-07-16" }, order: 1 };
+    const second: Task = { ...task, id: "s", scope: { kind: "day", date: "2026-07-16" }, order: 2 };
+    await repo.create(first);
+    await repo.create(second);
+
+    const result = await repo.reorderTask({ taskId: "f", taskVersion: 1, insertBeforeId: null });
+
+    expect(result.task.order).toBe(3);
+  });
+
+  it("reorderTask throws TaskVersionConflictError on a stale version", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const a: Task = { ...task, id: "a" };
+    await repo.create(a);
+
+    await expect(
+      repo.reorderTask({ taskId: "a", taskVersion: 99, insertBeforeId: null }),
+    ).rejects.toBeInstanceOf(TaskVersionConflictError);
+  });
+
   it("returns [] for missing, corrupt, or non-array data", async () => {
     expect(
       await createLocalStorageRepository(fakeStorage()).list(),

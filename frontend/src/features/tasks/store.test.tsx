@@ -1237,15 +1237,52 @@ describe("TasksProvider", () => {
     });
   });
 
-  it("setOrder updates a task's order and persists it", async () => {
-    const task = makeTask({ id: "a", order: 1, scope: { kind: "day", date: todayKey() } });
-    const { repo, result } = setup(fakeRepository([task]));
+  it("reorderTask calls repo.reorderTask and applies the authoritative order from the response", async () => {
+    const first = makeTask({ id: "f", scope: { kind: "day", date: todayKey() }, order: 1 });
+    const second = makeTask({ id: "s", scope: { kind: "day", date: todayKey() }, order: 2 });
+    const { repo, result } = setup(fakeRepository([first, second]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    const reorderSpy = vi.spyOn(repo, "reorderTask");
+
+    act(() => result.current.reorderTask("f", null));
+
+    await waitFor(() =>
+      expect(reorderSpy).toHaveBeenCalledWith({ taskId: "f", taskVersion: 1, insertBeforeId: null }),
+    );
+    await waitFor(() => expect(result.current.tasks.find((t) => t.id === "f")?.order).toBe(3));
+  });
+
+  it("reorderTask applies the optimistic order synchronously, before the command resolves", async () => {
+    // Final-review finding: reorderTask used to have no synchronous state
+    // update at all, so the drop indicator/drag preview vanished on
+    // pointer-up while the list itself kept showing the pre-drag order
+    // until the network round trip resolved — a visible snap-back then
+    // jump. Asserted synchronously, right after act() and before the
+    // queued command resolves, matching the style of the
+    // detachFromRoutine/removeTask/rescheduleTaskToDay optimistic-update
+    // tests above.
+    const first = makeTask({ id: "f", scope: { kind: "day", date: todayKey() }, order: 1 });
+    const second = makeTask({ id: "s", scope: { kind: "day", date: todayKey() }, order: 2 });
+    const { result } = setup(fakeRepository([first, second]));
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
-    act(() => result.current.setOrder("a", 2.5));
+    act(() => result.current.reorderTask("f", null));
 
-    expect(result.current.tasks[0].order).toBe(2.5);
-    await waitFor(() => expect(repo.tasks[0].order).toBe(2.5));
+    expect(result.current.tasks.find((t) => t.id === "f")?.order).toBe(3);
+  });
+
+  it("reorderTask returns 409 as a domain conflict, not a version-changed banner, for an invalid neighbor", async () => {
+    const task = makeTask({ id: "a", scope: { kind: "day", date: todayKey() } });
+    const { repo, result } = setup(fakeRepository([task]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    vi.spyOn(repo, "reorderTask").mockRejectedValueOnce(
+      new TaskVersionConflictError("invalid_neighbor"),
+    );
+
+    act(() => result.current.reorderTask("a", "does-not-exist"));
+
+    await waitFor(() => expect(result.current.syncError).toBeTruthy());
+    expect(result.current.syncError).not.toContain("changed elsewhere");
   });
 
   it("addTask appends a new day-scoped untimed task after the current highest All-Day-To-Do order for that day", async () => {

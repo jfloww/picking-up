@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 
 import { todayKey } from "../lib/dates";
 import { nestBlockReasonFor, type NestBlockReason } from "../lib/nesting";
-import { computeOrderBetween } from "../lib/reorder";
 import { compareTasksForDay, isPastToday, nowTime } from "../lib/times";
 import { useTasks } from "../store";
 import { scopeKey, type Scope, type Task } from "../types";
@@ -69,12 +68,11 @@ export function DayAgenda({
   function handleReorder(id: string, insertBeforeId: string | null) {
     const currentIndex = allDayToDo.findIndex((t) => t.id === id);
     if (currentIndex === -1) return;
-    const dragged = allDayToDo[currentIndex];
     const remaining = allDayToDo.filter((t) => t.id !== id);
     const targetIndex =
       insertBeforeId === null ? remaining.length : remaining.findIndex((t) => t.id === insertBeforeId);
     if (targetIndex === -1) return;
-    // Compare list *positions*, not just the resolved order value: the
+    // Compare list *positions*, not just a resolved order value: the
     // dragged item currently sits at currentIndex within allDayToDo
     // (dragged still present). Removing it to build `remaining` shifts
     // every later index down by one, so the slot it already occupies is
@@ -83,13 +81,11 @@ export function DayAgenda({
     // the same position even though insertBeforeId now names a
     // *different* neighbor than "itself." Catching that here (rather
     // than only `id === insertBeforeId`) avoids a no-op drag firing a
-    // real setOrder/network call.
+    // real reorderTask/network call — the server has no cheap way to
+    // detect "this would be a no-op" itself without first doing the same
+    // work the client just did.
     if (targetIndex === currentIndex) return;
-    const before = remaining[targetIndex - 1]?.order;
-    const after = remaining[targetIndex]?.order;
-    const newOrder = computeOrderBetween(before, after);
-    if (newOrder === dragged.order) return;
-    actions.setOrder(id, newOrder);
+    actions.reorderTask(id, insertBeforeId);
   }
 
   const { dragState: reorderDragState, getDragHandlers: getReorderHandlers } = useDragToReorder({
