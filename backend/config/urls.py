@@ -6,6 +6,7 @@ from apps.accounts.views import EmailTokenObtainPairView, GoogleTokenObtainView,
 from apps.tasks.views import (
     CategoryDetailView,
     CategoryListCreateView,
+    DetachTaskCommandView,
     NestTaskCommandView,
     PromoteSubtaskCommandView,
     TaskDetailView,
@@ -26,6 +27,11 @@ urlpatterns = [
         "api/tasks/<uuid:pk>/commands/nest/",
         NestTaskCommandView.as_view(),
         name="task-command-nest",
+    ),
+    path(
+        "api/tasks/<uuid:pk>/commands/detach/",
+        DetachTaskCommandView.as_view(),
+        name="task-command-detach",
     ),
     path(
         "api/tasks/<uuid:pk>/commands/promote-subtask/",

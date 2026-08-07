@@ -643,6 +643,15 @@ class TaskCommandApiTests(TestCase):
             format="json",
         )
 
+    def detach(self, occurrence, **overrides):
+        payload = {"occurrence_version": occurrence.version}
+        payload.update(overrides)
+        return self.client.post(
+            f"/api/tasks/{occurrence.id}/commands/detach/",
+            payload,
+            format="json",
+        )
+
     def test_nest_atomically_appends_subtask_and_removes_source(self):
         source = self.create_task(title="buy milk", done=True)
         target = self.create_task(
@@ -996,6 +1005,80 @@ class TaskCommandApiTests(TestCase):
         self.assertEqual(collision.data["code"], "task_id_conflict")
         collision_parent.refresh_from_db()
         self.assertEqual(len(collision_parent.subtasks), 1)
+
+    def test_detach_clears_repeat_source_and_excludes_the_date_on_the_anchor(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+
+        response = self.detach(occurrence)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        occurrence.refresh_from_db()
+        self.assertIsNone(occurrence.repeat_source_id)
+        self.assertIsNone(occurrence.repeat_weekdays)
+        self.assertEqual(occurrence.version, 2)
+        anchor.refresh_from_db()
+        self.assertEqual(anchor.excluded_dates, ["2026-07-16"])
+        self.assertEqual(anchor.version, 2)
+        self.assertEqual(response.data["occurrence"]["version"], 2)
+        self.assertEqual(response.data["anchor"]["version"], 2)
+
+    def test_detach_appends_to_existing_excluded_dates_rather_than_replacing_them(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+            excluded_dates=["2026-07-09"],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+
+        self.detach(occurrence)
+
+        anchor.refresh_from_db()
+        self.assertEqual(anchor.excluded_dates, ["2026-07-09", "2026-07-16"])
+
+    def test_detach_can_immediately_establish_a_new_repeat_schedule(self):
+        occurrence = self.create_task(title="solo")
+
+        response = self.detach(occurrence, repeat_weekdays=[2, 4])
+
+        self.assertEqual(response.status_code, 200, response.data)
+        occurrence.refresh_from_db()
+        self.assertEqual(occurrence.repeat_weekdays, [2, 4])
+
+    def test_detach_on_an_already_standalone_task_touches_no_anchor(self):
+        response = self.detach(self.create_task(title="solo"))
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn("anchor", response.data)
+
+    def test_detach_returns_409_for_a_stale_version(self):
+        occurrence = self.create_task(title="solo")
+
+        response = self.detach(occurrence, occurrence_version=occurrence.version + 1)
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "task_version_conflict")
+
+    def test_detach_returns_404_for_a_missing_or_unowned_occurrence(self):
+        response = self.client.post(
+            f"/api/tasks/{uuid.uuid4()}/commands/detach/",
+            {"occurrence_version": 1},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+
+        other_user, other_client = auth_client("detach-other@example.com")
+        other_task = Task.objects.create(
+            id=uuid.uuid4(), user=other_user, title="not yours",
+            scope_kind="day", scope_value="2026-07-16",
+        )
+        response = self.detach(other_task)
+        self.assertEqual(response.status_code, 404)
 
     def test_promote_returns_404_for_a_missing_or_unowned_parent(self):
         missing = self.client.post(

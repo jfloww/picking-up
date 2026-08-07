@@ -181,3 +181,11 @@ class PromoteSubtaskCommandSerializer(serializers.Serializer):
     subtask_id = serializers.CharField(max_length=255, allow_blank=False)
     parent_version = serializers.IntegerField(min_value=1)
     new_task_id = serializers.UUIDField()
+
+
+class DetachTaskCommandSerializer(serializers.Serializer):
+    occurrence_version = serializers.IntegerField(min_value=1)
+    repeat_weekdays = serializers.ListField(
+        child=serializers.IntegerField(min_value=0, max_value=6),
+        required=False, allow_null=True, default=None,
+    )

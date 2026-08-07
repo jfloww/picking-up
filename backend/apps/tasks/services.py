@@ -43,6 +43,12 @@ class PromoteSubtaskResult:
     task: Task
 
 
+@dataclass(frozen=True)
+class DetachTaskResult:
+    occurrence: Task
+    anchor: Task | None
+
+
 def _lock_user(user):
     # Serializing commands per owner gives sibling-order calculations a stable
     # boundary even when two commands touch different Task rows.
@@ -56,6 +62,40 @@ def _locked_owned_tasks(user, task_ids) -> dict[str, Task]:
         .order_by("id")
     )
     return {str(task.id): task for task in tasks}
+
+
+def _current_effective_date(task: Task) -> str | None:
+    if task.scope_kind == "day":
+        return task.scope_value
+    if task.scope_kind == "week" and task.rolled_from_kind == "day":
+        return task.rolled_from_value
+    return None
+
+
+def _append_anchor_exclusion(user, occurrence: Task) -> Task | None:
+    # Additive set-union onto the anchor's excluded_dates — never a whole-
+    # array replace — so a concurrent exclusion from another writer always
+    # survives regardless of what this command does. No anchor_version
+    # precondition: the owner-row lock (_lock_user, already held by every
+    # caller) is the only concurrency guarantee this write needs, since the
+    # write is idempotent (adding the same date twice is a no-op).
+    anchor_id = occurrence.repeat_source_id
+    if not anchor_id:
+        return None
+    anchors = _locked_owned_tasks(user, [anchor_id])
+    anchor = anchors.get(str(anchor_id))
+    if anchor is None:
+        return None
+    date = _current_effective_date(occurrence)
+    if date is None:
+        return None
+    existing = set(anchor.excluded_dates or [])
+    if date in existing:
+        return anchor
+    anchor.excluded_dates = [*(anchor.excluded_dates or []), date]
+    anchor.version += 1
+    anchor.save(update_fields=["excluded_dates", "version", "updated_at"])
+    return anchor
 
 
 def _assert_versions(expected: dict[str, int], tasks: dict[str, Task]):
@@ -157,6 +197,37 @@ def nest_task(
     source.delete()
 
     return NestTaskResult(target=target, removed_task_id=removed_task_id)
+
+
+@transaction.atomic
+def detach_task(
+    *,
+    user,
+    occurrence_id,
+    occurrence_version: int,
+    repeat_weekdays: list[int] | None,
+) -> DetachTaskResult:
+    _lock_user(user)
+    occurrence_key = str(occurrence_id)
+    tasks = _locked_owned_tasks(user, [occurrence_id])
+    if occurrence_key not in tasks:
+        raise TaskCommandNotFound
+
+    occurrence = tasks[occurrence_key]
+    _assert_versions({occurrence_key: occurrence_version}, tasks)
+
+    # Must run before repeat_source is cleared below — it reads
+    # occurrence.repeat_source_id to find the anchor.
+    anchor = _append_anchor_exclusion(user, occurrence)
+
+    occurrence.repeat_source = None
+    occurrence.repeat_weekdays = repeat_weekdays
+    occurrence.version += 1
+    occurrence.save(
+        update_fields=["repeat_source", "repeat_weekdays", "version", "updated_at"]
+    )
+
+    return DetachTaskResult(occurrence=occurrence, anchor=anchor)
 
 
 def _promotion_order(user, parent: Task) -> float:
