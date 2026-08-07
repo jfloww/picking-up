@@ -812,18 +812,14 @@ the same reason noted in the first slice's checkpoint above: SQLite accepts
 `select_for_update()` but treats it as a no-op. This remains connected to
 RF-012.
 
-## Remaining RF-005 work
+## RF-005 completion notes
 
-RF-005 stays **In progress** until the following client-owned mutation moves to
-an equivalent server command and its callers stop composing generic writes:
-
-- **Reorder:** send structural intent such as neighboring Task IDs and let the
-  server validate list membership and calculate the fractional order. Sending
-  an arbitrary client-computed float would leave the business rule client
-  owned. The promotion calculation is already centralized in one frontend
-  helper plus the authoritative Django service; a reorder command would remove
-  the remaining client authority and close the promotion sibling-locking gap,
-  since `POST /api/tasks/` would no longer accept a client-supplied `order`.
+RF-005's last client-owned mutation was Reorder: sending structural intent
+(neighboring Task IDs) instead of an arbitrary client-computed float, so the
+server validates list membership and calculates the fractional order itself.
+The "Reorder command" and "Server-computed creation order" sections above
+cover how this landed — see those for the current contract rather than this
+section, which described the gap before it closed.
 
 The older detach design said detaching did not touch the anchor. That statement
 is superseded by the current exclusion behavior: without recording the
