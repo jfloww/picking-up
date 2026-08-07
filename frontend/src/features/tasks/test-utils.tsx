@@ -1,5 +1,6 @@
 import type { CategoryRepository } from "./data/category-repository";
-import type { TaskRepository } from "./data/repository";
+import { TaskVersionConflictError, type TaskRepository } from "./data/repository";
+import { promotedSubtaskOrder } from "./lib/reorder";
 import type { Category, Task } from "./types";
 
 export function makeTask(overrides: Partial<Task> = {}): Task {
@@ -10,6 +11,7 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     scope: { kind: "day", date: "2026-07-16" },
     createdAt: "2026-07-16T00:00:00.000Z",
     order: 0,
+    version: 1,
     ...overrides,
   };
 }
@@ -35,13 +37,77 @@ export function fakeRepository(
       return [...state.tasks];
     },
     async create(task) {
-      state.tasks = [...state.tasks, task];
+      const created = { ...task, version: 1 };
+      state.tasks = [...state.tasks, created];
+      return created;
     },
     async update(task) {
-      state.tasks = state.tasks.map((t) => (t.id === task.id ? task : t));
+      const current = state.tasks.find((item) => item.id === task.id);
+      if (!current || current.version !== task.version) throw new TaskVersionConflictError();
+      const updated = { ...task, version: task.version + 1 };
+      state.tasks = state.tasks.map((t) => (t.id === task.id ? updated : t));
+      return updated;
     },
-    async remove(id) {
+    async remove(id, version) {
+      const current = state.tasks.find((item) => item.id === id);
+      if (!current || current.version !== version) throw new TaskVersionConflictError();
       state.tasks = state.tasks.filter((t) => t.id !== id);
+    },
+    async nestTask(command) {
+      const source = state.tasks.find((task) => task.id === command.sourceId);
+      const target = state.tasks.find((task) => task.id === command.targetId);
+      if (
+        !source ||
+        !target ||
+        source.version !== command.sourceVersion ||
+        target.version !== command.targetVersion
+      ) {
+        throw new TaskVersionConflictError();
+      }
+      const updatedTarget: Task = {
+        ...target,
+        version: target.version + 1,
+        subtasks: [
+          ...(target.subtasks ?? []),
+          { id: command.subtaskId, title: source.title, done: source.done },
+        ],
+      };
+      state.tasks = state.tasks
+        .filter((task) => task.id !== source.id)
+        .map((task) => (task.id === target.id ? updatedTarget : task));
+      return { target: updatedTarget, removedTaskId: source.id };
+    },
+    async promoteSubtask(command) {
+      const parent = state.tasks.find((task) => task.id === command.parentId);
+      if (!parent || parent.version !== command.parentVersion) {
+        throw new TaskVersionConflictError();
+      }
+      const subtask = parent.subtasks?.find((item) => item.id === command.subtaskId);
+      if (!subtask) throw new Error("Subtask not found.");
+
+      const order = promotedSubtaskOrder(state.tasks, parent);
+
+      const now = new Date().toISOString();
+      const task: Task = {
+        id: command.newTaskId,
+        title: subtask.title,
+        done: subtask.done,
+        scope: parent.scope,
+        createdAt: now,
+        completedAt: subtask.done ? now : undefined,
+        order,
+        version: 1,
+      };
+      const updatedParent: Task = {
+        ...parent,
+        subtasks: parent.subtasks?.filter((item) => item.id !== command.subtaskId),
+        version: parent.version + 1,
+      };
+      state.tasks = [
+        ...state.tasks.map((item) => (item.id === parent.id ? updatedParent : item)),
+        task,
+      ];
+      return { parent: updatedParent, task };
     },
   };
 }

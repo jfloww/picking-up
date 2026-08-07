@@ -48,6 +48,7 @@ describe("lostFieldsFor", () => {
       lostFieldsFor(
         makeTask({
           memo: "call the plumber",
+          completedAt: "2026-08-06T12:00:00.000Z",
           time: "09:00",
           durationMinutes: 30,
           priority: true,
@@ -55,10 +56,29 @@ describe("lostFieldsFor", () => {
           background: true,
         }),
       ),
-    ).toEqual(["note", "time", "duration", "priority", "due date", "background"]);
+    ).toEqual([
+      "note",
+      "completion time",
+      "time",
+      "duration",
+      "priority",
+      "due date",
+      "background",
+    ]);
   });
 
   it("omits fields that aren't set", () => {
     expect(lostFieldsFor(makeTask({ priority: true }))).toEqual(["priority"]);
+  });
+
+  it("includes rollover and exclusion history that a subtask cannot represent", () => {
+    expect(
+      lostFieldsFor(
+        makeTask({
+          rolledFrom: { kind: "day", date: "2026-08-05" },
+          excludedDates: ["2026-08-04"],
+        }),
+      ),
+    ).toEqual(["rollover history", "excluded routine dates"]);
   });
 });

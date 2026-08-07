@@ -54,6 +54,27 @@ describe("middleware", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
+  it("also refreshes an expired access token on a /api/categories request", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ access: "new-access-token", refresh: "new-refresh-token" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = requestWithCookies(
+      "http://localhost/api/categories/41fdcb65-ca75-46f5-9790-04f246888cb6",
+      `access_token=${expiredAccessToken()}; refresh_token=a-valid-refresh-token`,
+    );
+
+    const response = await middleware(request);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/auth/token/refresh/"),
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(response.cookies.get("access_token")?.value).toBe("new-access-token");
+    expect(response.headers.get("location")).toBeNull();
+  });
+
   it("still lets a /api/tasks request through (unredirected) when the refresh token is also invalid", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ detail: "Token is invalid or expired." }, 401));
     vi.stubGlobal("fetch", fetchMock);

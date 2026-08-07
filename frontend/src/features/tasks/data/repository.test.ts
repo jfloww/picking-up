@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { Task } from "../types";
-import { createLocalStorageRepository, normalizeTask, type TaskStorage } from "./repository";
+import {
+  createLocalStorageRepository,
+  normalizeTask,
+  TaskVersionConflictError,
+  type TaskStorage,
+} from "./repository";
 
 function fakeStorage(initial: Record<string, string> = {}): TaskStorage {
   const map = new Map(Object.entries(initial));
@@ -18,19 +23,114 @@ const task: Task = {
   scope: { kind: "day", date: "2026-07-16" },
   createdAt: "2026-07-16T00:00:00.000Z",
   order: 0,
+  version: 1,
 };
 
 describe("createLocalStorageRepository", () => {
   it("round-trips create/list/update/remove", async () => {
     const repo = createLocalStorageRepository(fakeStorage());
     await repo.create(task);
-    expect(await repo.list()).toEqual([task]);
+    const [loaded] = await repo.list();
+    expect(loaded).toMatchObject(task);
+    expect(loaded.version).toBe(1);
 
-    await repo.update({ ...task, done: true });
-    expect((await repo.list())[0].done).toBe(true);
+    const updated = await repo.update({ ...task, done: true });
+    expect(updated).toMatchObject({ done: true, version: 2 });
+    expect((await repo.list())[0]).toMatchObject({ done: true, version: 2 });
 
-    await repo.remove("a");
+    await repo.remove("a", 2);
     expect(await repo.list()).toEqual([]);
+  });
+
+  it("normalizes pre-version legacy tasks to version 1", async () => {
+    const legacyTask = { ...task } as Partial<Task>;
+    delete legacyTask.version;
+    const repo = createLocalStorageRepository(
+      fakeStorage({ "picking-up.tasks.v1": JSON.stringify([legacyTask]) }),
+    );
+
+    const [loaded] = await repo.list();
+    expect(loaded).toMatchObject(task);
+    expect(loaded.version).toBe(1);
+  });
+
+  it("rejects stale update and delete preconditions without changing storage", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    await repo.create(task);
+
+    await expect(repo.update({ ...task, version: 2, done: true })).rejects.toBeInstanceOf(
+      TaskVersionConflictError,
+    );
+    await expect(repo.remove(task.id, 2)).rejects.toBeInstanceOf(TaskVersionConflictError);
+    expect(await repo.list()).toEqual([task]);
+  });
+
+  it("nests with one authoritative result and rejects a stale retry", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const source = { ...task, id: "source", title: "buy milk" };
+    const target = { ...task, id: "target", title: "groceries", version: 3 };
+    await repo.create(source);
+    await repo.create(target);
+    // create() establishes version 1 regardless of a caller-provided value.
+
+    const result = await repo.nestTask({
+      sourceId: source.id,
+      targetId: target.id,
+      sourceVersion: 1,
+      targetVersion: 1,
+      subtaskId: "subtask-id",
+      confirmDataLoss: false,
+    });
+
+    expect(result).toEqual({
+      target: {
+        ...target,
+        version: 2,
+        subtasks: [{ id: "subtask-id", title: "buy milk", done: false }],
+      },
+      removedTaskId: source.id,
+    });
+    expect(await repo.list()).toEqual([result.target]);
+    await expect(
+      repo.nestTask({
+        sourceId: source.id,
+        targetId: target.id,
+        sourceVersion: 1,
+        targetVersion: 1,
+        subtaskId: "another-id",
+        confirmDataLoss: false,
+      }),
+    ).rejects.toBeInstanceOf(TaskVersionConflictError);
+    expect(await repo.list()).toEqual([result.target]);
+  });
+
+  it("promotes a subtask and increments only the existing parent's version", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const parent = {
+      ...task,
+      id: "parent",
+      title: "trip",
+      order: 2,
+      subtasks: [{ id: "subtask-id", title: "book flights", done: true }],
+    };
+    await repo.create(parent);
+
+    const result = await repo.promoteSubtask({
+      parentId: parent.id,
+      subtaskId: "subtask-id",
+      parentVersion: 1,
+      newTaskId: "promoted-id",
+    });
+
+    expect(result.parent).toMatchObject({ id: parent.id, subtasks: [], version: 2 });
+    expect(result.task).toMatchObject({
+      id: "promoted-id",
+      title: "book flights",
+      done: true,
+      order: 3,
+      version: 1,
+    });
+    expect(await repo.list()).toEqual([result.parent, result.task]);
   });
 
   it("returns [] for missing, corrupt, or non-array data", async () => {

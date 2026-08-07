@@ -34,10 +34,13 @@ export function nestBlockMessage(reason: NestBlockReason): string {
 export function lostFieldsFor(task: Task): string[] {
   const fields: string[] = [];
   if (task.memo) fields.push("note");
+  if (task.completedAt) fields.push("completion time");
   if (task.time) fields.push("time");
   if (task.durationMinutes) fields.push("duration");
   if (task.priority) fields.push("priority");
   if (task.dueDate) fields.push("due date");
   if (task.background) fields.push("background");
+  if (task.rolledFrom) fields.push("rollover history");
+  if ((task.excludedDates?.length ?? 0) > 0) fields.push("excluded routine dates");
   return fields;
 }

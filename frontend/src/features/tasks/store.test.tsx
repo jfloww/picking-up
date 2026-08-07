@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TasksProvider, tasksReducer, useTasks } from "./store";
 import { fakeCategoryRepository, fakeRepository, makeTask } from "./test-utils";
+import { TaskVersionConflictError } from "./data/repository";
 import { addDays, todayKey, weekStartOf } from "./lib/dates";
 import type { Category, Task } from "./types";
 
@@ -647,6 +648,9 @@ describe("TasksProvider", () => {
       const target = makeTask({ id: "t", title: "groceries", scope: { kind: "day", date: todayKey() } });
       const { repo, result } = setup(fakeRepository([source, target]));
       await waitFor(() => expect(result.current.loaded).toBe(true));
+      const nestSpy = vi.spyOn(repo, "nestTask");
+      const updateSpy = vi.spyOn(repo, "update");
+      const removeSpy = vi.spyOn(repo, "remove");
 
       act(() => result.current.convertTaskToSubtask("s", "t"));
 
@@ -658,6 +662,38 @@ describe("TasksProvider", () => {
       await waitFor(() =>
         expect(repo.tasks.find((t) => t.id === "t")?.subtasks).toHaveLength(1),
       );
+      expect(nestSpy).toHaveBeenCalledOnce();
+      expect(nestSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceId: "s",
+          targetId: "t",
+          sourceVersion: 1,
+          targetVersion: 1,
+          confirmDataLoss: false,
+        }),
+      );
+      expect(nestSpy.mock.calls[0][0].subtaskId).toBe(updatedTarget?.subtasks?.[0].id);
+      expect(updateSpy).not.toHaveBeenCalled();
+      expect(removeSpy).not.toHaveBeenCalled();
+      await waitFor(() => expect(result.current.tasks.find((t) => t.id === "t")?.version).toBe(2));
+    });
+
+    it("convertTaskToSubtask forwards explicit data-loss confirmation", async () => {
+      const source = makeTask({
+        id: "s",
+        title: "buy milk",
+        memo: "discarded note",
+        scope: { kind: "day", date: todayKey() },
+      });
+      const target = makeTask({ id: "t", title: "groceries", scope: { kind: "day", date: todayKey() } });
+      const { repo, result } = setup(fakeRepository([source, target]));
+      const nestSpy = vi.spyOn(repo, "nestTask");
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.convertTaskToSubtask("s", "t", true));
+
+      await waitFor(() => expect(nestSpy).toHaveBeenCalledOnce());
+      expect(nestSpy).toHaveBeenCalledWith(expect.objectContaining({ confirmDataLoss: true }));
     });
 
     it("convertTaskToSubtask preserves the source task's done state", async () => {
@@ -757,6 +793,9 @@ describe("TasksProvider", () => {
       });
       const { repo, result } = setup(fakeRepository([parent]));
       await waitFor(() => expect(result.current.loaded).toBe(true));
+      const promoteSpy = vi.spyOn(repo, "promoteSubtask");
+      const createSpy = vi.spyOn(repo, "create");
+      const updateSpy = vi.spyOn(repo, "update");
 
       let created: ReturnType<typeof result.current.promoteSubtaskToTask>;
       act(() => {
@@ -770,6 +809,19 @@ describe("TasksProvider", () => {
       expect(result.current.tasks.some((t) => t.id === created?.id)).toBe(true);
       await waitFor(() => expect(repo.tasks.some((t) => t.id === created?.id)).toBe(true));
       await waitFor(() => expect(repo.tasks.find((t) => t.id === "p")?.subtasks).toEqual([]));
+      expect(promoteSpy).toHaveBeenCalledOnce();
+      expect(promoteSpy).toHaveBeenCalledWith({
+        parentId: "p",
+        subtaskId: "s1",
+        parentVersion: 1,
+        newTaskId: created?.id,
+      });
+      expect(createSpy).not.toHaveBeenCalled();
+      expect(updateSpy).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(result.current.tasks.find((t) => t.id === "p")?.version).toBe(2);
+        expect(result.current.tasks.find((t) => t.id === created?.id)?.version).toBe(1);
+      });
     });
 
     it("promoteSubtaskToTask inserts directly after an untimed parent (All Day To-Do)", async () => {
@@ -1093,6 +1145,184 @@ describe("TasksProvider", () => {
   });
 
   describe("sync failure handling", () => {
+    it("a stale nest command resyncs and removes the optimistic partial state", async () => {
+      const source = makeTask({ id: "source", title: "buy milk", scope: { kind: "day", date: todayKey() } });
+      const target = makeTask({ id: "target", title: "groceries", scope: { kind: "day", date: todayKey() } });
+      const repo = fakeRepository([source, target]);
+      const listSpy = vi.spyOn(repo, "list");
+      const nestSpy = vi
+        .spyOn(repo, "nestTask")
+        .mockRejectedValueOnce(new TaskVersionConflictError());
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      expect(listSpy).toHaveBeenCalledTimes(1);
+
+      act(() => result.current.convertTaskToSubtask("source", "target"));
+
+      // The command remains optimistic for responsive drag-and-drop feedback.
+      expect(result.current.tasks.find((task) => task.id === "source")).toBeUndefined();
+      expect(result.current.tasks.find((task) => task.id === "target")?.subtasks).toHaveLength(1);
+      await waitFor(() => expect(result.current.syncError).not.toBeNull());
+      await waitFor(() => {
+        expect(result.current.tasks.find((task) => task.id === "source")).toEqual(source);
+        expect(result.current.tasks.find((task) => task.id === "target")).toEqual(target);
+      });
+      expect(nestSpy).toHaveBeenCalledOnce();
+      expect(listSpy).toHaveBeenCalledTimes(2);
+      expect(repo.tasks).toEqual([source, target]);
+    });
+
+    it("rebases a queued target edit after a failed nest without persisting the optimistic subtask", async () => {
+      const source = makeTask({ id: "source", title: "buy milk", scope: { kind: "day", date: todayKey() } });
+      const target = makeTask({ id: "target", title: "groceries", memo: "old", scope: { kind: "day", date: todayKey() } });
+      const repo = fakeRepository([source, target]);
+      vi.spyOn(repo, "nestTask").mockRejectedValueOnce(new TaskVersionConflictError());
+      const updateSpy = vi.spyOn(repo, "update");
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => {
+        result.current.convertTaskToSubtask("source", "target");
+        result.current.setMemo("target", "edited while nesting");
+      });
+
+      await waitFor(() => expect(updateSpy).toHaveBeenCalledOnce());
+      await waitFor(() => {
+        expect(repo.tasks.find((task) => task.id === "source")).toEqual(source);
+        expect(repo.tasks.find((task) => task.id === "target")).toMatchObject({
+          memo: "edited while nesting",
+          subtasks: undefined,
+        });
+      });
+      expect(updateSpy.mock.calls[0][0].subtasks).toBeUndefined();
+    });
+
+    it("rebases a queued parent edit after failed promotion without deleting the subtask", async () => {
+      const parent = makeTask({
+        id: "parent",
+        memo: "old",
+        subtasks: [{ id: "subtask", title: "book flights", done: false }],
+        scope: { kind: "day", date: todayKey() },
+      });
+      const repo = fakeRepository([parent]);
+      vi.spyOn(repo, "promoteSubtask").mockRejectedValueOnce(new TaskVersionConflictError());
+      const updateSpy = vi.spyOn(repo, "update");
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => {
+        result.current.promoteSubtaskToTask("parent", "subtask");
+        result.current.setMemo("parent", "edited while promoting");
+      });
+
+      await waitFor(() => expect(updateSpy).toHaveBeenCalledOnce());
+      await waitFor(() => {
+        expect(repo.tasks).toHaveLength(1);
+        expect(repo.tasks[0]).toMatchObject({
+          id: "parent",
+          memo: "edited while promoting",
+          subtasks: [{ id: "subtask", title: "book flights", done: false }],
+        });
+      });
+      expect(updateSpy.mock.calls[0][0].subtasks).toEqual(parent.subtasks);
+    });
+
+    it("waits for failure resync before attempting the next queued mutation", async () => {
+      const a = makeTask({ id: "a", memo: "old a", scope: { kind: "day", date: todayKey() } });
+      const b = makeTask({ id: "b", memo: "old b", scope: { kind: "day", date: todayKey() } });
+      const repo = fakeRepository([a, b]);
+      let releaseResync: ((tasks: Task[]) => void) | undefined;
+      vi.spyOn(repo, "list")
+        .mockResolvedValueOnce([a, b])
+        .mockImplementationOnce(() => new Promise<Task[]>((resolve) => (releaseResync = resolve)));
+      const updateSpy = vi
+        .spyOn(repo, "update")
+        .mockRejectedValueOnce(new Error("network down"));
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => {
+        result.current.setMemo("a", "failed edit");
+        result.current.setMemo("b", "queued edit");
+      });
+      await waitFor(() => expect(result.current.syncError).not.toBeNull());
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        releaseResync?.([a, b]);
+        await Promise.resolve();
+      });
+
+      await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(repo.tasks.find((task) => task.id === "b")?.memo).toBe("queued edit"));
+    });
+
+    it("shows a distinct message for a version conflict vs. a generic sync failure", async () => {
+      // RF-005 review finding: both used to produce the exact same banner
+      // text, even though a conflict (someone else changed this task) and
+      // a network failure call for different mental models from the user.
+      const conflictTask = makeTask({ id: "conflict", scope: { kind: "day", date: todayKey() } });
+      const conflictRepo = fakeRepository([conflictTask]);
+      vi.spyOn(conflictRepo, "update").mockRejectedValueOnce(
+        new TaskVersionConflictError("task_version_conflict", { conflict: 4 }),
+      );
+      const conflictResult = setup(conflictRepo).result;
+      await waitFor(() => expect(conflictResult.current.loaded).toBe(true));
+
+      act(() => conflictResult.current.setPriority("conflict", true));
+
+      await waitFor(() => expect(conflictResult.current.syncError).not.toBeNull());
+      expect(conflictResult.current.syncError).toMatch(/changed elsewhere/i);
+
+      const networkTask = makeTask({ id: "network", scope: { kind: "day", date: todayKey() } });
+      const networkRepo = fakeRepository([networkTask]);
+      vi.spyOn(networkRepo, "update").mockRejectedValueOnce(new Error("network down"));
+      const networkResult = setup(networkRepo).result;
+      await waitFor(() => expect(networkResult.current.loaded).toBe(true));
+
+      act(() => networkResult.current.setPriority("network", true));
+
+      await waitFor(() => expect(networkResult.current.syncError).not.toBeNull());
+      expect(networkResult.current.syncError).not.toMatch(/changed elsewhere/i);
+
+      // A command can also 409 via TaskVersionConflictError for a domain-rule
+      // rejection (e.g. nesting a task into itself), not a staleness
+      // conflict — final-review finding: the first version of this fix
+      // showed "changed elsewhere" for these too, which is a false claim.
+      const domainRuleTask = makeTask({ id: "domain-rule", scope: { kind: "day", date: todayKey() } });
+      const domainRuleRepo = fakeRepository([domainRuleTask]);
+      vi.spyOn(domainRuleRepo, "update").mockRejectedValueOnce(
+        new TaskVersionConflictError("same_task"),
+      );
+      const domainRuleResult = setup(domainRuleRepo).result;
+      await waitFor(() => expect(domainRuleResult.current.loaded).toBe(true));
+
+      act(() => domainRuleResult.current.setPriority("domain-rule", true));
+
+      await waitFor(() => expect(domainRuleResult.current.syncError).not.toBeNull());
+      expect(domainRuleResult.current.syncError).not.toMatch(/changed elsewhere/i);
+    });
+
+    it("serializes rapid edits using each authoritative returned version", async () => {
+      const task = makeTask({ id: "a", memo: "old", scope: { kind: "day", date: todayKey() } });
+      const repo = fakeRepository([task]);
+      const updateSpy = vi.spyOn(repo, "update");
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => {
+        result.current.setMemo("a", "first");
+        result.current.setMemo("a", "second");
+      });
+
+      await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(2));
+      expect(updateSpy.mock.calls.map(([persisted]) => persisted.version)).toEqual([1, 2]);
+      await waitFor(() => {
+        expect(repo.tasks[0]).toMatchObject({ memo: "second", version: 3 });
+        expect(result.current.tasks[0]).toMatchObject({ memo: "second", version: 3 });
+      });
+    });
+
     it("setMemo: on a repo.update rejection, sets syncError and resyncs tasks from a fresh list()", async () => {
       const task = makeTask({ id: "a", memo: "old", scope: { kind: "day", date: todayKey() } });
       const repo = fakeRepository([task]);
@@ -1122,7 +1352,7 @@ describe("TasksProvider", () => {
       expect(result.current.syncError).toBeNull();
     });
 
-    it("coalesces concurrent failures into a single in-flight resync", async () => {
+    it("reconciles each failed queued write before attempting the next one", async () => {
       const a = makeTask({ id: "a", scope: { kind: "day", date: todayKey() } });
       const b = makeTask({ id: "b", scope: { kind: "day", date: todayKey() } });
       const repo = fakeRepository([a, b]);
@@ -1140,7 +1370,7 @@ describe("TasksProvider", () => {
       await waitFor(() => expect(result.current.loaded).toBe(true));
       expect(listSpy).toHaveBeenCalledTimes(1);
 
-      // Two writes fail back-to-back, as they would during a real outage.
+      // Two writes are queued back-to-back, as they would be during an outage.
       await act(async () => {
         result.current.setPriority("a", true);
         result.current.setPriority("b", true);
@@ -1148,21 +1378,17 @@ describe("TasksProvider", () => {
         await Promise.resolve();
       });
 
-      expect(updateSpy).toHaveBeenCalledTimes(2);
+      expect(updateSpy).toHaveBeenCalledTimes(1);
       expect(result.current.syncError).not.toBeNull();
-      // Both failures surfaced the banner, but only one resync went out.
+      // The second write is fenced behind reconciliation of the first.
       expect(listSpy).toHaveBeenCalledTimes(2);
 
-      // Once the in-flight resync settles, the guard releases for the next one.
       await act(async () => {
         releaseResync?.([a, b]);
         await Promise.resolve();
       });
-      await act(async () => {
-        result.current.setPriority("a", true);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+      await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(2));
+      // The second write also fails, so it gets its own post-failure resync.
       expect(listSpy).toHaveBeenCalledTimes(3);
     });
 

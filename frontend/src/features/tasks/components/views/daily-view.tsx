@@ -166,7 +166,11 @@ export function DailyView({ anchor }: CalendarViewProps) {
           targetTitle={pendingConversion.targetTitle}
           lostFields={pendingConversion.lostFields}
           onConfirm={() => {
-            actions.convertTaskToSubtask(pendingConversion.sourceId, pendingConversion.targetId);
+            actions.convertTaskToSubtask(
+              pendingConversion.sourceId,
+              pendingConversion.targetId,
+              true,
+            );
             setPendingConversion(null);
           }}
           onCancel={() => setPendingConversion(null)}

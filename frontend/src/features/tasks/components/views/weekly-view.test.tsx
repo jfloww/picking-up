@@ -234,11 +234,8 @@ describe("WeeklyView", () => {
     vi.spyOn(column, "getBoundingClientRect").mockReturnValue({
       top: 0, bottom: 300, left: 0, right: 100, width: 100, height: 300, x: 0, y: 0, toJSON: () => {},
     } as DOMRect);
-    // Measure from the handle, not the title: TaskItem renders its own <li>
-    // inside the row wrapper <li>, so getByText(...).closest("li") would
-    // return the inner one — not the wrapper the drag hook registers in
-    // itemRefs and calls getBoundingClientRect on. Mocking the inner li
-    // leaves the hook reading jsdom's all-zero default rects.
+    // The drag wrapper owns the one and only <li> for each row.
+    expect(column.querySelector("li li")).toBeNull();
     const cardFirst = screen.getByLabelText("Reorder first").closest("li")!;
     const cardSecond = screen.getByLabelText("Reorder second").closest("li")!;
     vi.spyOn(cardFirst, "getBoundingClientRect").mockReturnValue({
@@ -318,9 +315,7 @@ describe("WeeklyView", () => {
     vi.spyOn(column, "getBoundingClientRect").mockReturnValue({
       top: 0, bottom: 300, left: 0, right: 100, width: 100, height: 300, x: 0, y: 0, toJSON: () => {},
     } as DOMRect);
-    // The row wrapper <li> (the element itemRefs registers) is the handle's
-    // closest <li> — TaskItem renders a nested <li> of its own, so going via
-    // the title text would mock the wrong element.
+    // The row wrapper <li> is the element registered in itemRefs.
     const cardA = screen.getByLabelText("Reorder task a").closest("li")!;
     const cardB = screen.getByLabelText("Reorder task b").closest("li")!;
     vi.spyOn(cardA, "getBoundingClientRect").mockReturnValue({

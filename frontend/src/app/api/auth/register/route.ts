@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { requestRegister } from "@/features/auth/api/auth";
+import { apiRouteErrorResponse } from "@/lib/api/route-error";
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,9 +10,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ user }, { status: 201 });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Registration failed." },
-      { status: 400 },
-    );
+    return apiRouteErrorResponse(error, "Registration failed.");
   }
 }

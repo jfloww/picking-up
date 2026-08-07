@@ -1,12 +1,18 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import SCOPE_KIND_CHOICES, Category, Task
+from .models import (
+    CATEGORY_NORMALIZED_NAME_MAX_LENGTH,
+    SCOPE_KIND_CHOICES,
+    Category,
+    Task,
+    normalize_category_name,
+)
 
 
 class SubtaskSerializer(serializers.Serializer):
-    id = serializers.CharField()
-    title = serializers.CharField()
+    id = serializers.CharField(max_length=255, allow_blank=False)
+    title = serializers.CharField(max_length=500, allow_blank=False)
     done = serializers.BooleanField()
 
 
@@ -15,6 +21,32 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = ("id", "name", "created_at")
         read_only_fields = ("id", "created_at")
+
+    def validate_name(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("This field may not be blank.")
+
+        normalized_name = normalize_category_name(name)
+        if len(normalized_name) > CATEGORY_NORMALIZED_NAME_MAX_LENGTH:
+            raise serializers.ValidationError(
+                "The normalized category name exceeds the supported "
+                f"{CATEGORY_NORMALIZED_NAME_MAX_LENGTH}-character limit."
+            )
+
+        request = self.context.get("request")
+        if self.instance is not None and request is not None and request.user.is_authenticated:
+            conflict = (
+                Category.objects.filter(
+                    user=request.user,
+                    normalized_name=normalized_name,
+                )
+                .exclude(pk=self.instance.pk)
+                .exists()
+            )
+            if conflict:
+                raise serializers.ValidationError("A category with this name already exists.")
+        return name
 
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -79,8 +111,9 @@ class TaskSerializer(serializers.ModelSerializer):
             "duration_minutes",
             "background",
             "order",
+            "version",
         )
-        read_only_fields = ("created_at", "completed_at")
+        read_only_fields = ("created_at", "completed_at", "version")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -113,4 +146,19 @@ class TaskSerializer(serializers.ModelSerializer):
         validated_data.pop("id", None)
         if "done" in validated_data and validated_data["done"] != instance.done:
             validated_data["completed_at"] = timezone.now() if validated_data["done"] else None
+        validated_data["version"] = instance.version + 1
         return super().update(instance, validated_data)
+
+
+class NestTaskCommandSerializer(serializers.Serializer):
+    target_id = serializers.UUIDField()
+    source_version = serializers.IntegerField(min_value=1)
+    target_version = serializers.IntegerField(min_value=1)
+    subtask_id = serializers.CharField(max_length=255, allow_blank=False)
+    confirm_data_loss = serializers.BooleanField(default=False)
+
+
+class PromoteSubtaskCommandSerializer(serializers.Serializer):
+    subtask_id = serializers.CharField(max_length=255, allow_blank=False)
+    parent_version = serializers.IntegerField(min_value=1)
+    new_task_id = serializers.UUIDField()

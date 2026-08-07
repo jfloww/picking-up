@@ -18,6 +18,18 @@ export class ApiUnauthorizedError extends Error {
   }
 }
 
+export class ApiResponseError extends Error {
+  readonly status: number;
+  readonly retryAfter?: string;
+
+  constructor(message: string, status: number, retryAfter?: string) {
+    super(message);
+    this.name = "ApiResponseError";
+    this.status = status;
+    this.retryAfter = retryAfter;
+  }
+}
+
 export async function apiRequest<TResponse>(
   path: string,
   options: ApiRequestOptions = {},
@@ -47,7 +59,11 @@ export async function apiRequest<TResponse>(
       throw new ApiUnauthorizedError();
     }
     const message = await readErrorMessage(response);
-    throw new Error(message);
+    throw new ApiResponseError(
+      message,
+      response.status,
+      response.headers.get("Retry-After") ?? undefined,
+    );
   }
 
   // 204: standard no-content. 205: Django's logout endpoint returns this on

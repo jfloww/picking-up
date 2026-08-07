@@ -1,6 +1,8 @@
+import unicodedata
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -12,6 +14,13 @@ SCOPE_KIND_CHOICES = [
     ("bucket", "bucket"),
 ]
 
+CATEGORY_NORMALIZED_NAME_MAX_LENGTH = 180
+
+
+def normalize_category_name(value: str) -> str:
+    """Return the stable, locale-independent key used for category identity."""
+    return unicodedata.normalize("NFKC", value).strip().casefold()
+
 
 class Category(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -19,13 +28,37 @@ class Category(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="categories"
     )
     name = models.CharField(max_length=60)
+    normalized_name = models.CharField(
+        max_length=CATEGORY_NORMALIZED_NAME_MAX_LENGTH,
+        editable=False,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["created_at"]
         constraints = [
-            models.UniqueConstraint(fields=["user", "name"], name="unique_category_name_per_user"),
+            models.UniqueConstraint(
+                fields=["user", "normalized_name"],
+                name="unique_normalized_category_name_per_user",
+            ),
         ]
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.strip()
+        self.normalized_name = normalize_category_name(self.name)
+        if len(self.normalized_name) > CATEGORY_NORMALIZED_NAME_MAX_LENGTH:
+            raise ValidationError(
+                {
+                    "name": (
+                        "The normalized category name exceeds the supported "
+                        f"{CATEGORY_NORMALIZED_NAME_MAX_LENGTH}-character limit."
+                    )
+                }
+            )
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "name" in update_fields:
+            kwargs["update_fields"] = set(update_fields) | {"normalized_name"}
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -66,6 +99,7 @@ class Task(models.Model):
     duration_minutes = models.PositiveIntegerField(blank=True, null=True)
     background = models.BooleanField(blank=True, null=True)
     order = models.FloatField(default=0)
+    version = models.PositiveBigIntegerField(default=1, editable=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

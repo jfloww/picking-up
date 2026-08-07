@@ -13,11 +13,21 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import GoogleIdentity
 from .serializers import EmailTokenObtainPairSerializer, RegisterSerializer, UserSerializer
+from .throttles import (
+    FirstFailureThrottleMixin,
+    GoogleBurstThrottle,
+    GoogleSustainedThrottle,
+    LoginBurstThrottle,
+    LoginSustainedThrottle,
+    RegisterBurstThrottle,
+    RegisterSustainedThrottle,
+)
 
 
-class RegisterView(generics.CreateAPIView):
+class RegisterView(FirstFailureThrottleMixin, generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = (permissions.AllowAny,)
+    throttle_classes = (RegisterBurstThrottle, RegisterSustainedThrottle)
 
 
 class MeView(APIView):
@@ -28,8 +38,9 @@ class MeView(APIView):
         return Response(serializer.data)
 
 
-class EmailTokenObtainPairView(TokenObtainPairView):
+class EmailTokenObtainPairView(FirstFailureThrottleMixin, TokenObtainPairView):
     serializer_class = EmailTokenObtainPairSerializer
+    throttle_classes = (LoginBurstThrottle, LoginSustainedThrottle)
 
 
 class LogoutView(APIView):
@@ -55,8 +66,9 @@ class LogoutView(APIView):
 User = get_user_model()
 
 
-class GoogleTokenObtainView(APIView):
+class GoogleTokenObtainView(FirstFailureThrottleMixin, APIView):
     permission_classes = (permissions.AllowAny,)
+    throttle_classes = (GoogleBurstThrottle, GoogleSustainedThrottle)
 
     def post(self, request):
         origin = request.headers.get("Origin")
@@ -112,7 +124,21 @@ class GoogleTokenObtainView(APIView):
                         )
                     user = identity.user
             else:
-                GoogleIdentity.objects.create(user=user, sub=sub, email=email)
+                # Two first-time requests for the same existing account can
+                # both miss the identity lookup above. Let the database choose
+                # the winner, then reuse that winner instead of leaking the
+                # unique sub/one-to-one IntegrityError as a 500.
+                try:
+                    with transaction.atomic():
+                        GoogleIdentity.objects.create(user=user, sub=sub, email=email)
+                except IntegrityError:
+                    identity = GoogleIdentity.objects.select_related("user").filter(sub=sub).first()
+                    if identity is None:
+                        return Response(
+                            {"error": "Could not complete Google sign-in."},
+                            status=status.HTTP_409_CONFLICT,
+                        )
+                    user = identity.user
 
         refresh = RefreshToken.for_user(user)
 

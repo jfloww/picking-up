@@ -103,6 +103,7 @@ export function TaskItem({
   highlight,
   repeatLabel,
   size = "default",
+  rootElement = "li",
   onToggle,
   onMemoChange,
   onTimeChange,
@@ -124,6 +125,7 @@ export function TaskItem({
   highlight?: "overdue" | "pending";
   repeatLabel?: string;
   size?: "default" | "large" | "timeline" | "week";
+  rootElement?: "li" | "div";
   onToggle: () => void;
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
@@ -146,6 +148,7 @@ export function TaskItem({
   const large = size === "large";
   const timeline = size === "timeline";
   const week = size === "week";
+  const Root = rootElement;
   const largeMeta = task.time
     ? `${highlight === "overdue" ? "Overdue • " : ""}${formatTaskTimeRange(task.time, task.durationMinutes)}`
     : "All Day";
@@ -178,7 +181,7 @@ export function TaskItem({
 
   if (timeline) {
     return (
-      <li>
+      <Root>
         <div
           onClick={selectOrToggle}
           className="absolute inset-0 flex cursor-pointer items-center gap-3 px-3 py-2.5"
@@ -202,14 +205,14 @@ export function TaskItem({
           </button>
           {timeBadge}
         </div>
-      </li>
+      </Root>
     );
   }
 
   if (week) {
     const hasMeta = !!task.time || subtasks.length > 0 || !!repeatLabel;
     return (
-      <li>
+      <Root>
         <div
           className={cn(
             "rounded-lg bg-muted px-2 py-1.5",
@@ -283,12 +286,12 @@ export function TaskItem({
             </button>
           )}
         </div>
-      </li>
+      </Root>
     );
   }
 
   return (
-    <li>
+    <Root>
       <div
         onClick={large ? selectOrToggle : undefined}
         className={cn(
@@ -425,6 +428,6 @@ export function TaskItem({
           />
         </div>
       )}
-    </li>
+    </Root>
   );
 }

@@ -33,5 +33,6 @@ export function materializeRoutines(tasks: Task[], today: string): Task[] {
       order: 0,
       repeatSourceId: anchor.id,
       createdAt: new Date().toISOString(),
+      version: 1,
     }));
 }

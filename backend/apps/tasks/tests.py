@@ -1,19 +1,28 @@
+import importlib
 import uuid
 from datetime import datetime, timedelta, timezone as dt_timezone
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from .models import Category, Task
+from .models import Category, Task, normalize_category_name
+from .services import nest_task, promote_subtask
 
 
 User = get_user_model()
 
 
 def auth_client(email="owner@example.com", password="StrongPass123!"):
+    # Authentication throttles deliberately persist outside database
+    # transactions. Keep this unrelated task-test helper isolated from prior
+    # tests while dedicated throttle tests exercise persistence explicitly.
+    cache.clear()
     user = User.objects.create_user(username=email, email=email, password=password)
     client = APIClient()
     token_response = client.post(
@@ -48,6 +57,10 @@ def make_task_payload(**overrides):
     }
     payload.update(overrides)
     return payload
+
+
+def if_match(version=1):
+    return {"HTTP_IF_MATCH": f'"{version}"'}
 
 
 class TaskApiTests(TestCase):
@@ -119,6 +132,24 @@ class TaskApiTests(TestCase):
         self.assertEqual(stored.duration_minutes, 45)
         self.assertTrue(stored.background)
 
+    def test_create_rejects_subtask_fields_that_commands_cannot_store_safely(self):
+        owner, client = auth_client("subtask-limits@example.com")
+        cases = [
+            {"id": "x" * 256, "title": "valid", "done": False},
+            {"id": "valid", "title": "x" * 501, "done": False},
+        ]
+
+        for subtask in cases:
+            with self.subTest(field="id" if len(subtask["id"]) > 255 else "title"):
+                response = client.post(
+                    "/api/tasks/",
+                    make_task_payload(subtasks=[subtask]),
+                    format="json",
+                )
+
+                self.assertEqual(response.status_code, 400)
+        self.assertEqual(Task.objects.filter(user=owner).count(), 0)
+
     def test_update_fully_replaces_a_tasks_fields(self):
         owner, client = auth_client()
         task_id = str(uuid.uuid4())
@@ -132,19 +163,103 @@ class TaskApiTests(TestCase):
             f"/api/tasks/{task_id}/",
             make_task_payload(id=task_id, title="after", priority=None),
             format="json",
+            **if_match(),
         )
 
         self.assertEqual(response.status_code, 200, response.data)
         stored = Task.objects.get(id=task_id)
         self.assertEqual(stored.title, "after")
         self.assertIsNone(stored.priority)
+        self.assertEqual(response.data["version"], 2)
+        self.assertEqual(response["ETag"], '"2"')
+
+    def test_task_detail_exposes_version_and_etag(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        create_response = client.post(
+            "/api/tasks/",
+            make_task_payload(id=task_id),
+            format="json",
+        )
+
+        detail_response = client.get(f"/api/tasks/{task_id}/")
+
+        self.assertEqual(create_response.data["version"], 1)
+        self.assertEqual(detail_response.data["version"], 1)
+        self.assertEqual(detail_response["ETag"], '"1"')
+
+    def test_update_requires_one_quoted_if_match_version(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=task_id), format="json")
+
+        missing = client.patch(f"/api/tasks/{task_id}/", {"memo": "x"}, format="json")
+        malformed = client.patch(
+            f"/api/tasks/{task_id}/",
+            {"memo": "x"},
+            format="json",
+            HTTP_IF_MATCH="1",
+        )
+
+        self.assertEqual(missing.status_code, 428)
+        self.assertEqual(missing.data["code"], "task_version_required")
+        self.assertEqual(malformed.status_code, 400)
+        self.assertEqual(malformed.data["code"], "task_version_malformed")
+        self.assertIsNone(Task.objects.get(id=task_id).memo)
+
+    def test_stale_put_cannot_overwrite_a_winning_update(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        client.post(
+            "/api/tasks/",
+            make_task_payload(id=task_id, title="original"),
+            format="json",
+        )
+        winner = client.patch(
+            f"/api/tasks/{task_id}/",
+            {"memo": "winner"},
+            format="json",
+            **if_match(1),
+        )
+
+        stale = client.put(
+            f"/api/tasks/{task_id}/",
+            make_task_payload(id=task_id, title="stale overwrite"),
+            format="json",
+            **if_match(1),
+        )
+
+        self.assertEqual(winner.status_code, 200)
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.data["code"], "task_version_conflict")
+        self.assertEqual(stale.data["current_versions"][task_id], 2)
+        stored = Task.objects.get(id=task_id)
+        self.assertEqual(stored.title, "original")
+        self.assertEqual(stored.memo, "winner")
+        self.assertEqual(stored.version, 2)
+
+    def test_stale_delete_is_rejected_without_removing_the_task(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=task_id), format="json")
+        client.patch(
+            f"/api/tasks/{task_id}/",
+            {"memo": "newer"},
+            format="json",
+            **if_match(1),
+        )
+
+        response = client.delete(f"/api/tasks/{task_id}/", **if_match(1))
+
+        self.assertEqual(response.status_code, 409)
+        self.assertTrue(Task.objects.filter(id=task_id).exists())
 
     def test_delete_removes_the_task(self):
         owner, client = auth_client()
         task_id = str(uuid.uuid4())
         client.post("/api/tasks/", make_task_payload(id=task_id), format="json")
 
-        response = client.delete(f"/api/tasks/{task_id}/")
+        response = client.delete(f"/api/tasks/{task_id}/", **if_match())
 
         self.assertEqual(response.status_code, 204)
         self.assertFalse(Task.objects.filter(id=task_id).exists())
@@ -160,10 +275,15 @@ class TaskApiTests(TestCase):
             format="json",
         )
 
-        client.delete(f"/api/tasks/{anchor_id}/")
+        client.delete(f"/api/tasks/{anchor_id}/", **if_match())
 
         occurrence = Task.objects.get(id=occurrence_id)
         self.assertIsNone(occurrence.repeat_source_id)
+        # RF-005 review finding: the SET_NULL cascade bypasses Task.save(),
+        # so without an explicit bump a client holding the pre-detach
+        # version could still pass If-Match after this occurrence's meaning
+        # changed underneath it.
+        self.assertEqual(occurrence.version, 2)
 
     def test_unauthenticated_requests_are_rejected(self):
         client = APIClient()
@@ -251,6 +371,7 @@ class TaskApiTests(TestCase):
             f"/api/tasks/{owner_task_id}/",
             make_task_payload(id=other_task_id, title="hijacked"),
             format="json",
+            **if_match(),
         )
 
         self.assertEqual(response.status_code, 200, response.data)
@@ -283,7 +404,12 @@ class TaskApiTests(TestCase):
             "scope_value": "2026-07-27",
             "created_at": "2026-07-27T00:00:00.000Z",
         }
-        response = client.put(f"/api/tasks/{task_id}/", minimal_payload, format="json")
+        response = client.put(
+            f"/api/tasks/{task_id}/",
+            minimal_payload,
+            format="json",
+            **if_match(),
+        )
 
         self.assertEqual(response.status_code, 200, response.data)
         stored = Task.objects.get(id=task_id)
@@ -365,7 +491,12 @@ class TaskApiTests(TestCase):
         client.post("/api/tasks/", make_task_payload(id=task_id, done=False), format="json")
         before = timezone.now()
 
-        response = client.patch(f"/api/tasks/{task_id}/", {"done": True}, format="json")
+        response = client.patch(
+            f"/api/tasks/{task_id}/",
+            {"done": True},
+            format="json",
+            **if_match(),
+        )
 
         self.assertEqual(response.status_code, 200, response.data)
         stored = Task.objects.get(id=task_id)
@@ -379,7 +510,12 @@ class TaskApiTests(TestCase):
         client.post("/api/tasks/", make_task_payload(id=task_id, done=True), format="json")
         self.assertIsNotNone(Task.objects.get(id=task_id).completed_at)
 
-        response = client.patch(f"/api/tasks/{task_id}/", {"done": False}, format="json")
+        response = client.patch(
+            f"/api/tasks/{task_id}/",
+            {"done": False},
+            format="json",
+            **if_match(),
+        )
 
         self.assertEqual(response.status_code, 200, response.data)
         stored = Task.objects.get(id=task_id)
@@ -395,6 +531,7 @@ class TaskApiTests(TestCase):
             f"/api/tasks/{task_id}/",
             {"completed_at": "2020-01-01T00:00:00.000Z"},
             format="json",
+            **if_match(),
         )
 
         self.assertEqual(response.status_code, 200, response.data)
@@ -425,9 +562,516 @@ class TaskApiTests(TestCase):
             f"/api/tasks/{task_id}/",
             make_task_payload(id=task_id, order=2.5),
             format="json",
+            **if_match(),
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["order"], 2.5)
+
+
+class TaskCommandApiTests(TestCase):
+    def setUp(self):
+        self.user, self.client = auth_client("commands@example.com")
+
+    def create_task(self, **overrides):
+        task_id = overrides.pop("id", str(uuid.uuid4()))
+        response = self.client.post(
+            "/api/tasks/",
+            make_task_payload(id=task_id, **overrides),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        return Task.objects.get(id=task_id)
+
+    def nest(self, source, target, **overrides):
+        payload = {
+            "target_id": str(target.id),
+            "source_version": source.version,
+            "target_version": target.version,
+            "subtask_id": str(uuid.uuid4()),
+            "confirm_data_loss": False,
+        }
+        payload.update(overrides)
+        return self.client.post(
+            f"/api/tasks/{source.id}/commands/nest/",
+            payload,
+            format="json",
+        )
+
+    def promote(self, parent, subtask_id="s1", **overrides):
+        payload = {
+            "subtask_id": subtask_id,
+            "parent_version": parent.version,
+            "new_task_id": str(uuid.uuid4()),
+        }
+        payload.update(overrides)
+        return self.client.post(
+            f"/api/tasks/{parent.id}/commands/promote-subtask/",
+            payload,
+            format="json",
+        )
+
+    def test_nest_atomically_appends_subtask_and_removes_source(self):
+        source = self.create_task(title="buy milk", done=True)
+        target = self.create_task(
+            title="groceries",
+            subtasks=[{"id": "existing", "title": "bread", "done": False}],
+        )
+
+        response = self.nest(
+            source,
+            target,
+            subtask_id="nested-1",
+            confirm_data_loss=True,
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["removed_task_id"], str(source.id))
+        self.assertFalse(Task.objects.filter(id=source.id).exists())
+        target.refresh_from_db()
+        self.assertEqual(target.version, 2)
+        self.assertEqual(
+            target.subtasks,
+            [
+                {"id": "existing", "title": "bread", "done": False},
+                {"id": "nested-1", "title": "buy milk", "done": True},
+            ],
+        )
+        self.assertEqual(response.data["target"]["version"], 2)
+
+    def test_nest_allows_a_timed_target_in_the_same_daily_agenda(self):
+        source = self.create_task(title="preparation")
+        target = self.create_task(title="meeting", time="09:00")
+
+        response = self.nest(source, target, subtask_id="timed-target-child")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(Task.objects.filter(id=source.id).exists())
+        target.refresh_from_db()
+        self.assertEqual(target.subtasks[0]["id"], "timed-target-child")
+
+    def test_nest_rejects_nesting_a_task_into_itself(self):
+        source = self.create_task(title="alone")
+
+        response = self.nest(source, source)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["code"], "same_task")
+        self.assertTrue(Task.objects.filter(id=source.id).exists())
+
+    def test_nest_requires_explicit_confirmation_for_server_detected_data_loss(self):
+        source = self.create_task(title="lossy", memo="important", priority=True)
+        target = self.create_task(title="target")
+
+        rejected = self.nest(source, target)
+        accepted = self.nest(source, target, confirm_data_loss=True)
+
+        self.assertEqual(rejected.status_code, 409)
+        self.assertEqual(rejected.data["code"], "data_loss_confirmation_required")
+        self.assertCountEqual(rejected.data["lost_fields"], ["memo", "priority"])
+        self.assertEqual(accepted.status_code, 200, accepted.data)
+
+    def test_nest_detects_data_loss_for_every_lossy_field_individually(self):
+        # RF-005 review finding: the prior test only exercised memo and
+        # priority, out of the fields _nest_data_loss_fields actually
+        # checks. An incomplete check here means silent data loss, so each
+        # field gets its own case.
+        cases = [
+            ({"done": True, "completed_at": timezone.now()}, "completed_at"),
+            ({"time": "09:00"}, "time"),
+            ({"duration_minutes": 30}, "duration_minutes"),
+            ({"due_date": "2026-08-10"}, "due_date"),
+            ({"background": True}, "background"),
+            ({"rolled_from_kind": "day", "rolled_from_value": "2026-08-05"}, "rollover_history"),
+            ({"excluded_dates": ["2026-08-05"]}, "excluded_dates"),
+        ]
+        for overrides, expected_field in cases:
+            with self.subTest(expected_field=expected_field):
+                source = self.create_task(title=f"lossy-{expected_field}", **overrides)
+                target = self.create_task(title=f"target-{expected_field}")
+
+                response = self.nest(source, target)
+
+                self.assertEqual(response.status_code, 409)
+                self.assertEqual(response.data["code"], "data_loss_confirmation_required")
+                self.assertIn(expected_field, response.data["lost_fields"])
+
+    def test_nest_revalidates_repeat_subtasks_and_duplicate_child_rules(self):
+        target = self.create_task(
+            title="target",
+            subtasks=[{"id": "duplicate", "title": "existing", "done": False}],
+        )
+        repeating = self.create_task(title="routine", repeat_weekdays=[1])
+        with_children = self.create_task(
+            title="parent",
+            subtasks=[{"id": "child", "title": "child", "done": False}],
+        )
+
+        cases = [
+            (repeating, {}, "source_is_repeating"),
+            (with_children, {}, "source_has_subtasks"),
+            (self.create_task(title="duplicate id"), {"subtask_id": "duplicate"}, "duplicate_subtask_id"),
+        ]
+        for source, overrides, expected_code in cases:
+            with self.subTest(expected_code=expected_code):
+                response = self.nest(source, target, **overrides)
+                self.assertEqual(response.status_code, 409)
+                self.assertEqual(response.data["code"], expected_code)
+                self.assertTrue(Task.objects.filter(id=source.id).exists())
+
+    def test_nest_supports_bucket_tasks_for_promote_undo(self):
+        category = Category.objects.create(user=self.user, name="Someday")
+        source = self.create_task(
+            title="promoted child",
+            scope_kind="bucket",
+            scope_value="",
+            bucket_category=str(category.id),
+        )
+        target = self.create_task(
+            title="bucket parent",
+            scope_kind="bucket",
+            scope_value="",
+            bucket_category=str(category.id),
+        )
+
+        response = self.nest(source, target, subtask_id="undo-child")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(Task.objects.filter(id=source.id).exists())
+        target.refresh_from_db()
+        self.assertEqual(target.subtasks[0]["id"], "undo-child")
+
+    def test_nest_blocks_a_former_anchor_that_still_has_occurrences(self):
+        source = self.create_task(title="former anchor")
+        occurrence = self.create_task(title="occurrence", repeat_source=str(source.id))
+        target = self.create_task(title="target")
+
+        response = self.nest(source, target)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["code"], "source_has_occurrences")
+        self.assertTrue(Task.objects.filter(id=occurrence.id, repeat_source=source).exists())
+
+    def test_nest_returns_404_when_the_target_is_not_owned(self):
+        source = self.create_task(title="source")
+        other = User.objects.create_user(username="other-command@example.com", email="other-command@example.com")
+        target = Task.objects.create(
+            id=uuid.uuid4(),
+            user=other,
+            title="other target",
+            scope_kind="day",
+            scope_value="2026-07-27",
+        )
+
+        response = self.nest(source, target)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Task.objects.filter(id=source.id).exists())
+        self.assertEqual(Task.objects.get(id=target.id).subtasks, [])
+
+    def test_nest_returns_404_when_the_source_is_not_owned(self):
+        target = self.create_task(title="own target")
+        other = User.objects.create_user(
+            username="other-source@example.com",
+            email="other-source@example.com",
+        )
+        source = Task.objects.create(
+            id=uuid.uuid4(),
+            user=other,
+            title="other source",
+            scope_kind="day",
+            scope_value="2026-07-27",
+        )
+
+        response = self.nest(source, target)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Task.objects.filter(id=source.id).exists())
+        target.refresh_from_db()
+        self.assertEqual(target.subtasks, [])
+
+    def test_nest_returns_404_when_source_or_target_is_missing(self):
+        source = self.create_task(title="source")
+        target = self.create_task(title="target")
+
+        missing_source = self.client.post(
+            f"/api/tasks/{uuid.uuid4()}/commands/nest/",
+            {
+                "target_id": str(target.id),
+                "source_version": 1,
+                "target_version": 1,
+                "subtask_id": "missing-source-child",
+            },
+            format="json",
+        )
+        missing_target = self.nest(source, target, target_id=str(uuid.uuid4()))
+
+        self.assertEqual(missing_source.status_code, 404)
+        self.assertEqual(missing_target.status_code, 404)
+        self.assertTrue(Task.objects.filter(id=source.id).exists())
+        target.refresh_from_db()
+        self.assertEqual(target.subtasks, [])
+
+    def test_stale_nest_versions_make_no_changes(self):
+        for stale_side in ("source", "target"):
+            with self.subTest(stale_side=stale_side):
+                source = self.create_task(title=f"source-{stale_side}")
+                target = self.create_task(title=f"target-{stale_side}")
+                stale_task = source if stale_side == "source" else target
+                Task.objects.filter(id=stale_task.id).update(version=2)
+
+                response = self.nest(
+                    source,
+                    target,
+                    source_version=1,
+                    target_version=1,
+                )
+
+                self.assertEqual(response.status_code, 409)
+                self.assertEqual(response.data["code"], "task_version_conflict")
+                self.assertTrue(Task.objects.filter(id=source.id).exists())
+                self.assertEqual(Task.objects.get(id=target.id).subtasks, [])
+
+    def test_nest_rolls_back_target_when_source_delete_fails(self):
+        source = self.create_task(title="source")
+        target = self.create_task(title="target")
+
+        with patch.object(Task, "delete", side_effect=RuntimeError("delete failed")):
+            with self.assertRaisesRegex(RuntimeError, "delete failed"):
+                nest_task(
+                    user=self.user,
+                    source_id=source.id,
+                    target_id=target.id,
+                    source_version=1,
+                    target_version=1,
+                    subtask_id="rollback-child",
+                    confirm_data_loss=False,
+                )
+
+        self.assertTrue(Task.objects.filter(id=source.id).exists())
+        target.refresh_from_db()
+        self.assertEqual(target.subtasks, [])
+        self.assertEqual(target.version, 1)
+
+    def test_stale_put_after_nest_cannot_restore_old_target_subtasks(self):
+        source = self.create_task(title="source")
+        target = self.create_task(title="target")
+        response = self.nest(source, target, subtask_id="kept-child")
+        self.assertEqual(response.status_code, 200)
+
+        stale = self.client.put(
+            f"/api/tasks/{target.id}/",
+            make_task_payload(id=str(target.id), title="stale target", subtasks=[]),
+            format="json",
+            **if_match(1),
+        )
+
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(Task.objects.get(id=target.id).subtasks[0]["id"], "kept-child")
+
+    def test_promote_creates_one_task_and_updates_parent_atomically(self):
+        parent = self.create_task(
+            title="plan trip",
+            order=1,
+            subtasks=[{"id": "s1", "title": "book flights", "done": True}],
+        )
+        self.create_task(title="next sibling", order=2)
+        new_task_id = str(uuid.uuid4())
+
+        response = self.promote(parent, new_task_id=new_task_id)
+
+        self.assertEqual(response.status_code, 201, response.data)
+        parent.refresh_from_db()
+        created = Task.objects.get(id=new_task_id)
+        self.assertEqual(parent.subtasks, [])
+        self.assertEqual(parent.version, 2)
+        self.assertEqual(created.title, "book flights")
+        self.assertTrue(created.done)
+        self.assertIsNotNone(created.completed_at)
+        self.assertGreater(created.order, 1)
+        self.assertLess(created.order, 2)
+        self.assertEqual(response.data["parent"]["version"], 2)
+        self.assertEqual(response.data["task"]["version"], 1)
+
+    def test_promote_rejects_an_overlength_legacy_subtask_title_without_partial_write(self):
+        parent = self.create_task(title="legacy parent")
+        legacy_subtasks = [{"id": "legacy", "title": "x" * 501, "done": False}]
+        Task.objects.filter(pk=parent.pk).update(subtasks=legacy_subtasks)
+        parent.refresh_from_db()
+
+        response = self.promote(parent, subtask_id="legacy")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["code"], "invalid_subtask_title")
+        parent.refresh_from_db()
+        self.assertEqual(len(parent.subtasks[0]["title"]), 501)
+        self.assertEqual(Task.objects.filter(user=parent.user).count(), 1)
+
+    def test_promote_uses_timed_append_and_copies_bucket_category(self):
+        timed_parent = self.create_task(
+            title="meeting",
+            time="09:00",
+            subtasks=[{"id": "timed-child", "title": "prep", "done": False}],
+        )
+        self.create_task(title="all day", order=3)
+        timed_response = self.promote(timed_parent, subtask_id="timed-child")
+
+        category = Category.objects.create(user=self.user, name="To Go")
+        bucket_parent = self.create_task(
+            title="bucket",
+            scope_kind="bucket",
+            scope_value="",
+            bucket_category=str(category.id),
+            subtasks=[{"id": "bucket-child", "title": "research", "done": False}],
+        )
+        bucket_response = self.promote(bucket_parent, subtask_id="bucket-child")
+
+        self.assertEqual(timed_response.status_code, 201)
+        self.assertEqual(timed_response.data["task"]["order"], 4)
+        self.assertEqual(bucket_response.status_code, 201)
+        self.assertEqual(bucket_response.data["task"]["bucket_category"], str(category.id))
+        self.assertEqual(bucket_response.data["task"]["order"], 0)
+
+    def test_promote_rejects_stale_parent_duplicate_child_and_new_id_collision(self):
+        stale_parent = self.create_task(
+            title="stale",
+            subtasks=[{"id": "s1", "title": "child", "done": False}],
+        )
+        Task.objects.filter(id=stale_parent.id).update(version=2)
+        stale = self.promote(stale_parent, parent_version=1)
+
+        duplicate_parent = self.create_task(
+            title="duplicates",
+            subtasks=[
+                {"id": "dup", "title": "one", "done": False},
+                {"id": "dup", "title": "two", "done": False},
+            ],
+        )
+        duplicate = self.promote(duplicate_parent, subtask_id="dup")
+
+        collision_parent = self.create_task(
+            title="collision",
+            subtasks=[{"id": "s1", "title": "child", "done": False}],
+        )
+        existing = self.create_task(title="existing id")
+        collision = self.promote(collision_parent, new_task_id=str(existing.id))
+
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.data["code"], "task_version_conflict")
+        self.assertEqual(duplicate.status_code, 409)
+        self.assertEqual(duplicate.data["code"], "duplicate_subtask_id")
+        self.assertEqual(collision.status_code, 409)
+        self.assertEqual(collision.data["code"], "task_id_conflict")
+        collision_parent.refresh_from_db()
+        self.assertEqual(len(collision_parent.subtasks), 1)
+
+    def test_promote_returns_404_for_a_missing_or_unowned_parent(self):
+        missing = self.client.post(
+            f"/api/tasks/{uuid.uuid4()}/commands/promote-subtask/",
+            {
+                "subtask_id": "s1",
+                "parent_version": 1,
+                "new_task_id": str(uuid.uuid4()),
+            },
+            format="json",
+        )
+        other = User.objects.create_user(
+            username="other-parent@example.com",
+            email="other-parent@example.com",
+        )
+        other_parent = Task.objects.create(
+            id=uuid.uuid4(),
+            user=other,
+            title="other parent",
+            scope_kind="day",
+            scope_value="2026-07-27",
+            subtasks=[{"id": "s1", "title": "private", "done": False}],
+        )
+
+        unowned = self.promote(other_parent)
+
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(unowned.status_code, 404)
+        other_parent.refresh_from_db()
+        self.assertEqual(len(other_parent.subtasks), 1)
+
+    def test_promote_rejects_a_missing_subtask_without_creating_a_task(self):
+        parent = self.create_task(
+            title="parent",
+            subtasks=[{"id": "s1", "title": "child", "done": False}],
+        )
+        new_task_id = uuid.uuid4()
+
+        response = self.promote(
+            parent,
+            subtask_id="missing",
+            new_task_id=str(new_task_id),
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["code"], "subtask_not_found")
+        self.assertFalse(Task.objects.filter(id=new_task_id).exists())
+        parent.refresh_from_db()
+        self.assertEqual(len(parent.subtasks), 1)
+
+    def test_task_commands_require_authentication(self):
+        source = self.create_task(title="source")
+        target = self.create_task(title="target")
+        parent = self.create_task(
+            title="parent",
+            subtasks=[{"id": "s1", "title": "child", "done": False}],
+        )
+        anonymous = APIClient()
+
+        nest_response = anonymous.post(
+            f"/api/tasks/{source.id}/commands/nest/",
+            {
+                "target_id": str(target.id),
+                "source_version": source.version,
+                "target_version": target.version,
+                "subtask_id": "anonymous-child",
+            },
+            format="json",
+        )
+        promote_response = anonymous.post(
+            f"/api/tasks/{parent.id}/commands/promote-subtask/",
+            {
+                "subtask_id": "s1",
+                "parent_version": parent.version,
+                "new_task_id": str(uuid.uuid4()),
+            },
+            format="json",
+        )
+
+        self.assertEqual(nest_response.status_code, 401)
+        self.assertEqual(promote_response.status_code, 401)
+
+    def test_promote_rolls_back_created_task_when_parent_save_fails(self):
+        parent = self.create_task(
+            title="parent",
+            subtasks=[{"id": "s1", "title": "child", "done": False}],
+        )
+        new_task_id = uuid.uuid4()
+        original_save = Task.save
+
+        def fail_parent_save(instance, *args, **kwargs):
+            if instance.id == parent.id:
+                raise RuntimeError("parent save failed")
+            return original_save(instance, *args, **kwargs)
+
+        with patch.object(Task, "save", autospec=True, side_effect=fail_parent_save):
+            with self.assertRaisesRegex(RuntimeError, "parent save failed"):
+                promote_subtask(
+                    user=self.user,
+                    parent_id=parent.id,
+                    subtask_id="s1",
+                    parent_version=1,
+                    new_task_id=new_task_id,
+                )
+
+        self.assertFalse(Task.objects.filter(id=new_task_id).exists())
+        parent.refresh_from_db()
+        self.assertEqual(len(parent.subtasks), 1)
+        self.assertEqual(parent.version, 1)
 
 
 class BucketScopeTests(TestCase):
@@ -452,7 +1096,12 @@ class BucketScopeTests(TestCase):
         task_id = create_response.data["id"]
 
         payload["bucket_category"] = str(to_eat.id)
-        update_response = client.put(f"/api/tasks/{task_id}/", payload, format="json")
+        update_response = client.put(
+            f"/api/tasks/{task_id}/",
+            payload,
+            format="json",
+            **if_match(),
+        )
         self.assertEqual(update_response.status_code, 200)
         self.assertEqual(update_response.data["bucket_category"], str(to_eat.id))
 
@@ -468,6 +1117,10 @@ class BucketScopeTests(TestCase):
 
 
 class CategoryModelTests(TestCase):
+    def test_normalizes_category_identity_with_nfkc_and_casefold(self):
+        self.assertEqual(normalize_category_name("  Straße  "), "strasse")
+        self.assertEqual(normalize_category_name("Ｔｏ Ｅａｔ"), "to eat")
+
     def test_two_users_can_each_have_a_category_with_the_same_name(self):
         owner, _ = auth_client("cat-owner@example.com")
         other, _ = auth_client("cat-other@example.com")
@@ -476,13 +1129,24 @@ class CategoryModelTests(TestCase):
 
         self.assertEqual(Category.objects.filter(name="To Eat").count(), 2)
 
-    def test_exact_duplicate_name_for_the_same_user_is_rejected_at_the_db_level(self):
-        from django.db import IntegrityError
+    def test_casefold_duplicate_name_for_the_same_user_is_rejected_at_the_db_level(self):
+        from django.db import IntegrityError, transaction
 
         owner, _ = auth_client("cat-dupe@example.com")
-        Category.objects.create(user=owner, name="To Eat")
-        with self.assertRaises(IntegrityError):
-            Category.objects.create(user=owner, name="To Eat")
+        Category.objects.create(user=owner, name="Straße")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Category.objects.create(user=owner, name="STRASSE")
+
+    def test_saving_a_renamed_category_updates_its_normalized_key(self):
+        owner, _ = auth_client("cat-normalized-update@example.com")
+        category = Category.objects.create(user=owner, name="To Eat")
+
+        category.name = "  To Visit  "
+        category.save(update_fields=["name"])
+        category.refresh_from_db()
+
+        self.assertEqual(category.name, "To Visit")
+        self.assertEqual(category.normalized_name, "to visit")
 
 
 import uuid as uuid_module
@@ -718,6 +1382,147 @@ class BackfillTaskTimestampsMigrationTests(TransactionTestCase):
         self.assertEqual(new_race_row.created_at, new_race_row.updated_at)
 
 
+class CategoryNormalizedNameMigrationTests(TransactionTestCase):
+    def test_backfill_preflight_rejects_a_normalized_key_that_exceeds_the_column(self):
+        migration = importlib.import_module(
+            "apps.tasks.migrations.0011_category_normalized_name_backfill"
+        )
+        category = SimpleNamespace(pk="expanding-category", name="\ufdfa" * 11)
+
+        with self.assertRaisesMessage(RuntimeError, "198 characters"):
+            migration.normalized_key(category)
+
+    def test_merges_existing_casefold_duplicates_and_repoints_tasks(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0009_task_timestamps_finalize")])
+
+        old_state = executor.loader.project_state([("tasks", "0009_task_timestamps_finalize")])
+        OldUser = old_state.apps.get_model("auth", "User")
+        OldCategory = old_state.apps.get_model("tasks", "Category")
+        OldTask = old_state.apps.get_model("tasks", "Task")
+
+        user = OldUser.objects.create(username="normalize@example.com", email="normalize@example.com")
+        other = OldUser.objects.create(
+            username="normalize-other@example.com",
+            email="normalize-other@example.com",
+        )
+        survivor = OldCategory.objects.create(user_id=user.id, name="Straße")
+        duplicate = OldCategory.objects.create(user_id=user.id, name="STRASSE")
+        other_category = OldCategory.objects.create(user_id=other.id, name="STRASSE")
+        OldCategory.objects.filter(pk=survivor.pk).update(
+            created_at=datetime(2026, 8, 1, tzinfo=dt_timezone.utc),
+        )
+        OldCategory.objects.filter(pk=duplicate.pk).update(
+            created_at=datetime(2026, 8, 2, tzinfo=dt_timezone.utc),
+        )
+        first_task = OldTask.objects.create(
+            id=uuid_module.uuid4(),
+            user_id=user.id,
+            title="first",
+            scope_kind="bucket",
+            scope_value="",
+            bucket_category_id=survivor.id,
+        )
+        second_task = OldTask.objects.create(
+            id=uuid_module.uuid4(),
+            user_id=user.id,
+            title="second",
+            scope_kind="bucket",
+            scope_value="",
+            bucket_category_id=duplicate.id,
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0012_category_normalized_name_finalize")])
+
+        new_state = executor.loader.project_state([("tasks", "0012_category_normalized_name_finalize")])
+        NewCategory = new_state.apps.get_model("tasks", "Category")
+        NewTask = new_state.apps.get_model("tasks", "Task")
+
+        categories = NewCategory.objects.filter(user_id=user.id)
+        self.assertEqual(categories.count(), 1)
+        self.assertEqual(categories.get().id, survivor.id)
+        self.assertEqual(categories.get().name, "Straße")
+        self.assertEqual(categories.get().normalized_name, "strasse")
+        self.assertTrue(NewCategory.objects.filter(id=other_category.id).exists())
+        self.assertEqual(NewTask.objects.get(id=first_task.id).bucket_category_id, survivor.id)
+        self.assertEqual(NewTask.objects.get(id=second_task.id).bucket_category_id, survivor.id)
+
+    def test_casefold_duplicate_inserted_between_backfill_and_finalize_is_merged(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0010_category_normalized_name")])
+
+        old_state = executor.loader.project_state([("tasks", "0010_category_normalized_name")])
+        OldUser = old_state.apps.get_model("auth", "User")
+        OldCategory = old_state.apps.get_model("tasks", "Category")
+
+        user = OldUser.objects.create(username="straggler@example.com", email="straggler@example.com")
+        survivor = OldCategory.objects.create(user_id=user.id, name="Straße")
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0011_category_normalized_name_backfill")])
+
+        backfilled_state = executor.loader.project_state(
+            [("tasks", "0011_category_normalized_name_backfill")]
+        )
+        BackfilledCategory = backfilled_state.apps.get_model("tasks", "Category")
+        BackfilledTask = backfilled_state.apps.get_model("tasks", "Task")
+        # Simulates an old writer after the primary backfill: it does not know
+        # normalized_name exists, so a casefold-equivalent row arrives as NULL.
+        duplicate = BackfilledCategory.objects.create(user_id=user.id, name="STRASSE")
+        duplicate_task = BackfilledTask.objects.create(
+            id=uuid_module.uuid4(),
+            user_id=user.id,
+            title="late duplicate task",
+            scope_kind="bucket",
+            scope_value="",
+            bucket_category_id=duplicate.id,
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0012_category_normalized_name_finalize")])
+
+        new_state = executor.loader.project_state([("tasks", "0012_category_normalized_name_finalize")])
+        NewCategory = new_state.apps.get_model("tasks", "Category")
+        NewTask = new_state.apps.get_model("tasks", "Task")
+        categories = NewCategory.objects.filter(user_id=user.id)
+        self.assertEqual(categories.count(), 1)
+        self.assertEqual(categories.get().id, survivor.id)
+        self.assertEqual(categories.get().normalized_name, "strasse")
+        self.assertEqual(
+            NewTask.objects.get(id=duplicate_task.id).bucket_category_id,
+            survivor.id,
+        )
+
+
+class TaskVersionMigrationTests(TransactionTestCase):
+    def test_existing_tasks_receive_version_one(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0012_category_normalized_name_finalize")])
+
+        old_state = executor.loader.project_state([("tasks", "0012_category_normalized_name_finalize")])
+        OldUser = old_state.apps.get_model("auth", "User")
+        OldTask = old_state.apps.get_model("tasks", "Task")
+        user = OldUser.objects.create(
+            username="task-version@example.com",
+            email="task-version@example.com",
+        )
+        task = OldTask.objects.create(
+            id=uuid_module.uuid4(),
+            user_id=user.id,
+            title="existing task",
+            scope_kind="day",
+            scope_value="2026-08-06",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0013_task_version")])
+
+        new_state = executor.loader.project_state([("tasks", "0013_task_version")])
+        NewTask = new_state.apps.get_model("tasks", "Task")
+        self.assertEqual(NewTask.objects.get(id=task.id).version, 1)
+
+
 class CategoryApiTests(TestCase):
     def test_list_only_returns_the_authenticated_users_own_categories_ordered_by_created_at(self):
         owner, owner_client = auth_client("cat-list-owner@example.com")
@@ -750,12 +1555,32 @@ class CategoryApiTests(TestCase):
         self.assertEqual(response.data["id"], str(existing.id))
         self.assertEqual(Category.objects.filter(user=owner).count(), 1)
 
+    def test_create_reuses_a_unicode_casefold_equivalent_category(self):
+        owner, client = auth_client("cat-create-unicode-dupe@example.com")
+        existing = Category.objects.create(user=owner, name="Straße")
+
+        response = client.post("/api/categories/", {"name": "STRASSE"}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["id"], str(existing.id))
+        self.assertEqual(response.data["name"], "Straße")
+        self.assertEqual(Category.objects.filter(user=owner).count(), 1)
+
     def test_create_rejects_a_blank_name(self):
         owner, client = auth_client("cat-create-blank@example.com")
 
         response = client.post("/api/categories/", {"name": "   "}, format="json")
 
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(Category.objects.filter(user=owner).count(), 0)
+
+    def test_create_rejects_a_name_whose_normalized_key_exceeds_the_column(self):
+        owner, client = auth_client("cat-create-expansion@example.com")
+
+        response = client.post("/api/categories/", {"name": "\ufdfa" * 11}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("normalized", str(response.data).lower())
         self.assertEqual(Category.objects.filter(user=owner).count(), 0)
 
     def test_a_different_users_category_with_the_same_name_is_not_reused(self):
@@ -795,6 +1620,20 @@ class CategoryApiTests(TestCase):
         category = Category.objects.create(user=owner, name="To Go")
 
         response = client.patch(f"/api/categories/{category.id}/", {"name": "   "}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        category.refresh_from_db()
+        self.assertEqual(category.name, "To Go")
+
+    def test_rename_rejects_a_name_whose_normalized_key_exceeds_the_column(self):
+        owner, client = auth_client("cat-rename-expansion@example.com")
+        category = Category.objects.create(user=owner, name="To Go")
+
+        response = client.patch(
+            f"/api/categories/{category.id}/",
+            {"name": "\ufdfa" * 11},
+            format="json",
+        )
 
         self.assertEqual(response.status_code, 400)
         category.refresh_from_db()

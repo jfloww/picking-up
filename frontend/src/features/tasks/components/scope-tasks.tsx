@@ -128,6 +128,7 @@ export function ScopeTasks({
             <TaskItem
               key={t.id}
               size={size}
+              rootElement={getDragHandlers ? "div" : "li"}
               task={t}
               dateLabel={date ? shortDateLabel(date, today) : undefined}
               highlight={highlight}
