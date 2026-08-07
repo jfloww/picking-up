@@ -259,6 +259,76 @@ def delete_occurrence(
     return DeleteOccurrenceResult(removed_task_id=removed_task_id, anchor=anchor)
 
 
+@dataclass(frozen=True)
+class RescheduleTaskResult:
+    task: Task
+    anchor: Task | None
+
+
+@transaction.atomic
+def reschedule_task(
+    *,
+    user,
+    task_id,
+    task_version: int,
+    date: str,
+) -> RescheduleTaskResult:
+    _lock_user(user)
+    task_key = str(task_id)
+    tasks = _locked_owned_tasks(user, [task_id])
+    if task_key not in tasks:
+        raise TaskCommandNotFound
+
+    task = tasks[task_key]
+    _assert_versions({task_key: task_version}, tasks)
+
+    current_date = _current_effective_date(task)
+    if current_date is None:
+        raise TaskCommandConflict(
+            "not_reschedulable",
+            "Only a day-scoped task or a rolled-over week-scoped task can be rescheduled.",
+        )
+    if current_date == date:
+        raise TaskCommandConflict("same_date", "The task is already scheduled on this date.")
+
+    # Must run before repeat_source is cleared below.
+    anchor = _append_anchor_exclusion(user, task)
+
+    if not task.time:
+        # Mirrors the frontend's current dayTasksForWeek-based scan: counts
+        # both day-scoped tasks already on the destination date and
+        # week-scoped tasks rolled over from it, including done tasks
+        # (position, not completion, drives this list). rolled_from_value
+        # alone pins the week — a calendar date belongs to exactly one
+        # week, so the frontend's extra weekStart match is redundant, not a
+        # distinct filter.
+        siblings = list(
+            Task.objects.select_for_update()
+            .filter(user=user)
+            .filter(
+                Q(scope_kind="day", scope_value=date)
+                | Q(scope_kind="week", rolled_from_kind="day", rolled_from_value=date)
+            )
+            .filter(Q(time__isnull=True) | Q(time=""))
+        )
+        task.order = max([0.0, *(sibling.order for sibling in siblings)]) + 1.0
+
+    task.scope_kind = "day"
+    task.scope_value = date
+    task.rolled_from_kind = None
+    task.rolled_from_value = None
+    task.repeat_source = None
+    task.version += 1
+    task.save(
+        update_fields=[
+            "scope_kind", "scope_value", "rolled_from_kind", "rolled_from_value",
+            "repeat_source", "order", "version", "updated_at",
+        ]
+    )
+
+    return RescheduleTaskResult(task=task, anchor=anchor)
+
+
 def _promotion_order(user, parent: Task) -> float:
     if parent.scope_kind != "day":
         return 0.0

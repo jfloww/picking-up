@@ -10,6 +10,7 @@ from apps.tasks.views import (
     DetachTaskCommandView,
     NestTaskCommandView,
     PromoteSubtaskCommandView,
+    RescheduleTaskCommandView,
     TaskDetailView,
     TaskListCreateView,
 )
@@ -38,6 +39,11 @@ urlpatterns = [
         "api/tasks/<uuid:pk>/commands/delete-occurrence/",
         DeleteOccurrenceCommandView.as_view(),
         name="task-command-delete-occurrence",
+    ),
+    path(
+        "api/tasks/<uuid:pk>/commands/reschedule/",
+        RescheduleTaskCommandView.as_view(),
+        name="task-command-reschedule",
     ),
     path(
         "api/tasks/<uuid:pk>/commands/promote-subtask/",

@@ -193,3 +193,8 @@ class DetachTaskCommandSerializer(serializers.Serializer):
 
 class DeleteOccurrenceCommandSerializer(serializers.Serializer):
     occurrence_version = serializers.IntegerField(min_value=1)
+
+
+class RescheduleTaskCommandSerializer(serializers.Serializer):
+    task_version = serializers.IntegerField(min_value=1)
+    date = serializers.CharField(max_length=10)

@@ -661,6 +661,15 @@ class TaskCommandApiTests(TestCase):
             format="json",
         )
 
+    def reschedule(self, task, date, **overrides):
+        payload = {"task_version": task.version, "date": date}
+        payload.update(overrides)
+        return self.client.post(
+            f"/api/tasks/{task.id}/commands/reschedule/",
+            payload,
+            format="json",
+        )
+
     def test_nest_atomically_appends_subtask_and_removes_source(self):
         source = self.create_task(title="buy milk", done=True)
         target = self.create_task(
@@ -1245,6 +1254,89 @@ class TaskCommandApiTests(TestCase):
         parent.refresh_from_db()
         self.assertEqual(len(parent.subtasks), 1)
         self.assertEqual(parent.version, 1)
+
+    def test_reschedule_moves_a_day_scoped_task_and_clears_repeat_source(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+
+        response = self.reschedule(occurrence, "2026-07-20")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        occurrence.refresh_from_db()
+        self.assertEqual(occurrence.scope_kind, "day")
+        self.assertEqual(occurrence.scope_value, "2026-07-20")
+        self.assertIsNone(occurrence.repeat_source_id)
+        anchor.refresh_from_db()
+        self.assertEqual(anchor.excluded_dates, ["2026-07-16"])
+
+    def test_reschedule_moves_a_rolled_over_week_scoped_task_clearing_rolled_from(self):
+        task = self.create_task(title="overdue thing", scope_kind="week")
+        task.scope_kind = "week"
+        task.scope_value = "2026-07-13"
+        task.rolled_from_kind = "day"
+        task.rolled_from_value = "2026-07-10"
+        task.save(update_fields=["scope_kind", "scope_value", "rolled_from_kind", "rolled_from_value"])
+
+        response = self.reschedule(task, "2026-07-20")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        task.refresh_from_db()
+        self.assertEqual(task.scope_kind, "day")
+        self.assertEqual(task.scope_value, "2026-07-20")
+        self.assertIsNone(task.rolled_from_kind)
+        self.assertIsNone(task.rolled_from_value)
+
+    def test_reschedule_appends_order_past_the_destinations_untimed_tasks(self):
+        existing = self.create_task(title="already there", scope_value="2026-07-20", order=3)
+        task = self.create_task(title="moving in", scope_value="2026-07-16")
+
+        self.reschedule(task, "2026-07-20")
+
+        task.refresh_from_db()
+        self.assertEqual(task.order, 4.0)
+
+    def test_reschedule_leaves_a_timed_tasks_order_untouched(self):
+        task = self.create_task(title="timed", scope_value="2026-07-16", time="09:00", order=7)
+
+        self.reschedule(task, "2026-07-20")
+
+        task.refresh_from_db()
+        self.assertEqual(task.order, 7)
+
+    def test_reschedule_rejects_the_same_effective_date_as_a_conflict(self):
+        task = self.create_task(title="staying put", scope_value="2026-07-16")
+
+        response = self.reschedule(task, "2026-07-16")
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "same_date")
+
+    def test_reschedule_rejects_a_month_scoped_task_as_not_reschedulable(self):
+        task = self.create_task(title="goal", scope_kind="month", scope_value="2026-07")
+
+        response = self.reschedule(task, "2026-07-20")
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "not_reschedulable")
+
+    def test_reschedule_returns_409_for_a_stale_version(self):
+        task = self.create_task(title="solo", scope_value="2026-07-16")
+
+        response = self.reschedule(task, "2026-07-20", task_version=task.version + 1)
+
+        self.assertEqual(response.status_code, 409, response.data)
+
+    def test_reschedule_returns_404_for_a_missing_or_unowned_task(self):
+        response = self.client.post(
+            f"/api/tasks/{uuid.uuid4()}/commands/reschedule/",
+            {"task_version": 1, "date": "2026-07-20"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
 
 
 class BucketScopeTests(TestCase):
