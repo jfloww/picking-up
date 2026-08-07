@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { TaskItem } from "./task-item";
+import { TaskItem, taskItemHandlers } from "./task-item";
 import { makeTask } from "../test-utils";
 
 const noopHandlers = {
@@ -154,5 +154,40 @@ describe('TaskItem size="week"', () => {
     expect(card?.className).toContain("bg-muted");
     expect(card?.className).not.toContain("border-destructive");
     expect(card?.className).not.toContain("border-warning");
+  });
+});
+
+describe("taskItemHandlers", () => {
+  it("undoing a promotion confirms data loss so it never re-shows the nest confirmation dialog", () => {
+    // PR#52 review finding: this used to call convertTaskToSubtask with no
+    // third argument, defaulting confirmDataLoss to false. That silently
+    // broke Undo for any promoted subtask that had been done (completedAt
+    // is a lossy field the server rejects without confirmation) — the
+    // click would fail with a generic sync error instead of undoing.
+    const convertTaskToSubtask = vi.fn();
+    const handlers = taskItemHandlers("parent-id", {
+      toggleTask: () => {},
+      setMemo: () => {},
+      setTime: () => {},
+      setRepeatWeekdays: () => {},
+      detachFromRoutine: () => {},
+      setPriority: () => {},
+      setDuration: () => {},
+      setBackground: () => {},
+      setDueDate: () => {},
+      removeTask: () => {},
+      addSubtask: () => {},
+      toggleSubtask: () => {},
+      removeSubtask: () => {},
+      editSubtaskTitle: () => {},
+      promoteSubtaskToTask: () => undefined,
+      convertTaskToSubtask,
+      setCategory: () => {},
+      createCategory: async () => undefined,
+    });
+
+    handlers.onUndoPromoteSubtask("promoted-task-id");
+
+    expect(convertTaskToSubtask).toHaveBeenCalledWith("promoted-task-id", "parent-id", true);
   });
 });
