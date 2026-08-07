@@ -3,6 +3,7 @@ import {
   createLocalStorageRepository,
   STORAGE_KEY,
   TaskVersionConflictError,
+  type DetachTaskResult,
   type NestTaskResult,
   type PromoteSubtaskResult,
   type TaskRepository,
@@ -161,6 +162,15 @@ export function createApiTaskRepository(
       });
       await guardTaskMutation(response, redirectToLogin);
       return (await response.json()) as PromoteSubtaskResult;
+    },
+    async detachTask(command) {
+      const response = await taskFetch(`/api/tasks/${command.occurrenceId}/commands/detach`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(command),
+      });
+      await guardTaskMutation(response, redirectToLogin);
+      return (await response.json()) as DetachTaskResult;
     },
   };
 }

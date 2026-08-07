@@ -594,17 +594,69 @@ export function TasksProvider({
         const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const normalized = weekdays && weekdays.length > 0 ? weekdays : undefined;
-        const task: Task = { ...current, repeatSourceId: undefined, repeatWeekdays: normalized };
-        persistUpdate(task);
+        const anchorId = current.repeatSourceId;
 
-        if (current.repeatSourceId !== undefined && current.scope.kind === "day") {
-          const anchor = tasksRef.current.find((t) => t.id === current.repeatSourceId);
+        const updatedOccurrence: Task = {
+          ...current,
+          repeatSourceId: undefined,
+          repeatWeekdays: normalized,
+        };
+        const occurrenceGeneration = nextMutationGeneration(current.id);
+        const anchorGeneration = anchorId ? nextMutationGeneration(anchorId) : undefined;
+
+        // Optimistically mirror the anchor's excludedDates update for the
+        // common case (an unrolled day-scoped occurrence) so the UI
+        // reflects the detach immediately, same as every other
+        // anchor-touching mutation in this store. The authoritative anchor
+        // from the command response — which also covers the rolled
+        // week-scope case buildTaskPatch doesn't need to reason about here
+        // — is applied once the command resolves below, regardless of
+        // whether this optimistic branch ran.
+        let optimisticAnchor: Task | undefined;
+        if (anchorId !== undefined && current.scope.kind === "day") {
+          const anchor = tasksRef.current.find((t) => t.id === anchorId);
           if (anchor) {
-            const excludedDates = [...(anchor.excludedDates ?? []), current.scope.date];
-            const updatedAnchor: Task = { ...anchor, excludedDates };
-            persistUpdate(updatedAnchor);
+            optimisticAnchor = {
+              ...anchor,
+              excludedDates: [...(anchor.excludedDates ?? []), current.scope.date],
+            };
           }
         }
+        applyCommandState(
+          optimisticAnchor ? [updatedOccurrence, optimisticAnchor] : [updatedOccurrence],
+          [],
+        );
+
+        enqueueMutation(async () => {
+          const result = await repo.detachTask({
+            occurrenceId: current.id,
+            occurrenceVersion: authoritativeVersionsRef.current.get(current.id) ?? current.version,
+            repeatWeekdays: normalized,
+          });
+          authoritativeVersionsRef.current.set(result.occurrence.id, result.occurrence.version);
+          authoritativeTasksRef.current.set(result.occurrence.id, result.occurrence);
+
+          const currentOccurrence = tasksRef.current.find((t) => t.id === result.occurrence.id);
+          const reconciledOccurrence =
+            currentOccurrence &&
+            mutationGenerationsRef.current.get(result.occurrence.id) !== occurrenceGeneration
+              ? { ...currentOccurrence, version: result.occurrence.version }
+              : result.occurrence;
+
+          const upserts = [reconciledOccurrence];
+          if (result.anchor) {
+            authoritativeVersionsRef.current.set(result.anchor.id, result.anchor.version);
+            authoritativeTasksRef.current.set(result.anchor.id, result.anchor);
+            const currentAnchor = tasksRef.current.find((t) => t.id === result.anchor!.id);
+            const reconciledAnchor =
+              currentAnchor && anchorGeneration !== undefined &&
+              mutationGenerationsRef.current.get(result.anchor.id) !== anchorGeneration
+                ? { ...currentAnchor, version: result.anchor.version }
+                : result.anchor;
+            upserts.push(reconciledAnchor);
+          }
+          applyCommandState(upserts, []);
+        });
       },
       rescheduleTaskToDay(id, date) {
         const current = tasksRef.current.find((t) => t.id === id);

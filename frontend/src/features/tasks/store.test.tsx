@@ -283,6 +283,30 @@ describe("TasksProvider", () => {
       ]);
     });
 
+    it("detachFromRoutine calls repo.detachTask once and applies both the occurrence and anchor from the response", async () => {
+      const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
+      const occurrence = makeTask({
+        id: "occ",
+        scope: { kind: "day", date: "2026-07-16" },
+        repeatSourceId: "anchor",
+      });
+      const { repo, result } = setup(fakeRepository([anchor, occurrence]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const detachSpy = vi.spyOn(repo, "detachTask");
+
+      act(() => result.current.detachFromRoutine("occ"));
+
+      await waitFor(() => expect(detachSpy).toHaveBeenCalledTimes(1));
+      expect(detachSpy).toHaveBeenCalledWith({
+        occurrenceId: "occ",
+        occurrenceVersion: 1,
+        repeatWeekdays: undefined,
+      });
+      await waitFor(() =>
+        expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual(["2026-07-16"]),
+      );
+    });
+
     it("detaching a task that was already standalone (no repeatSourceId) does not touch any anchor", async () => {
       const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
       const standalone = makeTask({ id: "solo", scope: { kind: "day", date: "2026-07-16" } });

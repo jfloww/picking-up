@@ -109,6 +109,47 @@ export function fakeRepository(
       ];
       return { parent: updatedParent, task };
     },
+    async detachTask(command) {
+      const occurrence = state.tasks.find((t) => t.id === command.occurrenceId);
+      if (!occurrence || occurrence.version !== command.occurrenceVersion) {
+        throw new TaskVersionConflictError();
+      }
+      const updatedOccurrence: Task = {
+        ...occurrence,
+        version: occurrence.version + 1,
+        repeatSourceId: undefined,
+        repeatWeekdays:
+          command.repeatWeekdays && command.repeatWeekdays.length > 0
+            ? command.repeatWeekdays
+            : undefined,
+      };
+      let updatedAnchor: Task | undefined;
+      const anchorId = occurrence.repeatSourceId;
+      if (anchorId) {
+        const anchor = state.tasks.find((t) => t.id === anchorId);
+        if (anchor) {
+          const date =
+            occurrence.scope.kind === "day"
+              ? occurrence.scope.date
+              : occurrence.scope.kind === "week" && occurrence.rolledFrom?.kind === "day"
+                ? occurrence.rolledFrom.date
+                : undefined;
+          const existing = new Set(anchor.excludedDates ?? []);
+          updatedAnchor =
+            date && !existing.has(date)
+              ? { ...anchor, version: anchor.version + 1, excludedDates: [...(anchor.excludedDates ?? []), date] }
+              : anchor;
+        }
+      }
+      state.tasks = state.tasks.map((t) => {
+        if (t.id === updatedOccurrence.id) return updatedOccurrence;
+        if (updatedAnchor && t.id === updatedAnchor.id) return updatedAnchor;
+        return t;
+      });
+      return updatedAnchor
+        ? { occurrence: updatedOccurrence, anchor: updatedAnchor }
+        : { occurrence: updatedOccurrence };
+    },
   };
 }
 
