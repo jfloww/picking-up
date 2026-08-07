@@ -4,6 +4,7 @@ import uuid
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 
 SCOPE_KIND_CHOICES = [
@@ -109,6 +110,32 @@ class Task(models.Model):
         # here would be redundant. Harmless on SQLite (silently allowed),
         # but Oracle rejects creating a second index on an identical
         # column list with ORA-01408.
+        #
+        # RF-006 round 2: two of the ten cross-field domain rules enforced
+        # at the serializer layer (apps/tasks/serializers.py's
+        # TaskSerializer.validate()) are also cheap, portable enough to add
+        # as CheckConstraints — defense-in-depth below the serializer, the
+        # same reasoning as Category's UniqueConstraint above. The rest
+        # (date/time format regexes, list bounds/dedup, the rolled-from
+        # bucket rejection, subtask uniqueness) either need per-kind regex
+        # matching Django's CHECK constraints can't portably express across
+        # SQLite/PostgreSQL/Oracle, or reach into JSONField contents, so
+        # they stay serializer-only. See
+        # docs/refining/2026-08-06-domain-validation.md for the full
+        # rule-by-rule breakdown.
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (Q(scope_kind="bucket") & Q(bucket_category__isnull=False))
+                    | (~Q(scope_kind="bucket") & Q(bucket_category__isnull=True))
+                ),
+                name="bucket_category_set_iff_scope_kind_is_bucket",
+            ),
+            models.CheckConstraint(
+                check=~(Q(repeat_weekdays__isnull=False) & Q(repeat_source__isnull=False)),
+                name="repeat_weekdays_and_repeat_source_are_mutually_exclusive",
+            ),
+        ]
 
     def __str__(self):
         return self.title

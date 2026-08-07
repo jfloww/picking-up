@@ -13,6 +13,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import Category, Task, normalize_category_name
+from .serializers import EXCLUDED_DATES_MAX_COUNT, SUBTASKS_MAX_COUNT
 from .services import nest_task, promote_subtask
 
 
@@ -89,7 +90,12 @@ class TaskApiTests(TestCase):
         anchor_id = str(uuid.uuid4())
         client.post(
             "/api/tasks/",
-            make_task_payload(id=anchor_id, title="anchor", repeat_weekdays=[1, 3, 5]),
+            make_task_payload(
+                id=anchor_id,
+                title="anchor",
+                repeat_weekdays=[1, 3, 5],
+                excluded_dates=["2026-07-13"],
+            ),
             format="json",
         )
 
@@ -104,10 +110,8 @@ class TaskApiTests(TestCase):
                 rolled_from_kind="day",
                 rolled_from_value="2026-07-20",
                 time="09:30",
-                due_date="2026-08-01",
                 subtasks=[{"id": "s1", "title": "buy wood", "done": False}],
                 repeat_source=anchor_id,
-                excluded_dates=["2026-07-13"],
                 priority=True,
                 duration_minutes=45,
                 background=True,
@@ -125,13 +129,25 @@ class TaskApiTests(TestCase):
         self.assertIsNotNone(stored.completed_at)
         self.assertLess(timezone.now() - stored.completed_at, timedelta(seconds=5))
         self.assertEqual(stored.time, "09:30")
-        self.assertEqual(stored.due_date, "2026-08-01")
         self.assertEqual(stored.subtasks, [{"id": "s1", "title": "buy wood", "done": False}])
         self.assertEqual(str(stored.repeat_source_id), anchor_id)
-        self.assertEqual(stored.excluded_dates, ["2026-07-13"])
         self.assertTrue(stored.priority)
         self.assertEqual(stored.duration_minutes, 45)
         self.assertTrue(stored.background)
+        self.assertEqual(Task.objects.get(id=anchor_id).excluded_dates, ["2026-07-13"])
+
+        # due_date and repeat_weekdays/repeat_source are mutually exclusive
+        # (RF-006 round 2, rule 7 — "unset for routine tasks"), so it can't
+        # round-trip on either task above; prove it separately here on a
+        # standalone, non-routine task.
+        plain_id = str(uuid.uuid4())
+        plain_response = client.post(
+            "/api/tasks/",
+            make_task_payload(id=plain_id, title="plain", due_date="2026-08-01"),
+            format="json",
+        )
+        self.assertEqual(plain_response.status_code, 201, plain_response.data)
+        self.assertEqual(Task.objects.get(id=plain_id).due_date, "2026-08-01")
 
     def test_create_truncates_subtask_fields_that_commands_cannot_store_safely(self):
         # RF-006 review finding: an outright 400 here means an unrelated
@@ -601,6 +617,365 @@ class TaskApiTests(TestCase):
         self.assertEqual(response.data["order"], 2.5)
 
 
+class TaskDomainValidationTests(TestCase):
+    # RF-006 round 2: cross-field scope, bucket/category, rolled-from,
+    # repeat, time/date, uniqueness, and bounded-collection rules on top of
+    # the plain field-shape validation TaskApiTests already covers. Each
+    # rule below gets an accept case and a reject case, matching the ground
+    # truth derived from frontend/src/features/tasks/types.ts and
+    # frontend/src/features/tasks/api/mapping.ts.
+
+    # Rule 1: scope_value format must match scope_kind.
+    def test_create_accepts_scope_value_formats_matching_each_scope_kind(self):
+        owner, client = auth_client()
+        cases = [("day", "2026-07-27"), ("week", "2026-07-27"), ("month", "2026-07"), ("year", "2026")]
+        for kind, value in cases:
+            with self.subTest(kind=kind):
+                response = client.post(
+                    "/api/tasks/",
+                    make_task_payload(id=str(uuid.uuid4()), scope_kind=kind, scope_value=value),
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_a_scope_value_that_does_not_match_its_scope_kinds_format(self):
+        owner, client = auth_client()
+        cases = [("day", "2026/07/27"), ("week", "07-27-2026"), ("month", "2026-07-27"), ("year", "26")]
+        for kind, value in cases:
+            with self.subTest(kind=kind):
+                response = client.post(
+                    "/api/tasks/",
+                    make_task_payload(id=str(uuid.uuid4()), scope_kind=kind, scope_value=value),
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 400)
+
+    def test_create_accepts_a_bucket_scoped_task_with_an_empty_scope_value(self):
+        owner, client = auth_client()
+        category = Category.objects.create(user=owner, name="Someday")
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(scope_kind="bucket", scope_value="", bucket_category=str(category.id)),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_a_bucket_scoped_task_with_a_non_empty_scope_value(self):
+        owner, client = auth_client()
+        category = Category.objects.create(user=owner, name="Someday")
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(
+                scope_kind="bucket", scope_value="2026-07-27", bucket_category=str(category.id),
+            ),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    # Rule 2: bucket_category <-> scope_kind pairing.
+    def test_create_accepts_a_bucket_scoped_task_with_bucket_category_set(self):
+        owner, client = auth_client()
+        category = Category.objects.create(user=owner, name="Someday")
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(scope_kind="bucket", scope_value="", bucket_category=str(category.id)),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_bucket_category_scope_kind_mismatches(self):
+        owner, client = auth_client()
+        category = Category.objects.create(user=owner, name="Someday")
+        cases = {
+            "bucket_without_category": {"scope_kind": "bucket", "scope_value": ""},
+            "non_bucket_with_category": {"bucket_category": str(category.id)},
+        }
+        for label, overrides in cases.items():
+            with self.subTest(label=label):
+                response = client.post(
+                    "/api/tasks/",
+                    make_task_payload(id=str(uuid.uuid4()), **overrides),
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 400)
+
+    # Rule 3: rolled_from_kind/rolled_from_value pairing, format, and the
+    # "bucket" rejection judgment call.
+    def test_create_accepts_a_task_with_matching_rolled_from_kind_and_value(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(rolled_from_kind="day", rolled_from_value="2026-07-20"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_a_rolled_from_kind_set_without_a_rolled_from_value(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(rolled_from_kind="day", rolled_from_value=None),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_rejects_a_rolled_from_value_whose_format_does_not_match_its_kind(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(rolled_from_kind="month", rolled_from_value="2026-07-20"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_rejects_a_bucket_rolled_from_kind_as_an_invalid_domain_state(self):
+        # Judgment call (see PR description): mapping.ts documents that
+        # rolled_from_kind="bucket" is type-legal but never produced by this
+        # app, since nothing rolls a bucket-scoped task over.
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(rolled_from_kind="bucket", rolled_from_value="not-empty"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    # Rule 4: repeat_weekdays / repeat_source are mutually exclusive.
+    def test_create_accepts_a_task_with_only_repeat_weekdays_set(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/", make_task_payload(repeat_weekdays=[1, 3]), format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_a_task_with_both_repeat_weekdays_and_repeat_source_set(self):
+        owner, client = auth_client()
+        anchor_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=anchor_id, repeat_weekdays=[1]), format="json")
+
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(repeat_weekdays=[2], repeat_source=anchor_id),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    # Rule 5: repeat_weekdays must be a non-empty list of unique weekdays
+    # when present.
+    def test_create_accepts_repeat_weekdays_with_unique_values(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/", make_task_payload(repeat_weekdays=[0, 6]), format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_repeat_weekdays_with_a_duplicate_value(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/", make_task_payload(repeat_weekdays=[1, 1]), format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_rejects_an_empty_repeat_weekdays_list(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/", make_task_payload(repeat_weekdays=[]), format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    # Rule 6: excluded_dates requires an anchor (repeat_weekdays).
+    def test_create_accepts_excluded_dates_on_an_anchor_task(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(repeat_weekdays=[1], excluded_dates=["2026-07-13"]),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_excluded_dates_without_repeat_weekdays(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/", make_task_payload(excluded_dates=["2026-07-13"]), format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_rejects_a_malformed_or_duplicate_excluded_dates_entry(self):
+        owner, client = auth_client()
+        cases = {"malformed": ["07-13-2026"], "duplicate": ["2026-07-13", "2026-07-13"]}
+        for label, excluded_dates in cases.items():
+            with self.subTest(label=label):
+                response = client.post(
+                    "/api/tasks/",
+                    make_task_payload(
+                        id=str(uuid.uuid4()), repeat_weekdays=[1], excluded_dates=excluded_dates,
+                    ),
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 400)
+
+    # Rule 7: due_date is excluded for routine-managed tasks.
+    def test_create_accepts_a_due_date_on_a_non_routine_task(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/", make_task_payload(due_date="2026-08-01"), format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_a_due_date_on_an_anchor_task(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(repeat_weekdays=[1], due_date="2026-08-01"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_rejects_a_due_date_on_an_occurrence_task(self):
+        owner, client = auth_client()
+        anchor_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=anchor_id, repeat_weekdays=[1]), format="json")
+
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(repeat_source=anchor_id, due_date="2026-08-01"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_rejects_a_due_date_with_the_wrong_format(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/", make_task_payload(due_date="08/01/2026"), format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    # Rule 8: duration_minutes requires time; time's own "HH:MM" format.
+    def test_create_accepts_duration_minutes_alongside_time(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/", make_task_payload(time="09:30", duration_minutes=45), format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_duration_minutes_without_time(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/", make_task_payload(duration_minutes=45), format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_accepts_a_well_formed_time_value(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/", make_task_payload(time="00:00"), format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_a_malformed_time_value(self):
+        owner, client = auth_client()
+        for value in ["9:30", "24:00", "09:60", "09-30"]:
+            with self.subTest(value=value):
+                response = client.post(
+                    "/api/tasks/", make_task_payload(id=str(uuid.uuid4()), time=value), format="json",
+                )
+                self.assertEqual(response.status_code, 400)
+
+    # Rule 9: subtask ids must be unique within a task.
+    def test_create_accepts_subtasks_with_unique_ids(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(
+                subtasks=[
+                    {"id": "s1", "title": "one", "done": False},
+                    {"id": "s2", "title": "two", "done": False},
+                ],
+            ),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_subtasks_with_a_duplicate_id(self):
+        owner, client = auth_client()
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(
+                subtasks=[
+                    {"id": "s1", "title": "one", "done": False},
+                    {"id": "s1", "title": "two", "done": False},
+                ],
+            ),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    # Rule 10: bounded-collection defensive caps on subtasks/excluded_dates.
+    def test_create_accepts_subtasks_at_the_defensive_cap(self):
+        owner, client = auth_client()
+        subtasks = [{"id": f"s{i}", "title": f"t{i}", "done": False} for i in range(SUBTASKS_MAX_COUNT)]
+        response = client.post(
+            "/api/tasks/", make_task_payload(subtasks=subtasks), format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_subtasks_beyond_the_defensive_cap(self):
+        owner, client = auth_client()
+        subtasks = [
+            {"id": f"s{i}", "title": f"t{i}", "done": False} for i in range(SUBTASKS_MAX_COUNT + 1)
+        ]
+        response = client.post(
+            "/api/tasks/", make_task_payload(subtasks=subtasks), format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_accepts_excluded_dates_at_the_defensive_cap(self):
+        owner, client = auth_client()
+        start = datetime(2026, 1, 1)
+        excluded_dates = [
+            (start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(EXCLUDED_DATES_MAX_COUNT)
+        ]
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(repeat_weekdays=[1], excluded_dates=excluded_dates),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_create_rejects_excluded_dates_beyond_the_defensive_cap(self):
+        owner, client = auth_client()
+        start = datetime(2026, 1, 1)
+        excluded_dates = [
+            (start + timedelta(days=i)).strftime("%Y-%m-%d")
+            for i in range(EXCLUDED_DATES_MAX_COUNT + 1)
+        ]
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(repeat_weekdays=[1], excluded_dates=excluded_dates),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    # A PATCH only carries the fields it sends, so validate() must merge
+    # against the current instance rather than treat missing fields as
+    # unset — otherwise a partial update could sneak past a cross-field
+    # rule that a full create/PUT would have caught.
+    def test_update_rejects_a_partial_patch_that_would_violate_a_cross_field_rule(self):
+        owner, client = auth_client()
+        task_id = str(uuid.uuid4())
+        client.post("/api/tasks/", make_task_payload(id=task_id), format="json")
+
+        response = client.patch(
+            f"/api/tasks/{task_id}/",
+            {"duration_minutes": 30},
+            format="json",
+            **if_match(),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIsNone(Task.objects.get(id=task_id).duration_minutes)
+
+
 class TaskCommandApiTests(TestCase):
     def setUp(self):
         self.user, self.client = auth_client("commands@example.com")
@@ -711,11 +1086,11 @@ class TaskCommandApiTests(TestCase):
         cases = [
             ({"done": True, "completed_at": timezone.now()}, "completed_at"),
             ({"time": "09:00"}, "time"),
-            ({"duration_minutes": 30}, "duration_minutes"),
+            # RF-006 round 2, rule 8: duration_minutes requires time.
+            ({"duration_minutes": 30, "time": "09:00"}, "duration_minutes"),
             ({"due_date": "2026-08-10"}, "due_date"),
             ({"background": True}, "background"),
             ({"rolled_from_kind": "day", "rolled_from_value": "2026-08-05"}, "rollover_history"),
-            ({"excluded_dates": ["2026-08-05"]}, "excluded_dates"),
         ]
         for overrides, expected_field in cases:
             with self.subTest(expected_field=expected_field):
@@ -727,6 +1102,25 @@ class TaskCommandApiTests(TestCase):
                 self.assertEqual(response.status_code, 409)
                 self.assertEqual(response.data["code"], "data_loss_confirmation_required")
                 self.assertIn(expected_field, response.data["lost_fields"])
+
+        # excluded_dates is only ever valid on a task that also has
+        # repeat_weekdays set (RF-006 round 2, rule 6) — but a source with
+        # repeat_weekdays is already rejected earlier in nest_task
+        # ("source_is_repeating"), before the data-loss check ever runs, so
+        # this combination can no longer be produced through the live API.
+        # Write it directly against the DB, same as this suite's existing
+        # legacy/pre-validation-data cases, to keep _nest_data_loss_fields's
+        # excluded_dates handling covered.
+        excluded_dates_source = self.create_task(title="lossy-excluded_dates")
+        Task.objects.filter(id=excluded_dates_source.id).update(excluded_dates=["2026-08-05"])
+        excluded_dates_source.refresh_from_db()
+        excluded_dates_target = self.create_task(title="target-excluded_dates")
+
+        response = self.nest(excluded_dates_source, excluded_dates_target)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["code"], "data_loss_confirmation_required")
+        self.assertIn("excluded_dates", response.data["lost_fields"])
 
     def test_nest_revalidates_repeat_subtasks_and_duplicate_child_rules(self):
         target = self.create_task(
@@ -972,13 +1366,20 @@ class TaskCommandApiTests(TestCase):
         Task.objects.filter(id=stale_parent.id).update(version=2)
         stale = self.promote(stale_parent, parent_version=1)
 
-        duplicate_parent = self.create_task(
-            title="duplicates",
+        # RF-006 round 2, rule 9 now rejects a subtasks array with a
+        # duplicate id on create/update, so this legacy shape (which
+        # promote_subtask's own len(matches) > 1 guard exists to handle)
+        # can no longer arise through the live API — write it directly
+        # against the DB instead, same as this suite's other
+        # legacy/pre-validation-data cases.
+        duplicate_parent = self.create_task(title="duplicates")
+        Task.objects.filter(id=duplicate_parent.id).update(
             subtasks=[
                 {"id": "dup", "title": "one", "done": False},
                 {"id": "dup", "title": "two", "done": False},
-            ],
+            ]
         )
+        duplicate_parent.refresh_from_db()
         duplicate = self.promote(duplicate_parent, subtask_id="dup")
 
         collision_parent = self.create_task(
