@@ -1307,6 +1307,25 @@ class TaskCommandApiTests(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.order, 7)
 
+    def test_reschedule_appends_order_accounting_for_rolled_over_week_scoped_siblings(self):
+        # Test the week-scoped OR-branch of the order-calculation query: ensure
+        # week-scoped tasks rolled over from the destination date are counted
+        # when calculating the new order.
+        rolled_sibling = self.create_task(title="rolled task", scope_kind="week", scope_value="2026-07-13")
+        rolled_sibling.scope_kind = "week"
+        rolled_sibling.scope_value = "2026-07-13"
+        rolled_sibling.rolled_from_kind = "day"
+        rolled_sibling.rolled_from_value = "2026-07-20"
+        rolled_sibling.order = 5.0
+        rolled_sibling.save(update_fields=["scope_kind", "scope_value", "rolled_from_kind", "rolled_from_value", "order"])
+
+        task = self.create_task(title="moving in", scope_value="2026-07-16")
+
+        self.reschedule(task, "2026-07-20")
+
+        task.refresh_from_db()
+        self.assertEqual(task.order, 6.0)
+
     def test_reschedule_rejects_the_same_effective_date_as_a_conflict(self):
         task = self.create_task(title="staying put", scope_value="2026-07-16")
 
