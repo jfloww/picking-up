@@ -1252,6 +1252,25 @@ describe("TasksProvider", () => {
     await waitFor(() => expect(result.current.tasks.find((t) => t.id === "f")?.order).toBe(3));
   });
 
+  it("reorderTask applies the optimistic order synchronously, before the command resolves", async () => {
+    // Final-review finding: reorderTask used to have no synchronous state
+    // update at all, so the drop indicator/drag preview vanished on
+    // pointer-up while the list itself kept showing the pre-drag order
+    // until the network round trip resolved — a visible snap-back then
+    // jump. Asserted synchronously, right after act() and before the
+    // queued command resolves, matching the style of the
+    // detachFromRoutine/removeTask/rescheduleTaskToDay optimistic-update
+    // tests above.
+    const first = makeTask({ id: "f", scope: { kind: "day", date: todayKey() }, order: 1 });
+    const second = makeTask({ id: "s", scope: { kind: "day", date: todayKey() }, order: 2 });
+    const { result } = setup(fakeRepository([first, second]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    act(() => result.current.reorderTask("f", null));
+
+    expect(result.current.tasks.find((t) => t.id === "f")?.order).toBe(3);
+  });
+
   it("reorderTask returns 409 as a domain conflict, not a version-changed banner, for an invalid neighbor", async () => {
     const task = makeTask({ id: "a", scope: { kind: "day", date: todayKey() } });
     const { repo, result } = setup(fakeRepository([task]));
