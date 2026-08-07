@@ -52,6 +52,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # First, so every log call made while handling this request — including
+    # ones inside middleware below it — can pick up the correlation ID.
+    "config.middleware.RequestIdMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -211,74 +214,98 @@ SIMPLE_JWT = {
 # until a real OAuth client is created in Google Cloud Console.
 GOOGLE_OAUTH_CLIENT_ID = env("GOOGLE_OAUTH_CLIENT_ID", default=None)
 
-LOG_DIR = BASE_DIR / "logs"
-LOG_DIR.mkdir(parents=True, exist_ok=True)
+# Console-only in production: gunicorn's stdout/stderr already flows into
+# journald under this project's systemd deployment (see the deployment
+# runbook — `journalctl -u gunicorn` is already the first place operators
+# look), and a local rotating file adds nothing there while being actively
+# unsafe with more than one worker process. WindowsSafeTimedRotatingFileHandler
+# only fixes the Windows dev-autoreloader file-lock problem it was built
+# for; TimedRotatingFileHandler itself has no protection against two
+# processes rotating the same file at the same moment — each does its own
+# rename-based rollover independently, so concurrent gunicorn workers race
+# on rollover and can silently drop or corrupt log lines. File logging is
+# therefore dev-only here (DEBUG=True), where there is always exactly one
+# process writing.
+_LOG_HANDLERS = {
+    "console": {
+        "class": "logging.StreamHandler",
+        "formatter": "verbose",
+    },
+}
+
+if DEBUG:
+    LOG_DIR = BASE_DIR / "logs"
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    # Rotates at local midnight: today's log is backend.log, and each
+    # previous day is kept as backend.log.YYYY-MM-DD (up to a year back).
+    # Uses WindowsSafeTimedRotatingFileHandler, not the stdlib class
+    # directly: on Windows, the dev autoreloader's watcher process keeps
+    # this file open for the whole `runserver` session, so a plain
+    # TimedRotatingFileHandler's rename-based rollover fails with
+    # PermissionError every time it's due — and since doRollover() and
+    # the actual write share a try block, that silently drops every log
+    # record from then on, not just the rotation.
+    _LOG_HANDLERS["file"] = {
+        "class": "config.logging_handlers.WindowsSafeTimedRotatingFileHandler",
+        "filename": LOG_DIR / "backend.log",
+        "when": "midnight",
+        "backupCount": 365,
+        "formatter": "verbose",
+        "encoding": "utf-8",
+    }
+    _LOG_HANDLERS["error_file"] = {
+        "class": "config.logging_handlers.WindowsSafeTimedRotatingFileHandler",
+        "filename": LOG_DIR / "backend-error.log",
+        "when": "midnight",
+        "backupCount": 365,
+        "level": "ERROR",
+        "formatter": "verbose",
+        "encoding": "utf-8",
+    }
+
+_LOG_HANDLER_NAMES = list(_LOG_HANDLERS)
 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "request_id": {
+            "()": "config.middleware.RequestIdLogFilter",
+        },
+    },
     "formatters": {
         "verbose": {
-            # e.g. "[20260720 222217] ERROR - accounts.views.post:112 - Invalid Google credential."
-            "format": "[{asctime}] {levelname} - {module}.{funcName}:{lineno} - {message}",
+            # e.g. "[20260720 222217] ERROR - a1b2c3d4 - accounts.views.post:112 - Invalid Google credential."
+            "format": "[{asctime}] {levelname} - {request_id} - {module}.{funcName}:{lineno} - {message}",
             "style": "{",
             "datefmt": "%Y%m%d %H%M%S",
         },
     },
     "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "verbose",
-        },
-        # Rotates at local midnight: today's log is backend.log, and each
-        # previous day is kept as backend.log.YYYY-MM-DD (up to a year back).
-        # Uses WindowsSafeTimedRotatingFileHandler, not the stdlib class
-        # directly: on Windows, the dev autoreloader's watcher process keeps
-        # this file open for the whole `runserver` session, so a plain
-        # TimedRotatingFileHandler's rename-based rollover fails with
-        # PermissionError every time it's due — and since doRollover() and
-        # the actual write share a try block, that silently drops every log
-        # record from then on, not just the rotation.
-        "file": {
-            "class": "config.logging_handlers.WindowsSafeTimedRotatingFileHandler",
-            "filename": LOG_DIR / "backend.log",
-            "when": "midnight",
-            "backupCount": 365,
-            "formatter": "verbose",
-            "encoding": "utf-8",
-        },
-        "error_file": {
-            "class": "config.logging_handlers.WindowsSafeTimedRotatingFileHandler",
-            "filename": LOG_DIR / "backend-error.log",
-            "when": "midnight",
-            "backupCount": 365,
-            "level": "ERROR",
-            "formatter": "verbose",
-            "encoding": "utf-8",
-        },
+        name: {**config, "filters": ["request_id"]} for name, config in _LOG_HANDLERS.items()
     },
     "root": {
-        "handlers": ["console", "file", "error_file"],
+        "handlers": _LOG_HANDLER_NAMES,
         "level": "INFO",
     },
     "loggers": {
         "django": {
-            "handlers": ["console", "file", "error_file"],
+            "handlers": _LOG_HANDLER_NAMES,
             "level": "INFO",
             "propagate": False,
         },
         "django.request": {
-            "handlers": ["console", "file", "error_file"],
+            "handlers": _LOG_HANDLER_NAMES,
             "level": "WARNING",
             "propagate": False,
         },
         "django.db.backends": {
-            "handlers": ["console", "file", "error_file"],
+            "handlers": _LOG_HANDLER_NAMES,
             "level": "WARNING",
             "propagate": False,
         },
         "apps": {
-            "handlers": ["console", "file", "error_file"],
+            "handlers": _LOG_HANDLER_NAMES,
             "level": "DEBUG" if DEBUG else "INFO",
             "propagate": False,
         },

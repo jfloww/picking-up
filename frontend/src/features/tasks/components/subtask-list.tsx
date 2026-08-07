@@ -8,25 +8,40 @@ import { cn } from "@/lib/utils";
 
 import type { Subtask } from "../types";
 import { QuickAdd } from "./quick-add";
+import {
+  prefersReducedMotion,
+  SUBTASK_TRANSITION_DURATION_MS,
+  useSubtaskTransitionClasses,
+  type SubtaskRenderState,
+} from "./use-subtask-transition-classes";
 
 // Cardless, ~40px row: checkbox, click-to-edit title, and a delete control
 // that only shows on hover/focus/while editing — never a permanent "×" per
 // row, which reads as noisy at this density.
+//
+// Delete's fade-out is driven locally (a click handler, not a prop diff):
+// the button click already knows exactly which row is leaving, so this
+// defers the real onRemove call until the animation finishes instead of
+// needing to reconcile a removed id back into its old list position from
+// the subtasks array alone (see use-subtask-transition-classes.ts).
 function DrawerSubtaskRow({
   subtask,
   onToggle,
   onRemove,
   onEditTitle,
   onPromote,
+  animationClass,
 }: {
   subtask: Subtask;
   onToggle: (subtaskId: string) => void;
   onRemove: (subtaskId: string) => void;
   onEditTitle: (subtaskId: string, title: string) => void;
   onPromote?: (subtaskId: string) => void;
+  animationClass?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(subtask.title);
+  const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const startEditing = () => {
@@ -45,8 +60,22 @@ function DrawerSubtaskRow({
     setEditing(false);
   };
 
+  const handleRemove = () => {
+    if (prefersReducedMotion()) {
+      onRemove(subtask.id);
+      return;
+    }
+    setDeleting(true);
+    setTimeout(() => onRemove(subtask.id), SUBTASK_TRANSITION_DURATION_MS);
+  };
+
   return (
-    <li className="group flex h-10 items-center gap-2.5 rounded-md px-1.5 transition-colors duration-200 hover:bg-muted/40 focus-within:bg-muted/40">
+    <li
+      className={cn(
+        "group flex h-10 items-center gap-2.5 rounded-md px-1.5 transition-colors duration-200 hover:bg-muted/40 focus-within:bg-muted/40",
+        deleting ? "animate-subtask-exit" : animationClass,
+      )}
+    >
       <Checkbox
         checked={subtask.done}
         onCheckedChange={() => onToggle(subtask.id)}
@@ -97,7 +126,7 @@ function DrawerSubtaskRow({
       )}
       <button
         type="button"
-        onClick={() => onRemove(subtask.id)}
+        onClick={handleRemove}
         aria-label={`Delete ${subtask.title}`}
         className="flex size-6 shrink-0 items-center justify-center rounded-md text-subtle opacity-0 outline-none transition-opacity duration-200 hover:bg-muted hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover:opacity-100 group-focus-within:opacity-100"
       >
@@ -109,6 +138,7 @@ function DrawerSubtaskRow({
 
 function DrawerSubtaskList({
   subtasks,
+  renderStates,
   onAdd,
   onToggle,
   onRemove,
@@ -116,20 +146,29 @@ function DrawerSubtaskList({
   onPromote,
 }: {
   subtasks: Subtask[];
+  renderStates: Map<string, SubtaskRenderState>;
   onAdd: (title: string) => void;
   onToggle: (subtaskId: string) => void;
   onRemove: (subtaskId: string) => void;
   onEditTitle: (subtaskId: string, title: string) => void;
   onPromote?: (subtaskId: string) => void;
 }) {
-  const active = subtasks.filter((s) => !s.done);
-  const completed = subtasks.filter((s) => s.done);
+  const withRenderState = subtasks.map((s) => ({
+    subtask: s,
+    state: renderStates.get(s.id),
+  }));
+  // Grouping uses the (possibly delayed) render-state `done` value, not the
+  // live one, so a just-toggled row stays in its old section for the
+  // duration of its exit animation instead of jumping to the new section
+  // on the very next render.
+  const active = withRenderState.filter((x) => !(x.state?.done ?? x.subtask.done));
+  const completed = withRenderState.filter((x) => x.state?.done ?? x.subtask.done);
 
   return (
     <div className="space-y-1">
       {(active.length > 0 || completed.length > 0) && (
         <ul>
-          {[...active, ...completed].map((s) => (
+          {[...active, ...completed].map(({ subtask: s, state }) => (
             <DrawerSubtaskRow
               key={s.id}
               subtask={s}
@@ -137,6 +176,7 @@ function DrawerSubtaskList({
               onRemove={onRemove}
               onEditTitle={onEditTitle}
               onPromote={onPromote}
+              animationClass={state?.enterAnimationClass ?? state?.sectionAnimationClass}
             />
           ))}
         </ul>
@@ -151,6 +191,60 @@ function DrawerSubtaskList({
         </div>
       </div>
     </div>
+  );
+}
+
+// The default (non-drawer) list never regroups by done — a toggled
+// subtask keeps its position, so it only needs the enter/delete animations,
+// not the section-move one DrawerSubtaskRow also plays.
+function PlainSubtaskRow({
+  subtask,
+  onToggle,
+  onRemove,
+  animationClass,
+}: {
+  subtask: Subtask;
+  onToggle: (subtaskId: string) => void;
+  onRemove: (subtaskId: string) => void;
+  animationClass?: string;
+}) {
+  const [deleting, setDeleting] = useState(false);
+
+  const handleRemove = () => {
+    if (prefersReducedMotion()) {
+      onRemove(subtask.id);
+      return;
+    }
+    setDeleting(true);
+    setTimeout(() => onRemove(subtask.id), SUBTASK_TRANSITION_DURATION_MS);
+  };
+
+  return (
+    <li
+      className={cn("flex items-center gap-2", deleting ? "animate-subtask-exit" : animationClass)}
+    >
+      <Checkbox
+        checked={subtask.done}
+        onCheckedChange={() => onToggle(subtask.id)}
+        aria-label={`Toggle ${subtask.title}`}
+      />
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate text-xs",
+          subtask.done && "text-muted-foreground line-through",
+        )}
+      >
+        {subtask.title}
+      </span>
+      <button
+        type="button"
+        onClick={handleRemove}
+        aria-label={`Delete ${subtask.title}`}
+        className="text-xs text-subtle hover:text-destructive"
+      >
+        ×
+      </button>
+    </li>
   );
 }
 
@@ -171,10 +265,16 @@ export function SubtaskList({
   onPromote?: (subtaskId: string) => void;
   drawer?: boolean;
 }) {
+  // Called once here (not separately in DrawerSubtaskList) so drawer mode
+  // doesn't run two independent copies of the same timer bookkeeping for
+  // the same subtasks array.
+  const renderStates = useSubtaskTransitionClasses(subtasks);
+
   if (drawer) {
     return (
       <DrawerSubtaskList
         subtasks={subtasks}
+        renderStates={renderStates}
         onAdd={onAdd}
         onToggle={onToggle}
         onRemove={onRemove}
@@ -188,29 +288,13 @@ export function SubtaskList({
     <div className="space-y-1">
       <ul className="space-y-0.5">
         {subtasks.map((s) => (
-          <li key={s.id} className="flex items-center gap-2">
-            <Checkbox
-              checked={s.done}
-              onCheckedChange={() => onToggle(s.id)}
-              aria-label={`Toggle ${s.title}`}
-            />
-            <span
-              className={cn(
-                "min-w-0 flex-1 truncate text-xs",
-                s.done && "text-muted-foreground line-through",
-              )}
-            >
-              {s.title}
-            </span>
-            <button
-              type="button"
-              onClick={() => onRemove(s.id)}
-              aria-label={`Delete ${s.title}`}
-              className="text-xs text-subtle hover:text-destructive"
-            >
-              ×
-            </button>
-          </li>
+          <PlainSubtaskRow
+            key={s.id}
+            subtask={s}
+            onToggle={onToggle}
+            onRemove={onRemove}
+            animationClass={renderStates.get(s.id)?.enterAnimationClass}
+          />
         ))}
       </ul>
       <QuickAdd onAdd={onAdd} placeholder="Add subtask" />

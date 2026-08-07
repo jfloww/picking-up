@@ -302,17 +302,8 @@ export function TaskDetailFields({
     <div className={cn(drawer ? "space-y-7" : "space-y-1.5")}>
       {schedulingCluster}
 
-      {drawer ? (
-        <>
-          {subtasksSection}
-          {notesSection}
-        </>
-      ) : (
-        <>
-          {notesSection}
-          {subtasksSection}
-        </>
-      )}
+      {subtasksSection}
+      {notesSection}
 
       {showDelete && (
         <button

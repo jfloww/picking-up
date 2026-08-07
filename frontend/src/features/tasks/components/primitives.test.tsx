@@ -603,7 +603,7 @@ describe("TaskItem due date badge", () => {
 });
 
 describe("SubtaskList", () => {
-  it("wires toggle, remove, and add", () => {
+  it("wires toggle, remove, and add", async () => {
     const onToggle = vi.fn();
     const onRemove = vi.fn();
     const onAdd = vi.fn();
@@ -619,7 +619,9 @@ describe("SubtaskList", () => {
     fireEvent.click(screen.getByLabelText("Toggle buy wood"));
     expect(onToggle).toHaveBeenCalledWith("s1");
     fireEvent.click(screen.getByLabelText("Delete buy wood"));
-    expect(onRemove).toHaveBeenCalledWith("s1");
+    // onRemove is deferred until the row's exit animation finishes (see
+    // use-subtask-transition-classes.ts), not called synchronously on click.
+    await waitFor(() => expect(onRemove).toHaveBeenCalledWith("s1"));
     const input = screen.getByLabelText("Add subtask");
     fireEvent.change(input, { target: { value: "sand it" } });
     fireEvent.submit(input.closest("form")!);
