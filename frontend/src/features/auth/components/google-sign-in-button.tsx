@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { safeAuthRedirect } from "../lib/safe-redirect";
 
 declare global {
   interface Window {
@@ -68,7 +69,7 @@ export function GoogleSignInButton() {
           return;
         }
 
-        router.replace(searchParams.get("next") ?? "/planner");
+        router.replace(safeAuthRedirect(searchParams.get("next")));
         router.refresh();
       },
     });

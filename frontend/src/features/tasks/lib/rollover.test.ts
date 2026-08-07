@@ -13,6 +13,7 @@ function makeTask(overrides: Partial<Task>): Task {
     scope: { kind: "day", date: TODAY },
     createdAt: "2026-07-01T00:00:00.000Z",
     order: 0,
+    version: 1,
     ...overrides,
   };
 }

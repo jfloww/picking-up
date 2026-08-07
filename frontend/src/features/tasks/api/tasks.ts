@@ -1,10 +1,44 @@
-import { apiRequest } from "@/lib/api/server";
+import { ApiUnauthorizedError, apiRequest } from "@/lib/api/server";
 import { getAccessToken } from "@/lib/auth/server-cookies";
 
 import { fromApiPayload, toApiPayload, type ApiTask } from "./mapping";
 import type { Task } from "../types";
 
 const API_BASE_URL = process.env.DJANGO_API_BASE_URL ?? "http://localhost:8000";
+
+export class TaskApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly body: unknown,
+  ) {
+    const payload = body as { detail?: unknown; error?: unknown } | null;
+    const message =
+      (typeof payload?.detail === "string" && payload.detail) ||
+      (typeof payload?.error === "string" && payload.error) ||
+      "Task request failed.";
+    super(message);
+    this.name = "TaskApiError";
+  }
+}
+
+async function taskMutationRequest(path: string, init: RequestInit): Promise<Response> {
+  const accessToken = await getAccessToken();
+  const headers = new Headers(init.headers);
+  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers,
+    cache: "no-store",
+  });
+  if (response.status === 401) throw new ApiUnauthorizedError();
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new TaskApiError(response.status, body);
+  }
+  return response;
+}
 
 function isDuplicateIdError(body: unknown): boolean {
   const idErrors = (body as { id?: unknown } | null)?.id;
@@ -42,15 +76,96 @@ export async function requestCreateTask(
   return { status: response.status, duplicateId: response.status === 400 && isDuplicateIdError(body) };
 }
 
-export async function requestUpdateTask(task: Task): Promise<Task> {
-  const payload = await apiRequest<ApiTask>(`/api/tasks/${task.id}/`, {
+export async function requestUpdateTask(taskId: string, task: Task): Promise<Task> {
+  const response = await taskMutationRequest(`/api/tasks/${taskId}/`, {
     method: "PUT",
+    headers: { "If-Match": `"${task.version}"` },
     body: JSON.stringify(toApiPayload(task)),
-    authenticated: true,
   });
-  return fromApiPayload(payload);
+  return fromApiPayload((await response.json()) as ApiTask);
 }
 
-export async function requestDeleteTask(id: string): Promise<void> {
-  await apiRequest(`/api/tasks/${id}/`, { method: "DELETE", authenticated: true });
+export async function requestDeleteTask(id: string, version: number): Promise<void> {
+  await taskMutationRequest(`/api/tasks/${id}/`, {
+    method: "DELETE",
+    headers: { "If-Match": `"${version}"` },
+  });
+}
+
+export interface NestTaskRequest {
+  targetId: string;
+  sourceVersion: number;
+  targetVersion: number;
+  subtaskId: string;
+  confirmDataLoss: boolean;
+}
+
+export interface NestTaskResponse {
+  target: Task;
+  removedTaskId: string;
+  // The BFF route echoes this back instead of hardcoding a status, so it
+  // stays correct if Django's success status for this command ever changes
+  // (RF-005 review finding — the "preserve Django's status" claim in the
+  // design doc previously only held on the error path).
+  status: number;
+}
+
+export async function requestNestTask(
+  sourceId: string,
+  command: NestTaskRequest,
+): Promise<NestTaskResponse> {
+  const response = await taskMutationRequest(`/api/tasks/${sourceId}/commands/nest/`, {
+    method: "POST",
+    body: JSON.stringify({
+      target_id: command.targetId,
+      source_version: command.sourceVersion,
+      target_version: command.targetVersion,
+      subtask_id: command.subtaskId,
+      confirm_data_loss: command.confirmDataLoss,
+    }),
+  });
+  const payload = (await response.json()) as {
+    target: ApiTask;
+    removed_task_id: string;
+  };
+  return {
+    target: fromApiPayload(payload.target),
+    removedTaskId: payload.removed_task_id,
+    status: response.status,
+  };
+}
+
+export interface PromoteSubtaskRequest {
+  subtaskId: string;
+  parentVersion: number;
+  newTaskId: string;
+}
+
+export interface PromoteSubtaskResponse {
+  parent: Task;
+  task: Task;
+  status: number;
+}
+
+export async function requestPromoteSubtask(
+  parentId: string,
+  command: PromoteSubtaskRequest,
+): Promise<PromoteSubtaskResponse> {
+  const response = await taskMutationRequest(
+    `/api/tasks/${parentId}/commands/promote-subtask/`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        subtask_id: command.subtaskId,
+        parent_version: command.parentVersion,
+        new_task_id: command.newTaskId,
+      }),
+    },
+  );
+  const payload = (await response.json()) as { parent: ApiTask; task: ApiTask };
+  return {
+    parent: fromApiPayload(payload.parent),
+    task: fromApiPayload(payload.task),
+    status: response.status,
+  };
 }

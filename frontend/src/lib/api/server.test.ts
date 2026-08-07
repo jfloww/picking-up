@@ -4,7 +4,7 @@ vi.mock("@/lib/auth/server-cookies", () => ({
   getAccessToken: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { ApiUnauthorizedError, apiRequest } from "./server";
+import { ApiResponseError, ApiUnauthorizedError, apiRequest } from "./server";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -68,5 +68,24 @@ describe("apiRequest", () => {
     expect(error).not.toBeInstanceOf(ApiUnauthorizedError);
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe("Invalid credentials.");
+  });
+
+  it("preserves the upstream status and Retry-After on ApiResponseError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: "Request was throttled." }), {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": "42",
+          },
+        }),
+      ),
+    );
+
+    const error = await apiRequest("/api/auth/token/", { method: "POST" }).catch((e) => e);
+    expect(error).toBeInstanceOf(ApiResponseError);
+    expect(error).toMatchObject({ status: 429, retryAfter: "42" });
   });
 });

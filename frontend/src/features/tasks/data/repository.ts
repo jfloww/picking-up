@@ -1,3 +1,4 @@
+import { promotedSubtaskOrder } from "../lib/reorder";
 import { isValidTime } from "../lib/times";
 import type { Subtask, Task } from "../types";
 
@@ -13,11 +14,58 @@ const SCOPE_FIELDS = {
 
 export type TaskStorage = Pick<Storage, "getItem" | "setItem">;
 
+export interface NestTaskCommand {
+  sourceId: string;
+  targetId: string;
+  sourceVersion: number;
+  targetVersion: number;
+  subtaskId: string;
+  confirmDataLoss: boolean;
+}
+
+export interface NestTaskResult {
+  target: Task;
+  removedTaskId: string;
+}
+
+export interface PromoteSubtaskCommand {
+  parentId: string;
+  subtaskId: string;
+  parentVersion: number;
+  newTaskId: string;
+}
+
+export interface PromoteSubtaskResult {
+  parent: Task;
+  task: Task;
+}
+
+export class TaskVersionConflictError extends Error {
+  // RF-005 review finding: the server's 409 body carries a machine code and
+  // (for a genuine staleness conflict) the task's current version, so a
+  // caller can distinguish "someone else changed this" from a client-side
+  // programming error and could resync just the affected task instead of
+  // treating every conflict as an undifferentiated failure. Both are
+  // optional because not every conflict source provides them (the
+  // localStorage/fake repositories below construct this with neither).
+  readonly code: string;
+  readonly currentVersions?: Record<string, number>;
+
+  constructor(code = "task_version_conflict", currentVersions?: Record<string, number>) {
+    super("The task changed after it was loaded.");
+    this.name = "TaskVersionConflictError";
+    this.code = code;
+    this.currentVersions = currentVersions;
+  }
+}
+
 export interface TaskRepository {
   list(): Promise<Task[]>;
-  create(task: Task): Promise<void>;
-  update(task: Task): Promise<void>;
-  remove(id: string): Promise<void>;
+  create(task: Task): Promise<Task>;
+  update(task: Task): Promise<Task>;
+  remove(id: string, version: number): Promise<void>;
+  nestTask(command: NestTaskCommand): Promise<NestTaskResult>;
+  promoteSubtask(command: PromoteSubtaskCommand): Promise<PromoteSubtaskResult>;
 }
 
 function isScope(value: unknown): boolean {
@@ -51,6 +99,7 @@ function isValidDateList(value: unknown): value is string[] {
 // The read path normalizes v2 fields instead of rejecting the whole task:
 // only v1 structural validation (isTask/isScope) may drop a task.
 export function normalizeTask(task: Task): Task {
+  const version = Number.isSafeInteger(task.version) && task.version >= 1 ? task.version : 1;
   let time = task.time;
   if (time !== undefined && (typeof time !== "string" || !isValidTime(time))) {
     time = undefined;
@@ -109,7 +158,8 @@ export function normalizeTask(task: Task): Task {
     excludedDates === task.excludedDates &&
     priority === task.priority &&
     durationMinutes === task.durationMinutes &&
-    background === task.background
+    background === task.background &&
+    version === task.version
   ) {
     return task;
   }
@@ -123,6 +173,7 @@ export function normalizeTask(task: Task): Task {
     priority,
     durationMinutes,
     background,
+    version,
   };
 }
 
@@ -164,13 +215,112 @@ export function createLocalStorageRepository(
       return read();
     },
     async create(task) {
-      write([...read(), task]);
+      const created = { ...task, version: 1 };
+      write([...read(), created]);
+      return created;
     },
     async update(task) {
-      write(read().map((t) => (t.id === task.id ? task : t)));
+      const tasks = read();
+      const current = tasks.find((t) => t.id === task.id);
+      if (!current || current.version !== task.version) throw new TaskVersionConflictError();
+      const updated = { ...task, version: task.version + 1 };
+      write(tasks.map((t) => (t.id === task.id ? updated : t)));
+      return updated;
     },
-    async remove(id) {
-      write(read().filter((t) => t.id !== id));
+    async remove(id, version) {
+      const tasks = read();
+      const current = tasks.find((t) => t.id === id);
+      if (!current || current.version !== version) throw new TaskVersionConflictError();
+      write(tasks.filter((t) => t.id !== id));
+    },
+    async nestTask(command) {
+      const tasks = read();
+      const source = tasks.find((t) => t.id === command.sourceId);
+      const target = tasks.find((t) => t.id === command.targetId);
+      if (
+        !source ||
+        !target ||
+        source.version !== command.sourceVersion ||
+        target.version !== command.targetVersion
+      ) {
+        throw new TaskVersionConflictError();
+      }
+      if (source.id === target.id) throw new Error("A task cannot be nested into itself.");
+      if ((source.subtasks?.length ?? 0) > 0) {
+        throw new Error("A task with subtasks cannot be nested.");
+      }
+      if (
+        (source.repeatWeekdays?.length ?? 0) > 0 ||
+        source.repeatSourceId ||
+        tasks.some((task) => task.repeatSourceId === source.id)
+      ) {
+        throw new Error("A routine task must be detached before nesting.");
+      }
+      if (target.subtasks?.some((subtask) => subtask.id === command.subtaskId)) {
+        throw new Error("The subtask id already exists on the target.");
+      }
+      const losesTaskOnlyData = Boolean(
+        source.memo ||
+          source.time ||
+          source.durationMinutes ||
+          source.priority ||
+          source.dueDate ||
+          source.background ||
+          source.rolledFrom ||
+          (source.excludedDates?.length ?? 0) > 0,
+      );
+      if (losesTaskOnlyData && !command.confirmDataLoss) {
+        throw new Error("Nesting requires explicit data-loss confirmation.");
+      }
+      const updatedTarget: Task = {
+        ...target,
+        version: target.version + 1,
+        subtasks: [
+          ...(target.subtasks ?? []),
+          { id: command.subtaskId, title: source.title, done: source.done },
+        ],
+      };
+      write(
+        tasks
+          .filter((task) => task.id !== source.id)
+          .map((task) => (task.id === target.id ? updatedTarget : task)),
+      );
+      return { target: updatedTarget, removedTaskId: source.id };
+    },
+    async promoteSubtask(command) {
+      const tasks = read();
+      const parent = tasks.find((task) => task.id === command.parentId);
+      if (!parent || parent.version !== command.parentVersion) {
+        throw new TaskVersionConflictError();
+      }
+      const matchingSubtasks =
+        parent.subtasks?.filter((item) => item.id === command.subtaskId) ?? [];
+      if (matchingSubtasks.length !== 1) throw new Error("Subtask not found or ambiguous.");
+      if (tasks.some((task) => task.id === command.newTaskId)) {
+        throw new Error("The promoted task id already exists.");
+      }
+      const subtask = matchingSubtasks[0]!;
+
+      const order = promotedSubtaskOrder(tasks, parent);
+
+      const now = new Date().toISOString();
+      const task: Task = {
+        id: command.newTaskId,
+        title: subtask.title,
+        done: subtask.done,
+        scope: parent.scope,
+        createdAt: now,
+        completedAt: subtask.done ? now : undefined,
+        order,
+        version: 1,
+      };
+      const updatedParent: Task = {
+        ...parent,
+        subtasks: parent.subtasks?.filter((item) => item.id !== command.subtaskId),
+        version: parent.version + 1,
+      };
+      write([...tasks.map((item) => (item.id === parent.id ? updatedParent : item)), task]);
+      return { parent: updatedParent, task };
     },
   };
 }

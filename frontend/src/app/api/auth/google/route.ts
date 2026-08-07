@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { setAuthCookies } from "@/lib/auth/cookies";
 import { requestGoogleLogin } from "@/features/auth/api/auth";
+import { apiRouteErrorResponse } from "@/lib/api/route-error";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,9 +13,6 @@ export async function POST(request: NextRequest) {
     setAuthCookies(response, tokens);
     return response;
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Google sign-in failed." },
-      { status: 400 },
-    );
+    return apiRouteErrorResponse(error, "Google sign-in failed.");
   }
 }

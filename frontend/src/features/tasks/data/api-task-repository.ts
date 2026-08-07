@@ -1,5 +1,24 @@
 import type { Task } from "../types";
-import { createLocalStorageRepository, STORAGE_KEY, type TaskRepository } from "./repository";
+import {
+  createLocalStorageRepository,
+  STORAGE_KEY,
+  TaskVersionConflictError,
+  type NestTaskResult,
+  type PromoteSubtaskResult,
+  type TaskRepository,
+} from "./repository";
+
+export const TASK_REQUEST_TIMEOUT_MS = 15_000;
+
+async function taskFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TASK_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 async function parseJsonOrUndefined<T>(response: Response): Promise<T | undefined> {
   if (response.status === 204) return undefined;
@@ -25,8 +44,21 @@ function guardUnauthorized(response: Response, redirectToLogin: () => void): voi
   }
 }
 
+async function guardTaskMutation(response: Response, redirectToLogin: () => void): Promise<void> {
+  guardUnauthorized(response, redirectToLogin);
+  if (response.status === 409) {
+    // Safe to consume the body here: every caller throws out of this
+    // branch and never reaches its own response.json() call afterward.
+    const body = (await response.json().catch(() => null)) as
+      | { code?: string; current_versions?: Record<string, number> }
+      | null;
+    throw new TaskVersionConflictError(body?.code, body?.current_versions);
+  }
+  if (!response.ok) throw new Error("Failed to save task.");
+}
+
 async function uploadForMigration(task: Task, redirectToLogin: () => void): Promise<void> {
-  const response = await fetch("/api/tasks", {
+  const response = await taskFetch("/api/tasks", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(task),
@@ -78,34 +110,57 @@ export function createApiTaskRepository(
       // migration failure is handled inside the function itself and never
       // throws, so list() stays usable even when one legacy task is stuck.
       await migrateLegacyLocalStorageTasks(redirectToLogin);
-      const response = await fetch("/api/tasks");
+      const response = await taskFetch("/api/tasks");
       guardUnauthorized(response, redirectToLogin);
       if (!response.ok) throw new Error("Failed to load tasks.");
       return (await response.json()) as Task[];
     },
     async create(task) {
-      const response = await fetch("/api/tasks", {
+      const response = await taskFetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(task),
       });
-      guardUnauthorized(response, redirectToLogin);
-      if (!response.ok) throw new Error("Failed to save task.");
+      await guardTaskMutation(response, redirectToLogin);
+      return (await response.json()) as Task;
     },
     async update(task) {
-      const response = await fetch(`/api/tasks/${task.id}`, {
+      const response = await taskFetch(`/api/tasks/${task.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": `"${task.version}"`,
+        },
         body: JSON.stringify(task),
       });
-      guardUnauthorized(response, redirectToLogin);
-      if (!response.ok) throw new Error("Failed to save task.");
+      await guardTaskMutation(response, redirectToLogin);
+      return (await response.json()) as Task;
     },
-    async remove(id) {
-      const response = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
-      guardUnauthorized(response, redirectToLogin);
-      if (!response.ok) throw new Error("Failed to delete task.");
+    async remove(id, version) {
+      const response = await taskFetch(`/api/tasks/${id}`, {
+        method: "DELETE",
+        headers: { "If-Match": `"${version}"` },
+      });
+      await guardTaskMutation(response, redirectToLogin);
       await parseJsonOrUndefined(response);
+    },
+    async nestTask(command) {
+      const response = await taskFetch(`/api/tasks/${command.sourceId}/commands/nest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(command),
+      });
+      await guardTaskMutation(response, redirectToLogin);
+      return (await response.json()) as NestTaskResult;
+    },
+    async promoteSubtask(command) {
+      const response = await taskFetch(`/api/tasks/${command.parentId}/commands/promote-subtask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(command),
+      });
+      await guardTaskMutation(response, redirectToLogin);
+      return (await response.json()) as PromoteSubtaskResult;
     },
   };
 }

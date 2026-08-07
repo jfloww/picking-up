@@ -116,6 +116,11 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+AUTHENTICATION_BACKENDS = [
+    "apps.accounts.backends.EmailBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
@@ -139,6 +144,39 @@ CORS_ALLOWED_ORIGINS = env.list(
 )
 CORS_ALLOW_CREDENTIALS = True
 
+# Development runs in one process, while production's file cache is shared by
+# all gunicorn workers on the documented single VM. A multi-host deployment
+# must replace this backend with a shared service such as Redis.
+if DEBUG:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "picking-up-development",
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+            "LOCATION": env(
+                "DJANGO_CACHE_LOCATION",
+                default=str(BASE_DIR / ".cache"),
+            ),
+            "OPTIONS": {"MAX_ENTRIES": 10_000},
+        }
+    }
+
+_NUM_PROXIES = env.int("DJANGO_NUM_PROXIES", default=0)
+
+if not DEBUG and _NUM_PROXIES == 0:
+    raise ImproperlyConfigured(
+        "DJANGO_NUM_PROXIES must be set to the number of trusted proxy hops "
+        "when DJANGO_DEBUG=False (see docs/planning/7. deployment-runbook.md). "
+        "Left at 0 behind nginx, every request resolves to the same "
+        "REMOTE_ADDR (nginx's own address), collapsing every client's auth "
+        "throttle into one shared, site-wide bucket (RF-018)."
+    )
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -146,6 +184,19 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # Trust no forwarding proxy by default. The documented nginx deployment
+    # explicitly sets this to one so throttles key on the real client address.
+    "NUM_PROXIES": _NUM_PROXIES,
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_login_burst": env("DJANGO_AUTH_LOGIN_BURST_RATE", default="5/min"),
+        "auth_login_sustained": env("DJANGO_AUTH_LOGIN_SUSTAINED_RATE", default="100/day"),
+        "auth_register_burst": env("DJANGO_AUTH_REGISTER_BURST_RATE", default="3/min"),
+        "auth_register_sustained": env(
+            "DJANGO_AUTH_REGISTER_SUSTAINED_RATE", default="20/day"
+        ),
+        "auth_google_burst": env("DJANGO_AUTH_GOOGLE_BURST_RATE", default="10/min"),
+        "auth_google_sustained": env("DJANGO_AUTH_GOOGLE_SUSTAINED_RATE", default="200/day"),
+    },
 }
 
 SIMPLE_JWT = {

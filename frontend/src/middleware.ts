@@ -18,7 +18,7 @@ const refreshOnlyRoutes = ["/"];
 // access token that expires mid-session (ACCESS_TOKEN_LIFETIME is 15
 // minutes) makes the next task edit fail with a stale-token 401 instead of
 // silently refreshing.
-const refreshOnlyPrefixes = ["/api/tasks"];
+const refreshOnlyPrefixes = ["/api/tasks", "/api/categories"];
 const API_BASE_URL = process.env.DJANGO_API_BASE_URL ?? "http://localhost:8000";
 
 // Decode-only: the edge does not verify the signature, it just avoids

@@ -4,6 +4,7 @@ import { categoryFromApiPayload, fromApiPayload, toApiPayload, type ApiTask } fr
 import type { Task } from "../types";
 
 const fullApiTask: ApiTask = {
+  version: 7,
   id: "a1",
   title: "write plan",
   memo: "details",
@@ -28,6 +29,7 @@ const fullApiTask: ApiTask = {
 };
 
 const fullTask: Task = {
+  version: 7,
   id: "a1",
   title: "write plan",
   memo: "details",
@@ -55,6 +57,7 @@ describe("fromApiPayload", () => {
 
   it("maps nulls to undefined for optional fields, and omits rolledFrom when either half is null", () => {
     const minimal: ApiTask = {
+      version: 1,
       id: "b1",
       title: "solo",
       memo: null,
@@ -101,6 +104,7 @@ describe("toApiPayload", () => {
 
   it("maps undefined to null for optional fields, and both rolled_from_* to null when rolledFrom is unset", () => {
     const minimal: Task = {
+      version: 1,
       id: "b1",
       title: "solo",
       done: false,
@@ -129,6 +133,7 @@ describe("toApiPayload", () => {
 
   it("round-trips a year-scoped task", () => {
     const yearTask: Task = {
+      version: 3,
       id: "c1",
       title: "yearly review",
       done: false,
@@ -142,6 +147,7 @@ describe("toApiPayload", () => {
 
   it("round-trips a bucket-scoped task", () => {
     const task: Task = {
+      version: 2,
       id: "b1",
       title: "visit kyoto",
       done: false,

@@ -16,9 +16,13 @@ afterAll(() => {
   vi.useRealTimers();
 });
 
-function renderView(onAnchorChange = vi.fn(), tasks = [] as Parameters<typeof fakeRepository>[0]) {
+function renderView(
+  onAnchorChange = vi.fn(),
+  tasks = [] as Parameters<typeof fakeRepository>[0],
+  repository = fakeRepository(tasks),
+) {
   render(
-    <TasksProvider repository={fakeRepository(tasks)} categoryRepository={fakeCategoryRepository()}>
+    <TasksProvider repository={repository} categoryRepository={fakeCategoryRepository()}>
       <DailyView anchor={ANCHOR} onAnchorChange={onAnchorChange} />
     </TasksProvider>,
   );
@@ -350,8 +354,12 @@ describe("DailyView drag-to-schedule (cross-column)", () => {
 });
 
 describe("DailyView drag-to-nest-subtask", () => {
-  async function setupCards(source: ReturnType<typeof makeTask>, target: ReturnType<typeof makeTask>) {
-    renderView(vi.fn(), [source, target]);
+  async function setupCards(
+    source: ReturnType<typeof makeTask>,
+    target: ReturnType<typeof makeTask>,
+    repository = fakeRepository([source, target]),
+  ) {
+    renderView(vi.fn(), [source, target], repository);
     // TasksProvider loads tasks asynchronously (repo.list() resolves via a
     // microtask), so agenda-${target.id} doesn't exist synchronously after
     // render — wait for it before mocking its rect, matching every other
@@ -374,7 +382,9 @@ describe("DailyView drag-to-nest-subtask", () => {
   it("converts a simple dragged task into a subtask immediately, no confirmation", async () => {
     const source = makeTask({ id: "s", title: "buy milk", scope: { kind: "day", date: ANCHOR } });
     const target = makeTask({ id: "t", title: "groceries", scope: { kind: "day", date: ANCHOR } });
-    await setupCards(source, target);
+    const repository = fakeRepository([source, target]);
+    const nestSpy = vi.spyOn(repository, "nestTask");
+    await setupCards(source, target, repository);
     await waitFor(() => expect(screen.getByTestId("agenda-s")).toBeTruthy());
 
     const sourceEl = dragOnto("s");
@@ -385,6 +395,8 @@ describe("DailyView drag-to-nest-subtask", () => {
 
     fireEvent.click(screen.getByText("groceries"));
     expect(await screen.findByText("buy milk")).toBeTruthy();
+    await waitFor(() => expect(nestSpy).toHaveBeenCalledOnce());
+    expect(nestSpy).toHaveBeenCalledWith(expect.objectContaining({ confirmDataLoss: false }));
   });
 
   it("shows a confirmation dialog for a task with extra fields, and converts on Confirm", async () => {
@@ -395,7 +407,9 @@ describe("DailyView drag-to-nest-subtask", () => {
       scope: { kind: "day", date: ANCHOR },
     });
     const target = makeTask({ id: "t", title: "house stuff", scope: { kind: "day", date: ANCHOR } });
-    await setupCards(source, target);
+    const repository = fakeRepository([source, target]);
+    const nestSpy = vi.spyOn(repository, "nestTask");
+    await setupCards(source, target, repository);
     await waitFor(() => expect(screen.getByTestId("agenda-s")).toBeTruthy());
 
     const sourceEl = dragOnto("s");
@@ -407,6 +421,8 @@ describe("DailyView drag-to-nest-subtask", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() => expect(screen.queryByTestId("agenda-s")).toBeNull());
+    await waitFor(() => expect(nestSpy).toHaveBeenCalledOnce());
+    expect(nestSpy).toHaveBeenCalledWith(expect.objectContaining({ confirmDataLoss: true }));
   });
 
   it("cancelling the confirmation dialog leaves the task unchanged", async () => {

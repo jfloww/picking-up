@@ -4,11 +4,10 @@ import { NextRequest } from "next/server";
 import { POST } from "./route";
 
 function jsonResponse(body: unknown, status = 200): Response {
-  return {
-    ok: status >= 200 && status < 300,
+  return new Response(JSON.stringify(body), {
     status,
-    json: async () => body,
-  } as Response;
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 describe("POST /api/auth/google", () => {
@@ -49,5 +48,30 @@ describe("POST /api/auth/google", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Invalid Google credential." });
     expect(response.cookies.get("access_token")).toBeUndefined();
+  });
+
+  it("preserves Django's throttle status and Retry-After header", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: "Request was throttled." }), {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": "60",
+          },
+        }),
+      ),
+    );
+
+    const request = new NextRequest("http://localhost/api/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ credential: "google-id-token" }),
+    });
+    const response = await POST(request);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("60");
+    expect(await response.json()).toEqual({ error: "Request was throttled." });
   });
 });

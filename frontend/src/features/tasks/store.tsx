@@ -13,30 +13,140 @@ import {
 import { createApiCategoryRepository } from "./data/category-repository";
 import type { CategoryRepository } from "./data/category-repository";
 import { createApiTaskRepository } from "./data/api-task-repository";
-import type { TaskRepository } from "./data/repository";
+import { TaskVersionConflictError, type TaskRepository } from "./data/repository";
 import { todayKey, weekStartOf } from "./lib/dates";
 import { dayTasksForWeek, isValidTime } from "./lib/times";
 import { rolloverTasks } from "./lib/rollover";
 import { materializeRoutines } from "./lib/routines";
 import { nestBlockReasonFor } from "./lib/nesting";
-import { computeOrderBetween } from "./lib/reorder";
-import type { Category, Scope, Task } from "./types";
+import { nextUntimedOrderFor, promotedSubtaskOrder } from "./lib/reorder";
+import type { Category, Scope, Subtask, Task } from "./types";
 
 const SYNC_ERROR_MESSAGE = "Something didn't save. Reconnecting to check what's saved…";
+// RF-005 review finding: a version conflict means the server has newer
+// truth for this task specifically (someone else — another tab, another
+// device — changed it), not a generic connectivity problem. The recovery
+// action is the same resync either way, but the message it left the user
+// with used to say exactly the same thing for both cases.
+const CONFLICT_ERROR_MESSAGE = "A task changed elsewhere. Refreshing to show the latest…";
 
-// Appends to the end of a day's untimed All Day To-Do list — the shared
-// ordering rule for a freshly created untimed task (addTask) and for a
-// subtask promoted out from under a timed parent (promoteSubtaskToTask's
-// timed-parent branch), which has no natural sibling to land next to.
-function nextUntimedOrderFor(tasks: Task[], date: string): number {
-  return (
-    Math.max(
-      0,
-      ...tasks
-        .filter((t) => t.scope.kind === "day" && t.scope.date === date && !t.time && !t.done)
-        .map((t) => t.order),
-    ) + 1
-  );
+type MutableTaskKey = Exclude<
+  keyof Task,
+  "id" | "createdAt" | "subtasks" | "version"
+>;
+
+const MUTABLE_TASK_KEYS = [
+  "title",
+  "memo",
+  "done",
+  "scope",
+  "rolledFrom",
+  "completedAt",
+  "time",
+  "repeatWeekdays",
+  "repeatSourceId",
+  "excludedDates",
+  "priority",
+  "durationMinutes",
+  "background",
+  "dueDate",
+  "order",
+] as const satisfies readonly MutableTaskKey[];
+
+type TaskValuePatch = Partial<Pick<Task, MutableTaskKey>>;
+
+interface SubtaskUpsert {
+  value: Subtask;
+  requiresExisting: boolean;
+}
+
+interface TaskPatch {
+  values: TaskValuePatch;
+  subtasks?: {
+    upserts: SubtaskUpsert[];
+    removedIds: string[];
+    keepEmptyArray: boolean;
+  };
+}
+
+function buildTaskPatch(before: Task, after: Task): TaskPatch {
+  const values = {} as TaskValuePatch;
+  for (const key of MUTABLE_TASK_KEYS) {
+    if (!Object.is(before[key], after[key])) {
+      (values as Record<MutableTaskKey, unknown>)[key] = after[key];
+    }
+  }
+
+  if (Object.is(before.subtasks, after.subtasks)) return { values };
+
+  const beforeSubtasks = before.subtasks ?? [];
+  const afterSubtasks = after.subtasks ?? [];
+  const beforeById = new Map(beforeSubtasks.map((subtask) => [subtask.id, subtask]));
+  const afterIds = new Set(afterSubtasks.map((subtask) => subtask.id));
+
+  return {
+    values,
+    subtasks: {
+      upserts: afterSubtasks
+        .filter((subtask) => !Object.is(beforeById.get(subtask.id), subtask))
+        .map((subtask) => ({
+          value: subtask,
+          requiresExisting: beforeById.has(subtask.id),
+        })),
+      removedIds: beforeSubtasks
+        .filter((subtask) => !afterIds.has(subtask.id))
+        .map((subtask) => subtask.id),
+      keepEmptyArray: after.subtasks !== undefined,
+    },
+  };
+}
+
+function applyTaskPatch(base: Task, patch: TaskPatch): Task | undefined {
+  let changed = false;
+  const values = {} as TaskValuePatch;
+  for (const key of MUTABLE_TASK_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(patch.values, key)) {
+      const value = patch.values[key];
+      if (!Object.is(base[key], value)) {
+        (values as Record<MutableTaskKey, unknown>)[key] = value;
+        changed = true;
+      }
+    }
+  }
+
+  let subtasks = base.subtasks;
+  if (patch.subtasks) {
+    const next = [...(base.subtasks ?? [])];
+    const removedIds = new Set(patch.subtasks.removedIds);
+    if (removedIds.size > 0) {
+      const kept = next.filter((subtask) => !removedIds.has(subtask.id));
+      if (kept.length !== next.length) {
+        next.splice(0, next.length, ...kept);
+        changed = true;
+      }
+    }
+
+    for (const upsert of patch.subtasks.upserts) {
+      const index = next.findIndex((subtask) => subtask.id === upsert.value.id);
+      if (index >= 0) {
+        if (!Object.is(next[index], upsert.value)) {
+          next[index] = upsert.value;
+          changed = true;
+        }
+      } else if (!upsert.requiresExisting) {
+        next.push(upsert.value);
+        changed = true;
+      }
+    }
+
+    if (changed || (patch.subtasks.keepEmptyArray && base.subtasks === undefined)) {
+      subtasks = next;
+      changed = true;
+    }
+  }
+
+  if (!changed) return undefined;
+  return { ...base, ...values, subtasks };
 }
 
 export interface TasksState {
@@ -51,9 +161,10 @@ export type TasksAction =
   | { type: "added"; task: Task }
   | { type: "updated"; task: Task }
   | { type: "removed"; id: string }
+  | { type: "commandApplied"; upserts: Task[]; removedIds: string[] }
   | { type: "categoryAdded"; category: Category }
   | { type: "categoryUpdated"; category: Category }
-  | { type: "syncErrorOccurred" }
+  | { type: "syncErrorOccurred"; message?: string }
   | { type: "syncErrorDismissed" };
 
 export function tasksReducer(
@@ -79,6 +190,18 @@ export function tasksReducer(
       };
     case "removed":
       return { ...state, tasks: state.tasks.filter((t) => t.id !== action.id) };
+    case "commandApplied": {
+      const removedIds = new Set(action.removedIds);
+      const upserts = new Map(action.upserts.map((task) => [task.id, task]));
+      const tasks = state.tasks
+        .filter((task) => !removedIds.has(task.id))
+        .map((task) => upserts.get(task.id) ?? task);
+      const existingIds = new Set(tasks.map((task) => task.id));
+      for (const task of action.upserts) {
+        if (!existingIds.has(task.id)) tasks.push(task);
+      }
+      return { ...state, tasks };
+    }
     case "categoryAdded":
       return { ...state, categories: [...state.categories, action.category] };
     case "categoryUpdated":
@@ -89,7 +212,7 @@ export function tasksReducer(
         ),
       };
     case "syncErrorOccurred":
-      return { ...state, syncError: SYNC_ERROR_MESSAGE };
+      return { ...state, syncError: action.message ?? SYNC_ERROR_MESSAGE };
     case "syncErrorDismissed":
       return { ...state, syncError: null };
   }
@@ -113,7 +236,11 @@ interface TasksContextValue extends TasksState {
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
-  convertTaskToSubtask: (id: string, targetId: string) => void;
+  convertTaskToSubtask: (
+    id: string,
+    targetId: string,
+    confirmDataLoss?: boolean,
+  ) => void;
   promoteSubtaskToTask: (id: string, subtaskId: string) => Task | undefined;
   addBucketItem: (title: string, categoryId: string) => Task | undefined;
   setCategory: (id: string, categoryId: string) => void;
@@ -152,18 +279,75 @@ export function TasksProvider({
   tasksRef.current = state.tasks;
   const appliedDayRef = useRef<string | null>(null);
   const resyncingRef = useRef(false);
+  const resyncPromiseRef = useRef<Promise<void> | null>(null);
+  const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const authoritativeVersionsRef = useRef(new Map<string, number>());
+  const authoritativeTasksRef = useRef(new Map<string, Task>());
+  const mutationGenerationsRef = useRef(new Map<string, number>());
 
-  function handleSyncFailure() {
-    dispatch({ type: "syncErrorOccurred" });
+  function replaceTaskState(task: Task) {
+    tasksRef.current = tasksRef.current.map((current) =>
+      current.id === task.id ? task : current,
+    );
+    dispatch({ type: "updated", task });
+  }
+
+  function addTaskState(task: Task) {
+    tasksRef.current = [...tasksRef.current, task];
+    dispatch({ type: "added", task });
+  }
+
+  function removeTaskState(id: string) {
+    tasksRef.current = tasksRef.current.filter((task) => task.id !== id);
+    dispatch({ type: "removed", id });
+  }
+
+  function applyCommandState(upserts: Task[], removedIds: string[]) {
+    const removed = new Set(removedIds);
+    const byId = new Map(upserts.map((task) => [task.id, task]));
+    const tasks = tasksRef.current
+      .filter((task) => !removed.has(task.id))
+      .map((task) => byId.get(task.id) ?? task);
+    const existingIds = new Set(tasks.map((task) => task.id));
+    for (const task of upserts) {
+      if (!existingIds.has(task.id)) tasks.push(task);
+    }
+    tasksRef.current = tasks;
+    dispatch({ type: "commandApplied", upserts, removedIds });
+  }
+
+  function replaceLoadedTasks(
+    tasks: Task[],
+    categories?: Category[],
+    authoritativeTasks: Task[] = tasks,
+  ) {
+    tasksRef.current = tasks;
+    authoritativeVersionsRef.current = new Map(
+      authoritativeTasks.map((task) => [task.id, task.version]),
+    );
+    authoritativeTasksRef.current = new Map(
+      authoritativeTasks.map((task) => [task.id, task]),
+    );
+    dispatch({ type: "loaded", tasks, categories });
+  }
+
+  function nextMutationGeneration(id: string): number {
+    const generation = (mutationGenerationsRef.current.get(id) ?? 0) + 1;
+    mutationGenerationsRef.current.set(id, generation);
+    return generation;
+  }
+
+  function handleSyncFailure(message = SYNC_ERROR_MESSAGE): Promise<void> {
+    dispatch({ type: "syncErrorOccurred", message });
     // A single outage typically fails several writes at once (every rolled
     // and spawned task on load); without this guard each one would kick off
     // its own full resync — and for the API repository every resync re-runs
     // the entire legacy-migration upload loop.
-    if (resyncingRef.current) return;
+    if (resyncingRef.current) return resyncPromiseRef.current ?? Promise.resolve();
     resyncingRef.current = true;
-    void repo
+    const resync = repo
       .list()
-      .then((tasks) => dispatch({ type: "loaded", tasks }))
+      .then((tasks) => replaceLoadedTasks(tasks))
       .catch(() => {
         // Already surfaced via syncErrorOccurred above; a second
         // consecutive failure just leaves the banner up rather than
@@ -171,7 +355,85 @@ export function TasksProvider({
       })
       .finally(() => {
         resyncingRef.current = false;
+        resyncPromiseRef.current = null;
       });
+    resyncPromiseRef.current = resync;
+    return resync;
+  }
+
+  function enqueueMutation(operation: () => Promise<void>) {
+    // A failed optimistic command must be reconciled before a dependent
+    // mutation is allowed to write. Each generic update stores a field/subtask
+    // delta (buildTaskPatch) and rebases that intent onto the authoritative
+    // task after this resync, so waiting here no longer pairs a stale full
+    // payload with a newly fetched version.
+    mutationQueueRef.current = mutationQueueRef.current.then(async () => {
+      try {
+        await operation();
+      } catch (error) {
+        // Only a genuine staleness conflict ("someone else changed this")
+        // gets the conflict-specific message. A command can also 409 for a
+        // domain-rule rejection (nesting a task into itself, a target that
+        // already has subtasks, ...) via the same TaskVersionConflictError
+        // type — those aren't a staleness conflict and showing "changed
+        // elsewhere" for them would be a new, incorrect claim (final-review
+        // finding on this fix).
+        await handleSyncFailure(
+          error instanceof TaskVersionConflictError && error.code === "task_version_conflict"
+            ? CONFLICT_ERROR_MESSAGE
+            : SYNC_ERROR_MESSAGE,
+        );
+      }
+    });
+  }
+
+  function persistUpdate(
+    task: Task,
+    previous = tasksRef.current.find((candidate) => candidate.id === task.id),
+  ) {
+    if (!previous) return;
+    const patch = buildTaskPatch(previous, task);
+    const generation = nextMutationGeneration(task.id);
+    replaceTaskState(task);
+    enqueueMutation(async () => {
+      const authoritative = authoritativeTasksRef.current.get(task.id);
+      if (!authoritative) return;
+      const rebased = applyTaskPatch(authoritative, patch);
+      if (!rebased) return;
+      const saved = await repo.update(rebased);
+      authoritativeVersionsRef.current.set(saved.id, saved.version);
+      authoritativeTasksRef.current.set(saved.id, saved);
+
+      const current = tasksRef.current.find((candidate) => candidate.id === saved.id);
+      if (!current) return;
+      const reconciled =
+        mutationGenerationsRef.current.get(saved.id) === generation
+          ? saved
+          : { ...current, version: saved.version };
+      replaceTaskState(reconciled);
+    });
+  }
+
+  function persistCreate(task: Task, alreadyApplied = false) {
+    const generation = nextMutationGeneration(task.id);
+    authoritativeVersionsRef.current.set(task.id, task.version);
+    if (!alreadyApplied) addTaskState(task);
+    enqueueMutation(async () => {
+      const saved = await repo.create(task);
+      authoritativeVersionsRef.current.set(saved.id, saved.version);
+      authoritativeTasksRef.current.set(saved.id, saved);
+
+      const current = tasksRef.current.find((candidate) => candidate.id === saved.id);
+      if (!current) {
+        addTaskState(saved);
+        return;
+      }
+      const reconciled =
+        mutationGenerationsRef.current.get(saved.id) === generation
+          ? saved
+          : { ...current, version: saved.version };
+      replaceTaskState(reconciled);
+    });
   }
 
   useEffect(() => {
@@ -183,17 +445,17 @@ export function TasksProvider({
         const rolled = rolloverTasks(tasks, today);
         const spawned = materializeRoutines(rolled, today);
         const finalTasks = [...rolled, ...spawned];
-        dispatch({ type: "loaded", tasks: finalTasks, categories });
+        replaceLoadedTasks(finalTasks, categories, tasks);
         appliedDayRef.current = today;
         rolled.forEach((task, i) => {
-          if (task !== tasks[i]) repo.update(task).catch(handleSyncFailure);
+          if (task !== tasks[i]) persistUpdate(task, tasks[i]);
         });
-        spawned.forEach((task) => repo.create(task).catch(handleSyncFailure));
+        spawned.forEach((task) => persistCreate(task, true));
       })
       .catch(() => {
         if (cancelled) return;
         dispatch({ type: "syncErrorOccurred" });
-        dispatch({ type: "loaded", tasks: [], categories: [] });
+        replaceLoadedTasks([], []);
       });
     return () => {
       cancelled = true;
@@ -210,12 +472,12 @@ export function TasksProvider({
       const rolled = rolloverTasks(tasks, today);
       const spawned = materializeRoutines(rolled, today);
       const finalTasks = [...rolled, ...spawned];
-      dispatch({ type: "loaded", tasks: finalTasks });
+      replaceLoadedTasks(finalTasks, undefined, tasks);
       appliedDayRef.current = today;
       rolled.forEach((task, i) => {
-        if (task !== tasks[i]) repo.update(task).catch(handleSyncFailure);
+        if (task !== tasks[i]) persistUpdate(task, tasks[i]);
       });
-      spawned.forEach((task) => repo.create(task).catch(handleSyncFailure));
+      spawned.forEach((task) => persistCreate(task, true));
     }
 
     window.addEventListener("focus", rolloverIfDateChanged);
@@ -233,7 +495,7 @@ export function TasksProvider({
       addTask(title, scope) {
         const trimmed = title.trim();
         if (!trimmed) return undefined;
-        const order = scope.kind === "day" ? nextUntimedOrderFor(state.tasks, scope.date) : 0;
+        const order = scope.kind === "day" ? nextUntimedOrderFor(tasksRef.current, scope.date) : 0;
         const task: Task = {
           id: crypto.randomUUID(),
           title: trimmed,
@@ -241,9 +503,9 @@ export function TasksProvider({
           scope,
           order,
           createdAt: new Date().toISOString(),
+          version: 1,
         };
-        dispatch({ type: "added", task });
-        repo.create(task).catch(handleSyncFailure);
+        persistCreate(task);
         return task;
       },
       addBucketItem(title, categoryId) {
@@ -256,39 +518,36 @@ export function TasksProvider({
           scope: { kind: "bucket", categoryId },
           order: 0,
           createdAt: new Date().toISOString(),
+          version: 1,
         };
-        dispatch({ type: "added", task });
-        repo.create(task).catch(handleSyncFailure);
+        persistCreate(task);
         return task;
       },
       toggleTask(id) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const task: Task = {
           ...current,
           done: !current.done,
           completedAt: current.done ? undefined : new Date().toISOString(),
         };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       setMemo(id, memo) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const task: Task = { ...current, memo: memo.trim() || undefined };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       setTime(id, time) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         if (time !== undefined && !isValidTime(time)) return;
         const task: Task = { ...current, time };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       setRepeatWeekdays(id, weekdays) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const normalized = weekdays && weekdays.length > 0 ? weekdays : undefined;
         const task: Task = {
@@ -296,29 +555,26 @@ export function TasksProvider({
           repeatWeekdays: normalized,
           dueDate: normalized ? undefined : current.dueDate,
         };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       detachFromRoutine(id, weekdays) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const normalized = weekdays && weekdays.length > 0 ? weekdays : undefined;
         const task: Task = { ...current, repeatSourceId: undefined, repeatWeekdays: normalized };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
 
         if (current.repeatSourceId !== undefined && current.scope.kind === "day") {
-          const anchor = state.tasks.find((t) => t.id === current.repeatSourceId);
+          const anchor = tasksRef.current.find((t) => t.id === current.repeatSourceId);
           if (anchor) {
             const excludedDates = [...(anchor.excludedDates ?? []), current.scope.date];
             const updatedAnchor: Task = { ...anchor, excludedDates };
-            dispatch({ type: "updated", task: updatedAnchor });
-            repo.update(updatedAnchor).catch(handleSyncFailure);
+            persistUpdate(updatedAnchor);
           }
         }
       },
       rescheduleTaskToDay(id, date) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
 
         let originalDate: string;
@@ -351,7 +607,7 @@ export function TasksProvider({
           ? current.order
           : Math.max(
               0,
-              ...dayTasksForWeek(state.tasks, date, weekStartOf(date))
+              ...dayTasksForWeek(tasksRef.current, date, weekStartOf(date))
                 .filter((t) => !t.time)
                 .map((t) => t.order),
             ) + 1;
@@ -365,60 +621,52 @@ export function TasksProvider({
         if (current.repeatSourceId !== undefined) {
           task.repeatSourceId = undefined;
         }
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
 
         if (current.repeatSourceId !== undefined) {
-          const anchor = state.tasks.find((t) => t.id === current.repeatSourceId);
+          const anchor = tasksRef.current.find((t) => t.id === current.repeatSourceId);
           if (anchor) {
             const excludedDates = [...(anchor.excludedDates ?? []), originalDate];
             const updatedAnchor: Task = { ...anchor, excludedDates };
-            dispatch({ type: "updated", task: updatedAnchor });
-            repo.update(updatedAnchor).catch(handleSyncFailure);
+            persistUpdate(updatedAnchor);
           }
         }
       },
       setPriority(id, priority) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const task: Task = { ...current, priority };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       setDuration(id, durationMinutes) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const task: Task = { ...current, durationMinutes };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       setBackground(id, background) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const task: Task = { ...current, background };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       setDueDate(id, dueDate) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const task: Task = { ...current, dueDate };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       setOrder(id, order) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const task: Task = { ...current, order };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       setCategory(id, categoryId) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current || current.scope.kind !== "bucket" || !categoryId) return;
         const task: Task = { ...current, scope: { kind: "bucket", categoryId } };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       async createCategory(name) {
         const trimmed = name.trim();
@@ -447,7 +695,7 @@ export function TasksProvider({
         }
       },
       addSubtask(id, title) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const trimmed = title.trim();
         if (!trimmed) return;
@@ -458,11 +706,10 @@ export function TasksProvider({
             { id: crypto.randomUUID(), title: trimmed, done: false },
           ],
         };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       toggleSubtask(id, subtaskId) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current?.subtasks) return;
         const task: Task = {
           ...current,
@@ -470,21 +717,19 @@ export function TasksProvider({
             s.id === subtaskId ? { ...s, done: !s.done } : s,
           ),
         };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       removeSubtask(id, subtaskId) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current?.subtasks) return;
         const task: Task = {
           ...current,
           subtasks: current.subtasks.filter((s) => s.id !== subtaskId),
         };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
       editSubtaskTitle(id, subtaskId, title) {
-        const current = state.tasks.find((t) => t.id === id);
+        const current = tasksRef.current.find((t) => t.id === id);
         if (!current?.subtasks) return;
         const trimmed = title.trim();
         if (!trimmed) return;
@@ -494,86 +739,129 @@ export function TasksProvider({
             s.id === subtaskId ? { ...s, title: trimmed } : s,
           ),
         };
-        dispatch({ type: "updated", task });
-        repo.update(task).catch(handleSyncFailure);
+        persistUpdate(task);
       },
-      convertTaskToSubtask(id, targetId) {
+      convertTaskToSubtask(id, targetId, confirmDataLoss = false) {
+        // One repository command mirrors the optimistic two-entity state change.
         if (id === targetId) return;
-        const source = state.tasks.find((t) => t.id === id);
-        const target = state.tasks.find((t) => t.id === targetId);
+        const source = tasksRef.current.find((t) => t.id === id);
+        const target = tasksRef.current.find((t) => t.id === targetId);
         if (!source || !target) return;
         if (nestBlockReasonFor(source)) return;
 
+        const subtaskId = crypto.randomUUID();
         const updatedTarget: Task = {
           ...target,
           subtasks: [
             ...(target.subtasks ?? []),
-            { id: crypto.randomUUID(), title: source.title, done: source.done },
+            { id: subtaskId, title: source.title, done: source.done },
           ],
         };
-        dispatch({ type: "updated", task: updatedTarget });
-        repo.update(updatedTarget).catch(handleSyncFailure);
+        const targetGeneration = nextMutationGeneration(target.id);
+        nextMutationGeneration(source.id);
+        applyCommandState([updatedTarget], [source.id]);
 
-        dispatch({ type: "removed", id });
-        repo.remove(id).catch(handleSyncFailure);
+        enqueueMutation(async () => {
+          const result = await repo.nestTask({
+            sourceId: source.id,
+            targetId: target.id,
+            sourceVersion:
+              authoritativeVersionsRef.current.get(source.id) ?? source.version,
+            targetVersion:
+              authoritativeVersionsRef.current.get(target.id) ?? target.version,
+            subtaskId,
+            confirmDataLoss,
+          });
+          authoritativeVersionsRef.current.delete(result.removedTaskId);
+          authoritativeVersionsRef.current.set(result.target.id, result.target.version);
+          authoritativeTasksRef.current.delete(result.removedTaskId);
+          authoritativeTasksRef.current.set(result.target.id, result.target);
+
+          const currentTarget = tasksRef.current.find(
+            (task) => task.id === result.target.id,
+          );
+          const reconciledTarget =
+            currentTarget &&
+            mutationGenerationsRef.current.get(result.target.id) !== targetGeneration
+              ? { ...currentTarget, version: result.target.version }
+              : result.target;
+          applyCommandState([reconciledTarget], [result.removedTaskId]);
+        });
       },
       promoteSubtaskToTask(id, subtaskId) {
-        const parent = state.tasks.find((t) => t.id === id);
+        const parent = tasksRef.current.find((t) => t.id === id);
         if (!parent?.subtasks) return undefined;
         const subtask = parent.subtasks.find((s) => s.id === subtaskId);
         if (!subtask) return undefined;
 
-        const scope = parent.scope;
-        let order: number;
-        if (scope.kind === "day" && !parent.time) {
-          // Parent lives in All Day To-Do — insert the promoted task
-          // directly after it.
-          const nextSibling = state.tasks
-            .filter(
-              (t) =>
-                t.scope.kind === "day" &&
-                t.scope.date === scope.date &&
-                !t.time &&
-                !t.done &&
-                t.order > parent.order,
-            )
-            .sort((a, b) => a.order - b.order)[0];
-          order = computeOrderBetween(parent.order, nextSibling?.order);
-        } else if (scope.kind === "day") {
-          // Parent is timed (Next Up) — the promoted task is always
-          // untimed regardless, so there's no natural sibling to land
-          // next to; append to the end of All Day To-Do for that day,
-          // same as addTask's own default for a fresh untimed task.
-          order = nextUntimedOrderFor(state.tasks, scope.date);
-        } else {
-          order = 0;
-        }
+        const order = promotedSubtaskOrder(tasksRef.current, parent);
 
+        const now = new Date().toISOString();
         const task: Task = {
           id: crypto.randomUUID(),
           title: subtask.title,
           done: subtask.done,
           scope: parent.scope,
           order,
-          createdAt: new Date().toISOString(),
+          createdAt: now,
+          completedAt: subtask.done ? now : undefined,
+          version: 1,
         };
         const updatedParent: Task = {
           ...parent,
           subtasks: parent.subtasks.filter((s) => s.id !== subtaskId),
         };
 
-        dispatch({ type: "added", task });
-        repo.create(task).catch(handleSyncFailure);
+        const parentGeneration = nextMutationGeneration(parent.id);
+        const taskGeneration = nextMutationGeneration(task.id);
+        authoritativeVersionsRef.current.set(task.id, task.version);
+        applyCommandState([updatedParent, task], []);
 
-        dispatch({ type: "updated", task: updatedParent });
-        repo.update(updatedParent).catch(handleSyncFailure);
+        enqueueMutation(async () => {
+          const result = await repo.promoteSubtask({
+            parentId: parent.id,
+            subtaskId,
+            parentVersion:
+              authoritativeVersionsRef.current.get(parent.id) ?? parent.version,
+            newTaskId: task.id,
+          });
+          authoritativeVersionsRef.current.set(result.parent.id, result.parent.version);
+          authoritativeVersionsRef.current.set(result.task.id, result.task.version);
+          authoritativeTasksRef.current.set(result.parent.id, result.parent);
+          authoritativeTasksRef.current.set(result.task.id, result.task);
+
+          const currentParent = tasksRef.current.find(
+            (candidate) => candidate.id === result.parent.id,
+          );
+          const currentTask = tasksRef.current.find(
+            (candidate) => candidate.id === result.task.id,
+          );
+          const reconciledParent =
+            currentParent &&
+            mutationGenerationsRef.current.get(result.parent.id) !== parentGeneration
+              ? { ...currentParent, version: result.parent.version }
+              : result.parent;
+          const reconciledTask =
+            currentTask &&
+            mutationGenerationsRef.current.get(result.task.id) !== taskGeneration
+              ? { ...currentTask, version: result.task.version }
+              : result.task;
+          applyCommandState([reconciledParent, reconciledTask], []);
+        });
 
         return task;
       },
       removeTask(id) {
-        const current = state.tasks.find((t) => t.id === id);
-        dispatch({ type: "removed", id });
-        repo.remove(id).catch(handleSyncFailure);
+        const current = tasksRef.current.find((t) => t.id === id);
+        if (!current) return;
+        nextMutationGeneration(id);
+        removeTaskState(id);
+        enqueueMutation(async () => {
+          const version = authoritativeVersionsRef.current.get(id) ?? current.version;
+          await repo.remove(id, version);
+          authoritativeVersionsRef.current.delete(id);
+          authoritativeTasksRef.current.delete(id);
+        });
 
         // Deleting a spawned occurrence must tell its anchor not to
         // re-spawn it — otherwise the next load's materializeRoutines()
@@ -581,12 +869,11 @@ export function TasksProvider({
         // task the user just deleted. Same excludedDates handling as
         // detachFromRoutine/rescheduleTaskToDay above.
         if (current?.repeatSourceId !== undefined && current.scope.kind === "day") {
-          const anchor = state.tasks.find((t) => t.id === current.repeatSourceId);
+          const anchor = tasksRef.current.find((t) => t.id === current.repeatSourceId);
           if (anchor) {
             const excludedDates = [...(anchor.excludedDates ?? []), current.scope.date];
             const updatedAnchor: Task = { ...anchor, excludedDates };
-            dispatch({ type: "updated", task: updatedAnchor });
-            repo.update(updatedAnchor).catch(handleSyncFailure);
+            persistUpdate(updatedAnchor);
           }
         }
       },

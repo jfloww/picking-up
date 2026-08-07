@@ -6,11 +6,14 @@ vi.mock("@/lib/auth/server-cookies", () => ({
 
 import { NextRequest } from "next/server";
 
+import { POST as NEST } from "@/app/api/tasks/[id]/commands/nest/route";
+import { POST as PROMOTE_SUBTASK } from "@/app/api/tasks/[id]/commands/promote-subtask/route";
 import { DELETE, PUT } from "@/app/api/tasks/[id]/route";
 import { GET, POST } from "@/app/api/tasks/route";
 import type { ApiTask } from "@/features/tasks/api/mapping";
 
 import { createApiTaskRepository } from "./api-task-repository";
+import { TaskVersionConflictError } from "./repository";
 import type { Task } from "../types";
 
 const DJANGO_ORIGIN = "http://localhost:8000";
@@ -38,6 +41,7 @@ const apiTask: ApiTask = {
   duration_minutes: 45,
   background: null,
   order: 2,
+  version: 4,
 };
 
 const expectedTask: Task = {
@@ -59,6 +63,7 @@ const expectedTask: Task = {
   background: undefined,
   dueDate: "2026-07-31",
   order: 2,
+  version: 4,
 };
 
 /** Requests the fake Django leg received, for asserting on the outbound side. */
@@ -66,6 +71,7 @@ interface DjangoCall {
   url: string;
   method: string;
   authorization: string | null;
+  ifMatch: string | null;
   body: unknown;
 }
 
@@ -88,6 +94,7 @@ function installFetchRouter(django: (call: DjangoCall) => Response | Promise<Res
         url,
         method,
         authorization: headers.get("Authorization"),
+        ifMatch: headers.get("If-Match"),
         body: typeof init.body === "string" ? JSON.parse(init.body) : null,
       };
       calls.push(call);
@@ -102,13 +109,20 @@ function installFetchRouter(django: (call: DjangoCall) => Response | Promise<Res
         headers: new Headers(init.headers),
         ...(init.body ? { body: init.body as string } : {}),
       });
-      const [, , , id] = url.split("/"); // "", "api", "tasks", maybe id
+      const [, , , id, segment, command] = url.split("/");
       if (!id) {
         return method === "POST" ? POST(request) : GET();
       }
+      const params = { params: Promise.resolve({ id }) };
+      if (segment === "commands" && command === "nest") {
+        return NEST(request, params);
+      }
+      if (segment === "commands" && command === "promote-subtask") {
+        return PROMOTE_SUBTASK(request, params);
+      }
       return method === "DELETE"
-        ? DELETE(request, { params: Promise.resolve({ id }) })
-        : PUT(request);
+        ? DELETE(request, params)
+        : PUT(request, params);
     }
 
     throw new Error(`Unexpected fetch to ${url}`);
@@ -159,21 +173,229 @@ describe("client repository -> real route handlers -> mapping (no mocked seams b
   });
 
   it("update() PUTs to the trailing-slash Django url for the task's own id", async () => {
-    const { djangoCalls } = installFetchRouter(() => Response.json(apiTask));
+    const { djangoCalls } = installFetchRouter(() =>
+      Response.json({ ...apiTask, version: apiTask.version + 1 }),
+    );
 
-    await createApiTaskRepository().update(expectedTask);
+    await expect(createApiTaskRepository().update(expectedTask)).resolves.toMatchObject({
+      id: expectedTask.id,
+      version: 5,
+    });
 
     expect(djangoCalls[0].url).toBe(`${DJANGO_ORIGIN}/api/tasks/a1/`);
     expect(djangoCalls[0].method).toBe("PUT");
+    expect(djangoCalls[0].ifMatch).toBe('"4"');
+  });
+
+  it("the PUT BFF distinguishes missing and invalid If-Match, then rejects a header/body mismatch", async () => {
+    const params = { params: Promise.resolve({ id: "a1" }) };
+    const withoutHeader = new NextRequest(`${NEXT_ORIGIN}/api/tasks/a1`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(expectedTask),
+    });
+
+    const required = await PUT(withoutHeader, params);
+    expect(required.status).toBe(428);
+    await expect(required.json()).resolves.toMatchObject({ code: "task_version_required" });
+
+    const malformed = new NextRequest(`${NEXT_ORIGIN}/api/tasks/a1`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "If-Match": "3" },
+      body: JSON.stringify(expectedTask),
+    });
+    const invalid = await PUT(malformed, params);
+    expect(invalid.status).toBe(400);
+    await expect(invalid.json()).resolves.toMatchObject({ code: "task_version_invalid" });
+
+    const mismatched = new NextRequest(`${NEXT_ORIGIN}/api/tasks/a1`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "If-Match": '"3"' },
+      body: JSON.stringify(expectedTask),
+    });
+    const conflict = await PUT(mismatched, params);
+    expect(conflict.status).toBe(409);
+    await expect(conflict.json()).resolves.toMatchObject({ code: "task_version_mismatch" });
+  });
+
+  it("the PUT BFF treats the URL id as authoritative", async () => {
+    const { djangoCalls } = installFetchRouter(() =>
+      Response.json({ ...apiTask, id: "url-id", version: 5 }),
+    );
+    const request = new NextRequest(`${NEXT_ORIGIN}/api/tasks/url-id`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "If-Match": '"4"' },
+      body: JSON.stringify({ ...expectedTask, id: "body-id" }),
+    });
+
+    const response = await PUT(request, { params: Promise.resolve({ id: "url-id" }) });
+
+    expect(response.status).toBe(200);
+    expect(djangoCalls[0].url).toBe(`${DJANGO_ORIGIN}/api/tasks/url-id/`);
+    expect(djangoCalls[0].ifMatch).toBe('"4"');
+    expect(djangoCalls[0].body).toMatchObject({ id: "url-id", version: 4 });
   });
 
   it("remove() drives the [id] route's async params through to Django's 204", async () => {
     const { djangoCalls } = installFetchRouter(() => new Response(null, { status: 204 }));
 
-    await createApiTaskRepository().remove("a1");
+    await createApiTaskRepository().remove("a1", 4);
 
     expect(djangoCalls[0].url).toBe(`${DJANGO_ORIGIN}/api/tasks/a1/`);
     expect(djangoCalls[0].method).toBe("DELETE");
+    expect(djangoCalls[0].ifMatch).toBe('"4"');
+  });
+
+  it("the DELETE BFF distinguishes a missing If-Match from a malformed one", async () => {
+    const request = new NextRequest(`${NEXT_ORIGIN}/api/tasks/a1`, { method: "DELETE" });
+
+    const response = await DELETE(request, { params: Promise.resolve({ id: "a1" }) });
+
+    expect(response.status).toBe(428);
+    await expect(response.json()).resolves.toMatchObject({ code: "task_version_required" });
+
+    const malformed = new NextRequest(`${NEXT_ORIGIN}/api/tasks/a1`, {
+      method: "DELETE",
+      headers: { "If-Match": '"0"' },
+    });
+    const invalid = await DELETE(malformed, { params: Promise.resolve({ id: "a1" }) });
+    expect(invalid.status).toBe(400);
+    await expect(invalid.json()).resolves.toMatchObject({ code: "task_version_invalid" });
+  });
+
+  it("nestTask() crosses both real route layers as one command and maps its result", async () => {
+    const targetApi = {
+      ...apiTask,
+      id: "target-id",
+      subtasks: [{ id: "subtask-id", title: "write plan", done: false }],
+      version: 8,
+    };
+    const { djangoCalls } = installFetchRouter(() =>
+      Response.json({ target: targetApi, removed_task_id: "source-id" }),
+    );
+
+    const result = await createApiTaskRepository().nestTask({
+      sourceId: "source-id",
+      targetId: "target-id",
+      sourceVersion: 3,
+      targetVersion: 7,
+      subtaskId: "subtask-id",
+      confirmDataLoss: true,
+    });
+
+    expect(result).toEqual({
+      target: {
+        ...expectedTask,
+        id: "target-id",
+        subtasks: [{ id: "subtask-id", title: "write plan", done: false }],
+        version: 8,
+      },
+      removedTaskId: "source-id",
+    });
+    expect(djangoCalls).toHaveLength(1);
+    expect(djangoCalls[0]).toMatchObject({
+      url: `${DJANGO_ORIGIN}/api/tasks/source-id/commands/nest/`,
+      method: "POST",
+      authorization: "Bearer test-token",
+      body: {
+        target_id: "target-id",
+        source_version: 3,
+        target_version: 7,
+        subtask_id: "subtask-id",
+        confirm_data_loss: true,
+      },
+    });
+  });
+
+  it("promoteSubtask() crosses both real route layers and returns parent plus new task", async () => {
+    const parentApi = { ...apiTask, id: "parent-id", subtasks: [], version: 5 };
+    const promotedApi = { ...apiTask, id: "promoted-id", title: "one", version: 1 };
+    const { djangoCalls } = installFetchRouter(() =>
+      Response.json({ parent: parentApi, task: promotedApi }, { status: 201 }),
+    );
+
+    const result = await createApiTaskRepository().promoteSubtask({
+      parentId: "parent-id",
+      subtaskId: "s1",
+      parentVersion: 4,
+      newTaskId: "promoted-id",
+    });
+
+    // subtasks: [] on the wire maps to `undefined` in the domain Task
+    // (mapping.ts), and NextResponse.json() then drops undefined-valued
+    // keys entirely during JSON serialization — so the key is genuinely
+    // absent by the time it crosses the real route handler, not present
+    // with an explicit undefined value. Assert absence directly instead of
+    // an expected-value shape that JSON can't actually carry.
+    expect(result.parent).toMatchObject({ id: "parent-id", version: 5 });
+    expect(result.parent).not.toHaveProperty("subtasks");
+    expect(result.task).toMatchObject({ id: "promoted-id", title: "one", version: 1 });
+    expect(djangoCalls).toHaveLength(1);
+    expect(djangoCalls[0]).toMatchObject({
+      url: `${DJANGO_ORIGIN}/api/tasks/parent-id/commands/promote-subtask/`,
+      method: "POST",
+      authorization: "Bearer test-token",
+      body: { subtask_id: "s1", parent_version: 4, new_task_id: "promoted-id" },
+    });
+  });
+
+  it("the command BFF routes reject a malformed body before ever calling Django", async () => {
+    // RF-005 review finding: these routes used to hand the parsed body
+    // straight to Django with no shape check, unlike the PUT route's
+    // careful If-Match validation — a missing confirmDataLoss silently
+    // became `undefined` and vanished during JSON.stringify instead of
+    // failing fast with a clear error.
+    const { djangoCalls } = installFetchRouter(() => {
+      throw new Error("Django should not have been called for a malformed command body.");
+    });
+    const params = { params: Promise.resolve({ id: "source-id" }) };
+
+    const missingConfirm = new NextRequest(`${NEXT_ORIGIN}/api/tasks/source-id/commands/nest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        targetId: "target-id",
+        sourceVersion: 1,
+        targetVersion: 1,
+        subtaskId: "s1",
+        // confirmDataLoss omitted
+      }),
+    });
+    const nestResponse = await NEST(missingConfirm, params);
+    expect(nestResponse.status).toBe(400);
+
+    const missingVersion = new NextRequest(
+      `${NEXT_ORIGIN}/api/tasks/source-id/commands/promote-subtask`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subtaskId: "s1", newTaskId: "new-id" }), // parentVersion omitted
+      },
+    );
+    const promoteResponse = await PROMOTE_SUBTASK(missingVersion, params);
+    expect(promoteResponse.status).toBe(400);
+
+    expect(djangoCalls).toHaveLength(0);
+  });
+
+  it("preserves Django command 409 through the BFF as a typed repository conflict", async () => {
+    installFetchRouter(() =>
+      Response.json(
+        { code: "version_conflict", detail: "The task changed after it was loaded." },
+        { status: 409 },
+      ),
+    );
+
+    await expect(
+      createApiTaskRepository().nestTask({
+        sourceId: "source-id",
+        targetId: "target-id",
+        sourceVersion: 1,
+        targetVersion: 1,
+        subtaskId: "subtask-id",
+        confirmDataLoss: false,
+      }),
+    ).rejects.toBeInstanceOf(TaskVersionConflictError);
   });
 
   it("a non-auth Django failure propagates through the real route handler as a rejected list()", async () => {

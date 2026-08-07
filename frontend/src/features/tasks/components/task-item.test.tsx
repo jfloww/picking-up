@@ -22,6 +22,15 @@ const noopHandlers = {
 };
 
 describe('TaskItem size="week"', () => {
+  it("can yield list-item ownership to a parent drag wrapper", () => {
+    const { container } = render(
+      <TaskItem task={makeTask()} size="week" rootElement="div" {...noopHandlers} />,
+    );
+
+    expect(container.firstElementChild?.tagName).toBe("DIV");
+    expect(container.querySelector("li")).toBeNull();
+  });
+
   it("collapses to a single line when the task has no time, subtasks, or repeat", () => {
     const task = makeTask({ title: "buy milk" });
     const { container } = render(<TaskItem task={task} size="week" {...noopHandlers} />);

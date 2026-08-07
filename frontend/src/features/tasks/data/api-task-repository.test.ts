@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createApiTaskRepository } from "./api-task-repository";
-import { STORAGE_KEY } from "./repository";
+import { createApiTaskRepository, TASK_REQUEST_TIMEOUT_MS } from "./api-task-repository";
+import { STORAGE_KEY, TaskVersionConflictError } from "./repository";
 import { makeTask } from "../test-utils";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -14,7 +14,9 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe("createApiTaskRepository", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
+    localStorage.clear();
   });
 
   it("list() fetches the server list directly when localStorage has nothing to migrate", async () => {
@@ -25,7 +27,31 @@ describe("createApiTaskRepository", () => {
 
     expect(tasks).toEqual([]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy).toHaveBeenCalledWith("/api/tasks");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/tasks",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("aborts a request that exceeds the task request timeout", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((_input, init: RequestInit) => {
+        signal = init.signal as AbortSignal;
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+        });
+      }),
+    );
+
+    const request = createApiTaskRepository().list();
+    const rejection = expect(request).rejects.toMatchObject({ name: "AbortError" });
+    await vi.advanceTimersByTimeAsync(TASK_REQUEST_TIMEOUT_MS);
+
+    await rejection;
+    expect(signal?.aborted).toBe(true);
   });
 
   it("list() uploads every local task once, then clears localStorage, when there's something to migrate", async () => {
@@ -106,23 +132,146 @@ describe("createApiTaskRepository", () => {
     await expect(createApiTaskRepository().create(makeTask())).rejects.toThrow();
   });
 
-  it("update() puts to the task's own url and throws on failure", async () => {
-    const fetchSpy = vi.fn().mockResolvedValue(jsonResponse({}, 200));
+  it("update() puts the versioned task to its own URL and returns the authoritative task", async () => {
+    const task = makeTask({ id: "x", version: 3 });
+    const authoritative = { ...task, title: "saved by server", version: 4 };
+    const fetchSpy = vi.fn().mockResolvedValue(jsonResponse(authoritative, 200));
     vi.stubGlobal("fetch", fetchSpy);
-    const task = makeTask({ id: "x" });
 
-    await createApiTaskRepository().update(task);
+    await expect(createApiTaskRepository().update(task)).resolves.toEqual(authoritative);
 
-    expect(fetchSpy).toHaveBeenCalledWith("/api/tasks/x", expect.objectContaining({ method: "PUT" }));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/tasks/x",
+      expect.objectContaining({
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "If-Match": '"3"' },
+        body: JSON.stringify(task),
+      }),
+    );
   });
 
-  it("remove() deletes at the id's url and throws on failure", async () => {
+  it("remove() deletes at the id's URL with the current version", async () => {
     const fetchSpy = vi.fn().mockResolvedValue(jsonResponse(null, 204));
     vi.stubGlobal("fetch", fetchSpy);
 
-    await createApiTaskRepository().remove("x");
+    await createApiTaskRepository().remove("x", 6);
 
-    expect(fetchSpy).toHaveBeenCalledWith("/api/tasks/x", expect.objectContaining({ method: "DELETE" }));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/tasks/x",
+      expect.objectContaining({ method: "DELETE", headers: { "If-Match": '"6"' } }),
+    );
+  });
+
+  it("turns mutation and command 409 responses into TaskVersionConflictError", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ code: "version_conflict" }, 409)));
+    const repo = createApiTaskRepository();
+
+    await expect(repo.update(makeTask())).rejects.toBeInstanceOf(TaskVersionConflictError);
+    await expect(
+      repo.nestTask({
+        sourceId: "source",
+        targetId: "target",
+        sourceVersion: 1,
+        targetVersion: 1,
+        subtaskId: "subtask",
+        confirmDataLoss: false,
+      }),
+    ).rejects.toBeInstanceOf(TaskVersionConflictError);
+  });
+
+  it("preserves the server's conflict code and current versions on the thrown error", async () => {
+    // RF-005 review finding: this information used to be discarded at the
+    // repository boundary, leaving the store unable to tell a genuine
+    // staleness conflict apart from any other failure.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          { code: "task_version_conflict", current_versions: { "task-1": 4 } },
+          409,
+        ),
+      ),
+    );
+    const repo = createApiTaskRepository();
+
+    try {
+      await repo.update(makeTask({ id: "task-1" }));
+      expect.unreachable("expected update() to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TaskVersionConflictError);
+      const conflict = error as TaskVersionConflictError;
+      expect(conflict.code).toBe("task_version_conflict");
+      expect(conflict.currentVersions).toEqual({ "task-1": 4 });
+    }
+  });
+
+  it("nestTask() sends one command request and returns the authoritative target", async () => {
+    const target = makeTask({
+      id: "target",
+      subtasks: [{ id: "subtask", title: "source", done: false }],
+      version: 2,
+    });
+    const fetchSpy = vi.fn().mockResolvedValue(
+      jsonResponse({ target, removedTaskId: "source" }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(
+      createApiTaskRepository().nestTask({
+        sourceId: "source",
+        targetId: "target",
+        sourceVersion: 1,
+        targetVersion: 1,
+        subtaskId: "subtask",
+        confirmDataLoss: true,
+      }),
+    ).resolves.toEqual({ target, removedTaskId: "source" });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/tasks/source/commands/nest",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          sourceId: "source",
+          targetId: "target",
+          sourceVersion: 1,
+          targetVersion: 1,
+          subtaskId: "subtask",
+          confirmDataLoss: true,
+        }),
+      }),
+    );
+  });
+
+  it("promoteSubtask() sends one command request and returns both authoritative tasks", async () => {
+    const parent = makeTask({ id: "parent", subtasks: [], version: 2 });
+    const task = makeTask({ id: "promoted", title: "book flights", version: 1 });
+    const fetchSpy = vi.fn().mockResolvedValue(jsonResponse({ parent, task }, 201));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(
+      createApiTaskRepository().promoteSubtask({
+        parentId: "parent",
+        subtaskId: "subtask",
+        parentVersion: 1,
+        newTaskId: "promoted",
+      }),
+    ).resolves.toEqual({ parent, task });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/tasks/parent/commands/promote-subtask",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          parentId: "parent",
+          subtaskId: "subtask",
+          parentVersion: 1,
+          newTaskId: "promoted",
+        }),
+      }),
+    );
   });
 
   describe("on a 401 (session expired)", () => {
@@ -159,7 +308,25 @@ describe("createApiTaskRepository", () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 401)));
       const redirectToLogin = vi.fn();
 
-      await expect(createApiTaskRepository(redirectToLogin).remove("x")).rejects.toThrow();
+      await expect(createApiTaskRepository(redirectToLogin).remove("x", 1)).rejects.toThrow();
+
+      expect(redirectToLogin).toHaveBeenCalledOnce();
+    });
+
+    it("nestTask() redirects to login", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 401)));
+      const redirectToLogin = vi.fn();
+
+      await expect(
+        createApiTaskRepository(redirectToLogin).nestTask({
+          sourceId: "source",
+          targetId: "target",
+          sourceVersion: 1,
+          targetVersion: 1,
+          subtaskId: "subtask",
+          confirmDataLoss: false,
+        }),
+      ).rejects.toThrow();
 
       expect(redirectToLogin).toHaveBeenCalledOnce();
     });

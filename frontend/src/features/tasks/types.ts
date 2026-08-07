@@ -36,6 +36,7 @@ export interface Task {
   background?: boolean; // renders in the timeline's slim background lane instead of the regular overlap columns
   dueDate?: string; // "YYYY-MM-DD"; independent of scope; unset for routine tasks
   order: number; // fractional manual position within "All Day To-Do"; meaningless for every other list, but always present
+  version: number; // server concurrency token; starts at 1 and increments after every accepted mutation
 }
 
 export function scopeKey(scope: Scope): string {
