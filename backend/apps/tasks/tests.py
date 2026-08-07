@@ -652,6 +652,15 @@ class TaskCommandApiTests(TestCase):
             format="json",
         )
 
+    def delete_occurrence(self, occurrence, **overrides):
+        payload = {"occurrence_version": occurrence.version}
+        payload.update(overrides)
+        return self.client.post(
+            f"/api/tasks/{occurrence.id}/commands/delete-occurrence/",
+            payload,
+            format="json",
+        )
+
     def test_nest_atomically_appends_subtask_and_removes_source(self):
         source = self.create_task(title="buy milk", done=True)
         target = self.create_task(
@@ -1079,6 +1088,54 @@ class TaskCommandApiTests(TestCase):
         )
         response = self.detach(other_task)
         self.assertEqual(response.status_code, 404)
+
+    def test_delete_occurrence_removes_the_task_and_excludes_its_date_on_the_anchor(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+
+        response = self.delete_occurrence(occurrence)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["removed_task_id"], str(occurrence.id))
+        self.assertFalse(Task.objects.filter(id=occurrence.id).exists())
+        anchor.refresh_from_db()
+        self.assertEqual(anchor.excluded_dates, ["2026-07-16"])
+
+    def test_delete_occurrence_on_a_standalone_task_touches_no_anchor(self):
+        response = self.delete_occurrence(self.create_task(title="solo"))
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn("anchor", response.data)
+        self.assertFalse(Task.objects.filter(title="solo").exists())
+
+    def test_delete_occurrence_returns_409_for_a_stale_version(self):
+        occurrence = self.create_task(title="solo")
+
+        response = self.delete_occurrence(occurrence, occurrence_version=occurrence.version + 1)
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertTrue(Task.objects.filter(id=occurrence.id).exists())
+
+    def test_delete_occurrence_returns_404_for_a_missing_or_unowned_occurrence(self):
+        response = self.client.post(
+            f"/api/tasks/{uuid.uuid4()}/commands/delete-occurrence/",
+            {"occurrence_version": 1},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+
+        other_user, other_client = auth_client("delete-occ-other@example.com")
+        other_task = Task.objects.create(
+            id=uuid.uuid4(), user=other_user, title="not yours",
+            scope_kind="day", scope_value="2026-07-16",
+        )
+        response = self.delete_occurrence(other_task)
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Task.objects.filter(id=other_task.id).exists())
 
     def test_promote_returns_404_for_a_missing_or_unowned_parent(self):
         missing = self.client.post(

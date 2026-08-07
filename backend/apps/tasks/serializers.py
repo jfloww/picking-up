@@ -189,3 +189,7 @@ class DetachTaskCommandSerializer(serializers.Serializer):
         child=serializers.IntegerField(min_value=0, max_value=6),
         required=False, allow_null=True, default=None,
     )
+
+
+class DeleteOccurrenceCommandSerializer(serializers.Serializer):
+    occurrence_version = serializers.IntegerField(min_value=1)

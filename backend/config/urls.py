@@ -6,6 +6,7 @@ from apps.accounts.views import EmailTokenObtainPairView, GoogleTokenObtainView,
 from apps.tasks.views import (
     CategoryDetailView,
     CategoryListCreateView,
+    DeleteOccurrenceCommandView,
     DetachTaskCommandView,
     NestTaskCommandView,
     PromoteSubtaskCommandView,
@@ -32,6 +33,11 @@ urlpatterns = [
         "api/tasks/<uuid:pk>/commands/detach/",
         DetachTaskCommandView.as_view(),
         name="task-command-detach",
+    ),
+    path(
+        "api/tasks/<uuid:pk>/commands/delete-occurrence/",
+        DeleteOccurrenceCommandView.as_view(),
+        name="task-command-delete-occurrence",
     ),
     path(
         "api/tasks/<uuid:pk>/commands/promote-subtask/",

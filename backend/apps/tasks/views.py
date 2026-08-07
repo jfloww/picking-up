@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from .models import Category, Task, normalize_category_name
 from .serializers import (
     CategorySerializer,
+    DeleteOccurrenceCommandSerializer,
     DetachTaskCommandSerializer,
     NestTaskCommandSerializer,
     PromoteSubtaskCommandSerializer,
@@ -21,6 +22,7 @@ from .services import (
     TaskCommandConflict,
     TaskCommandNotFound,
     TaskVersionConflict,
+    delete_occurrence,
     detach_task,
     nest_task,
     promote_subtask,
@@ -209,6 +211,32 @@ class DetachTaskCommandView(APIView):
             raise TaskCommandConflictResponse(exc) from exc
 
         body = {"occurrence": TaskSerializer(result.occurrence, context={"request": request}).data}
+        if result.anchor is not None:
+            body["anchor"] = TaskSerializer(result.anchor, context={"request": request}).data
+        return Response(body, status=status.HTTP_200_OK)
+
+
+class DeleteOccurrenceCommandView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, pk):
+        serializer = DeleteOccurrenceCommandSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = delete_occurrence(
+                user=request.user,
+                occurrence_id=pk,
+                occurrence_version=data["occurrence_version"],
+            )
+        except TaskCommandNotFound as exc:
+            raise NotFound from exc
+        except TaskVersionConflict as exc:
+            raise TaskVersionConflictResponse(exc.current_versions) from exc
+        except TaskCommandConflict as exc:
+            raise TaskCommandConflictResponse(exc) from exc
+
+        body = {"removed_task_id": result.removed_task_id}
         if result.anchor is not None:
             body["anchor"] = TaskSerializer(result.anchor, context={"request": request}).data
         return Response(body, status=status.HTTP_200_OK)

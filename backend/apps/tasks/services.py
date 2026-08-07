@@ -230,6 +230,35 @@ def detach_task(
     return DetachTaskResult(occurrence=occurrence, anchor=anchor)
 
 
+@dataclass(frozen=True)
+class DeleteOccurrenceResult:
+    removed_task_id: str
+    anchor: Task | None
+
+
+@transaction.atomic
+def delete_occurrence(
+    *,
+    user,
+    occurrence_id,
+    occurrence_version: int,
+) -> DeleteOccurrenceResult:
+    _lock_user(user)
+    occurrence_key = str(occurrence_id)
+    tasks = _locked_owned_tasks(user, [occurrence_id])
+    if occurrence_key not in tasks:
+        raise TaskCommandNotFound
+
+    occurrence = tasks[occurrence_key]
+    _assert_versions({occurrence_key: occurrence_version}, tasks)
+
+    anchor = _append_anchor_exclusion(user, occurrence)
+    removed_task_id = str(occurrence.id)
+    occurrence.delete()
+
+    return DeleteOccurrenceResult(removed_task_id=removed_task_id, anchor=anchor)
+
+
 def _promotion_order(user, parent: Task) -> float:
     if parent.scope_kind != "day":
         return 0.0
