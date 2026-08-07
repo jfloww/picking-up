@@ -309,7 +309,7 @@ describe("WeeklyView", () => {
       </TasksProvider>,
     );
     await waitFor(() => expect(screen.getByRole("button", { name: "task a" })).toBeTruthy());
-    const updateSpy = vi.spyOn(repo, "update");
+    const reorderSpy = vi.spyOn(repo, "reorderTask");
 
     const column = screen.getByTestId("day-column-2026-07-17");
     vi.spyOn(column, "getBoundingClientRect").mockReturnValue({
@@ -330,7 +330,17 @@ describe("WeeklyView", () => {
     fireEvent.pointerMove(handle, { pointerId: 1, clientX: 50, clientY: 50 }); // b's upper half (40-60)
     fireEvent.pointerUp(handle, { pointerId: 1, clientX: 50, clientY: 50 });
 
-    expect(updateSpy).not.toHaveBeenCalled();
+    // The guard (if it fires) runs synchronously inside the pointerUp
+    // handler, but `enqueueMutation` defers the actual `repo.reorderTask`
+    // call by one microtask hop (`mutationQueueRef.current.then(...)`), so
+    // asserting `not.toHaveBeenCalled()` immediately after fireEvent would
+    // pass trivially regardless of whether the guard fired — the call just
+    // hasn't happened *yet* either way. Flushing past that hop first (a
+    // macrotask boundary always runs after any already-queued microtask)
+    // makes this assertion prove the guard actually suppressed the call,
+    // not just that it hasn't reached the repo within the same tick.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reorderSpy).not.toHaveBeenCalled();
     expect(repo.tasks.find((t) => t.id === "a")?.order).toBe(1);
     expect(screen.getByTestId("day-column-2026-07-17").textContent).toContain("task a");
   });
