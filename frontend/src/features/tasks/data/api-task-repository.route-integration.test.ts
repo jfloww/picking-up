@@ -58,7 +58,7 @@ const expectedTask: Task = {
   createdAt: "2026-07-27T00:00:00.000Z",
   completedAt: undefined,
   time: "09:30",
-  subtasks: [{ id: "s1", title: "one", done: false, memo: "" }],
+  subtasks: [{ id: "s1", title: "one", done: false }],
   repeatWeekdays: [1, 3],
   repeatSourceId: undefined,
   excludedDates: undefined,
