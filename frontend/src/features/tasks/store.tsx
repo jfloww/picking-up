@@ -253,7 +253,7 @@ interface TasksContextValue extends TasksState {
   setDuration: (id: string, durationMinutes: number | undefined) => void;
   setBackground: (id: string, background: boolean) => void;
   setDueDate: (id: string, dueDate: string | undefined) => void;
-  setOrder: (id: string, order: number) => void;
+  reorderTask: (id: string, insertBeforeId: string | null) => void;
   removeTask: (id: string) => void;
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
@@ -793,11 +793,28 @@ export function TasksProvider({
         const task: Task = { ...current, dueDate };
         persistUpdate(task);
       },
-      setOrder(id, order) {
+      reorderTask(id, insertBeforeId) {
         const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
-        const task: Task = { ...current, order };
-        persistUpdate(task);
+
+        const generation = nextMutationGeneration(current.id);
+
+        enqueueMutation(async () => {
+          const result = await repo.reorderTask({
+            taskId: current.id,
+            taskVersion: authoritativeVersionsRef.current.get(current.id) ?? current.version,
+            insertBeforeId,
+          });
+          authoritativeVersionsRef.current.set(result.task.id, result.task.version);
+          authoritativeTasksRef.current.set(result.task.id, result.task);
+
+          const currentTask = tasksRef.current.find((t) => t.id === result.task.id);
+          const reconciledTask =
+            currentTask && mutationGenerationsRef.current.get(result.task.id) !== generation
+              ? { ...currentTask, version: result.task.version, order: result.task.order }
+              : result.task;
+          applyCommandState([reconciledTask], []);
+        });
       },
       setCategory(id, categoryId) {
         const current = tasksRef.current.find((t) => t.id === id);

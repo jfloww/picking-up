@@ -10,6 +10,7 @@ import { POST as DELETE_OCCURRENCE } from "@/app/api/tasks/[id]/commands/delete-
 import { POST as DETACH } from "@/app/api/tasks/[id]/commands/detach/route";
 import { POST as NEST } from "@/app/api/tasks/[id]/commands/nest/route";
 import { POST as PROMOTE_SUBTASK } from "@/app/api/tasks/[id]/commands/promote-subtask/route";
+import { POST as REORDER } from "@/app/api/tasks/[id]/commands/reorder/route";
 import { POST as RESCHEDULE } from "@/app/api/tasks/[id]/commands/reschedule/route";
 import { DELETE, PUT } from "@/app/api/tasks/[id]/route";
 import { GET, POST } from "@/app/api/tasks/route";
@@ -131,6 +132,9 @@ function installFetchRouter(django: (call: DjangoCall) => Response | Promise<Res
       }
       if (segment === "commands" && command === "reschedule") {
         return RESCHEDULE(request, params);
+      }
+      if (segment === "commands" && command === "reorder") {
+        return REORDER(request, params);
       }
       return method === "DELETE"
         ? DELETE(request, params)
@@ -440,6 +444,61 @@ describe("client repository -> real route handlers -> mapping (no mocked seams b
       authorization: "Bearer test-token",
       body: { task_version: 4, date: "2026-08-03" },
     });
+  });
+
+  it("reorderTask() crosses both real route layers and maps the reordered task", async () => {
+    const taskApi = { ...apiTask, id: "task-id", order: 2.5, version: 5 };
+    const { djangoCalls } = installFetchRouter(() => Response.json({ task: taskApi }));
+
+    const result = await createApiTaskRepository().reorderTask({
+      taskId: "task-id",
+      taskVersion: 4,
+      insertBeforeId: "neighbor-id",
+    });
+
+    expect(result).toEqual({
+      task: { ...expectedTask, id: "task-id", order: 2.5, version: 5 },
+    });
+    expect(djangoCalls).toHaveLength(1);
+    expect(djangoCalls[0]).toMatchObject({
+      url: `${DJANGO_ORIGIN}/api/tasks/task-id/commands/reorder/`,
+      method: "POST",
+      authorization: "Bearer test-token",
+      body: { task_version: 4, insert_before_id: "neighbor-id" },
+    });
+  });
+
+  it("the reorder BFF route rejects a malformed body before ever calling Django", async () => {
+    const { djangoCalls } = installFetchRouter(() => {
+      throw new Error("Django should not have been called for a malformed command body.");
+    });
+    const params = { params: Promise.resolve({ id: "task-id" }) };
+
+    const missingVersion = new NextRequest(`${NEXT_ORIGIN}/api/tasks/task-id/commands/reorder`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ insertBeforeId: null }), // taskVersion omitted
+    });
+    const response = await REORDER(missingVersion, params);
+
+    expect(response.status).toBe(400);
+    expect(djangoCalls).toHaveLength(0);
+  });
+
+  it("preserves Django's reorder invalid_neighbor 409 through the BFF as a typed repository conflict", async () => {
+    installFetchRouter(() =>
+      Response.json(
+        { code: "invalid_neighbor", detail: "The neighbor task is not a valid insertion point." },
+        { status: 409 },
+      ),
+    );
+
+    const error = await createApiTaskRepository()
+      .reorderTask({ taskId: "task-id", taskVersion: 1, insertBeforeId: "does-not-exist" })
+      .catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(TaskVersionConflictError);
+    expect((error as InstanceType<typeof TaskVersionConflictError>).code).toBe("invalid_neighbor");
   });
 
   it("the command BFF routes reject a malformed body before ever calling Django", async () => {

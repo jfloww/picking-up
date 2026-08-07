@@ -1,5 +1,5 @@
 import { weekStartOf } from "../lib/dates";
-import { promotedSubtaskOrder } from "../lib/reorder";
+import { computeOrderBetween, promotedSubtaskOrder } from "../lib/reorder";
 import { dayTasksForWeek, isValidTime } from "../lib/times";
 import type { Subtask, Task } from "../types";
 
@@ -73,6 +73,16 @@ export interface RescheduleTaskResult {
   anchor?: Task;
 }
 
+export interface ReorderTaskCommand {
+  taskId: string;
+  taskVersion: number;
+  insertBeforeId: string | null;
+}
+
+export interface ReorderTaskResult {
+  task: Task;
+}
+
 export class TaskVersionConflictError extends Error {
   // RF-005 review finding: the server's 409 body carries a machine code and
   // (for a genuine staleness conflict) the task's current version, so a
@@ -102,6 +112,7 @@ export interface TaskRepository {
   detachTask(command: DetachTaskCommand): Promise<DetachTaskResult>;
   deleteOccurrence(command: DeleteOccurrenceCommand): Promise<DeleteOccurrenceResult>;
   rescheduleTask(command: RescheduleTaskCommand): Promise<RescheduleTaskResult>;
+  reorderTask(command: ReorderTaskCommand): Promise<ReorderTaskResult>;
 }
 
 function isScope(value: unknown): boolean {
@@ -492,6 +503,47 @@ export function createLocalStorageRepository(
         }),
       );
       return updatedAnchor ? { task: updatedTask, anchor: updatedAnchor } : { task: updatedTask };
+    },
+    async reorderTask(command) {
+      const tasks = read();
+      const task = tasks.find((t) => t.id === command.taskId);
+      if (!task || task.version !== command.taskVersion) {
+        throw new TaskVersionConflictError();
+      }
+      const date =
+        task.scope.kind === "day"
+          ? task.scope.date
+          : task.scope.kind === "week" && task.rolledFrom?.kind === "day"
+            ? task.rolledFrom.date
+            : undefined;
+      if (task.time || date === undefined) {
+        throw new Error("Only an untimed day-scoped or rolled-over week-scoped task can be reordered.");
+      }
+      const siblings = dayTasksForWeek(tasks, date, weekStartOf(date))
+        .filter((t) => !t.time && t.id !== task.id)
+        .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+
+      let before: Task | undefined;
+      let after: Task | undefined;
+      if (command.insertBeforeId === null) {
+        before = siblings[siblings.length - 1];
+        after = undefined;
+      } else {
+        const matchIndex = siblings.findIndex((t) => t.id === command.insertBeforeId);
+        if (matchIndex === -1) {
+          throw new Error("The neighbor task is not a valid insertion point.");
+        }
+        after = siblings[matchIndex];
+        before = matchIndex > 0 ? siblings[matchIndex - 1] : undefined;
+      }
+
+      const updatedTask: Task = {
+        ...task,
+        version: task.version + 1,
+        order: computeOrderBetween(before?.order, after?.order),
+      };
+      write(tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
+      return { task: updatedTask };
     },
   };
 }

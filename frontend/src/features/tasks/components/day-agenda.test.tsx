@@ -299,7 +299,7 @@ describe("DayAgenda reorder handle", () => {
     expect(items[1]).toContain("first");
   });
 
-  it("releasing outside the All Day To-Do list cancels the drag: no setOrder, order unchanged, no indicator", async () => {
+  it("releasing outside the All Day To-Do list cancels the drag: no reorderTask call, order unchanged, no indicator", async () => {
     const first = makeTask({ id: "f", title: "first", order: 1, scope: { kind: "day", date: ANCHOR } });
     const second = makeTask({ id: "s", title: "second", order: 2, scope: { kind: "day", date: ANCHOR } });
     const repo = fakeRepository([first, second]);

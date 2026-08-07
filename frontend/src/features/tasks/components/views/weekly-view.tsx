@@ -13,7 +13,6 @@ import {
   weekDates,
   weekStartOf,
 } from "../../lib/dates";
-import { computeOrderBetween } from "../../lib/reorder";
 import { dayTasksForWeek, resolveRepeatWeekdays, weekStats } from "../../lib/times";
 import { useTasks } from "../../store";
 import type { ViewKind } from "../view-switcher";
@@ -81,7 +80,7 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
       const targetIndex =
         insertBeforeId === null ? remaining.length : remaining.indexOf(insertBeforeId);
       if (targetIndex === -1) return;
-      // Compare list *positions*, not just the resolved order value: the
+      // Compare list *positions*, not just a resolved order value: the
       // dragged id currently sits at currentIndex within `ids` (itself
       // still present). Removing it to build `remaining` shifts every
       // later index down by one, so the slot it already occupies is
@@ -90,21 +89,11 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
       // the same position even though insertBeforeId names a *different*
       // neighbor than "itself". Catching that here (rather than only
       // `id === insertBeforeId`) avoids a visually-no-op drag firing a
-      // real setOrder and its network write.
+      // real reorderTask and its network write — the server has no cheap
+      // way to detect "this would be a no-op" itself without first doing
+      // the same work the client just did.
       if (targetIndex === currentIndex) return;
-      const byId = (taskId: string) => tasks.find((t) => t.id === taskId);
-      const before = targetIndex > 0 ? byId(remaining[targetIndex - 1])?.order : undefined;
-      const after =
-        targetIndex < remaining.length ? byId(remaining[targetIndex])?.order : undefined;
-      const dragged = byId(id);
-      if (!dragged) return;
-      const newOrder = computeOrderBetween(before, after);
-      // Still distinct from the positional guard above: a move to a
-      // genuinely different index can still land on the exact same order
-      // value when neighbours share order values or the midpoint of two
-      // adjacent floats rounds back onto the dragged task's own value.
-      if (newOrder === dragged.order) return;
-      actions.setOrder(id, newOrder);
+      actions.reorderTask(id, insertBeforeId);
     },
     onReschedule: (id, date) => actions.rescheduleTaskToDay(id, date),
   });
