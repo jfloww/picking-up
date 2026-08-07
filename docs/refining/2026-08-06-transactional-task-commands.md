@@ -214,8 +214,10 @@ permanent. The following has now run against the current combined tree:
 - Backend, full suite: `manage.py test apps.tasks -v 2` → **72 tests, OK.**
 - `manage.py check`: no issues.
 - `manage.py makemigrations --check --dry-run`: no changes detected —
-  `models.py` and the migration graph agreed at that checkpoint (the graph now
-  ends at 0013 after RF-007's final add/backfill/finalize split).
+  `models.py` and the migration graph agreed at that checkpoint (the graph
+  then ended at 0013 after RF-007's final add/backfill/finalize split. It has
+  since moved again: a later RF-006 fix added `0014_truncate_overlength_subtask_fields`,
+  unrelated to RF-007 — see that row in `docs/refining/README.md` for detail).
 - Frontend, full suite: `npx vitest run` → **751 passed, 2 failed**, of 753.
   Both failures are real, not flaky:
   - `store.test.tsx:1250` — the mutation queue now fences out any mutation

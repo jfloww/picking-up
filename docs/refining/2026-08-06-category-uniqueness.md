@@ -72,7 +72,11 @@ The migration is split at real migration-file boundaries:
 3. `0012_category_normalized_name_finalize` reruns the complete merge for rows
    written in the cutover window, then makes the key non-null and swaps the
    uniqueness constraint.
-4. `0013_task_version` follows the completed category migration.
+
+That three-file sequence is this issue's entire migration footprint.
+Numbering continues afterward with unrelated work, not more of this split:
+`0013_task_version` is RF-005's version field, and
+`0014_truncate_overlength_subtask_fields` is a later RF-006 cleanup.
 
 The migration is intentionally one-way for merged duplicate rows: reversing the
 schema cannot recreate categories that represented the same logical identity.
@@ -118,7 +122,10 @@ UNIQUE creation fail instead of becoming an ordinary API conflict.
   merely a NULL fill — before the non-null and constraint operations. The merge
   is idempotent and wrapped in its own transaction, so it is safe to retry if a
   later Oracle DDL step fails.
-- Task version follows as `0013_task_version.py`.
+
+(`0013_task_version.py` and `0014_truncate_overlength_subtask_fields.py` are
+later, unrelated migrations that happen to number-follow this sequence — RF-005
+and RF-006 respectively, not part of this three-file resolution.)
 
 The real file boundary between backfill and finalize makes the race testable:
 the migration test stops after 0011, inserts an old-writer casefold duplicate
