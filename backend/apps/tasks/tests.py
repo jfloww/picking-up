@@ -13,7 +13,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import Category, Task, normalize_category_name
-from .serializers import EXCLUDED_DATES_MAX_COUNT, SUBTASKS_MAX_COUNT
+from .serializers import EXCLUDED_DATES_MAX_COUNT, SUBTASK_MEMO_MAX_LENGTH, SUBTASKS_MAX_COUNT
 from .services import (
     delete_occurrence,
     detach_task,
@@ -117,7 +117,7 @@ class TaskApiTests(TestCase):
                 rolled_from_kind="day",
                 rolled_from_value="2026-07-20",
                 time="09:30",
-                subtasks=[{"id": "s1", "title": "buy wood", "done": False}],
+                subtasks=[{"id": "s1", "title": "buy wood", "done": False, "memo": "oak, 2x4"}],
                 repeat_source=anchor_id,
                 priority=True,
                 duration_minutes=45,
@@ -136,7 +136,10 @@ class TaskApiTests(TestCase):
         self.assertIsNotNone(stored.completed_at)
         self.assertLess(timezone.now() - stored.completed_at, timedelta(seconds=5))
         self.assertEqual(stored.time, "09:30")
-        self.assertEqual(stored.subtasks, [{"id": "s1", "title": "buy wood", "done": False}])
+        self.assertEqual(
+            stored.subtasks,
+            [{"id": "s1", "title": "buy wood", "done": False, "memo": "oak, 2x4"}],
+        )
         self.assertEqual(str(stored.repeat_source_id), anchor_id)
         self.assertTrue(stored.priority)
         self.assertEqual(stored.duration_minutes, 45)
@@ -188,6 +191,43 @@ class TaskApiTests(TestCase):
         self.assertEqual(len(stored.subtasks[1]["title"]), 500)
         self.assertEqual(stored.subtasks[1]["title"], "b" * 500)
 
+    def test_create_defaults_a_subtasks_missing_memo_to_an_empty_string(self):
+        owner, client = auth_client("subtask-memo-default@example.com")
+        task_id = str(uuid.uuid4())
+
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(
+                id=task_id,
+                subtasks=[{"id": "s1", "title": "buy wood", "done": False}],
+            ),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertEqual(stored.subtasks[0]["memo"], "")
+
+    def test_create_truncates_an_overlength_subtask_memo(self):
+        owner, client = auth_client("subtask-memo-limits@example.com")
+        task_id = str(uuid.uuid4())
+
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(
+                id=task_id,
+                subtasks=[
+                    {"id": "s1", "title": "valid", "done": False, "memo": "m" * (SUBTASK_MEMO_MAX_LENGTH + 1)}
+                ],
+            ),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertEqual(len(stored.subtasks[0]["memo"]), SUBTASK_MEMO_MAX_LENGTH)
+        self.assertEqual(stored.subtasks[0]["memo"], "m" * SUBTASK_MEMO_MAX_LENGTH)
+
     def test_create_accepts_subtask_fields_at_exactly_the_length_boundary(self):
         owner, client = auth_client("subtask-limits-boundary@example.com")
         task_id = str(uuid.uuid4())
@@ -196,7 +236,14 @@ class TaskApiTests(TestCase):
             "/api/tasks/",
             make_task_payload(
                 id=task_id,
-                subtasks=[{"id": "a" * 255, "title": "b" * 500, "done": False}],
+                subtasks=[
+                    {
+                        "id": "a" * 255,
+                        "title": "b" * 500,
+                        "done": False,
+                        "memo": "m" * SUBTASK_MEMO_MAX_LENGTH,
+                    }
+                ],
             ),
             format="json",
         )
@@ -205,6 +252,7 @@ class TaskApiTests(TestCase):
         stored = Task.objects.get(id=task_id)
         self.assertEqual(stored.subtasks[0]["id"], "a" * 255)
         self.assertEqual(stored.subtasks[0]["title"], "b" * 500)
+        self.assertEqual(stored.subtasks[0]["memo"], "m" * SUBTASK_MEMO_MAX_LENGTH)
 
     def test_update_fully_replaces_a_tasks_fields(self):
         owner, client = auth_client()
@@ -1199,8 +1247,8 @@ class TaskCommandApiTests(TestCase):
         self.assertEqual(
             target.subtasks,
             [
-                {"id": "existing", "title": "bread", "done": False},
-                {"id": "nested-1", "title": "buy milk", "done": True},
+                {"id": "existing", "title": "bread", "done": False, "memo": ""},
+                {"id": "nested-1", "title": "buy milk", "done": True, "memo": ""},
             ],
         )
         self.assertEqual(response.data["target"]["version"], 2)
@@ -1234,8 +1282,11 @@ class TaskCommandApiTests(TestCase):
 
         self.assertEqual(rejected.status_code, 409)
         self.assertEqual(rejected.data["code"], "data_loss_confirmation_required")
-        self.assertCountEqual(rejected.data["lost_fields"], ["memo", "priority"])
+        # memo is no longer lossy — it now travels onto the appended subtask
+        # instead of being discarded, so only priority remains here.
+        self.assertCountEqual(rejected.data["lost_fields"], ["priority"])
         self.assertEqual(accepted.status_code, 200, accepted.data)
+        self.assertEqual(accepted.data["target"]["subtasks"][0]["memo"], "important")
 
     def test_nest_detects_data_loss_for_every_lossy_field_individually(self):
         # RF-005 review finding: the prior test only exercised memo and
@@ -1477,6 +1528,29 @@ class TaskCommandApiTests(TestCase):
         self.assertLess(created.order, 2)
         self.assertEqual(response.data["parent"]["version"], 2)
         self.assertEqual(response.data["task"]["version"], 1)
+
+    def test_promote_copies_the_subtasks_memo_onto_the_new_task(self):
+        parent = self.create_task(
+            title="plan trip",
+            subtasks=[{"id": "s1", "title": "book flights", "done": False, "memo": "window seat"}],
+        )
+
+        response = self.promote(parent, subtask_id="s1")
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["task"]["memo"], "window seat")
+
+    def test_promote_leaves_the_new_tasks_memo_null_when_the_subtask_has_no_memo(self):
+        parent = self.create_task(
+            title="plan trip",
+            subtasks=[{"id": "s1", "title": "book flights", "done": False}],
+        )
+
+        response = self.promote(parent, subtask_id="s1")
+
+        self.assertEqual(response.status_code, 201, response.data)
+        created = Task.objects.get(id=response.data["task"]["id"])
+        self.assertIsNone(created.memo)
 
     def test_promote_rejects_an_overlength_legacy_subtask_title_without_partial_write(self):
         parent = self.create_task(title="legacy parent")

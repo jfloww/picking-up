@@ -14,6 +14,7 @@ from .models import (
 
 SUBTASK_ID_MAX_LENGTH = 255
 SUBTASK_TITLE_MAX_LENGTH = 500
+SUBTASK_MEMO_MAX_LENGTH = 2000
 
 # RF-006 domain validation (round 2): defensive, operational caps on the two
 # unbounded JSONField collections on Task. Nothing in the product spec or the
@@ -59,12 +60,23 @@ class SubtaskSerializer(serializers.Serializer):
     id = serializers.CharField(allow_blank=False)
     title = serializers.CharField(allow_blank=False)
     done = serializers.BooleanField()
+    # Unlike Task.memo (a nullable model column), this is a plain dict key
+    # inside a JSONField list — there is no separate null/not-null column
+    # state to preserve, so "no memo" is represented as "" rather than
+    # None. This also means a legacy subtask dict with no "memo" key at
+    # all reads back as "" once it passes through this serializer (DRF
+    # applies `default` on both serialize and deserialize), with no
+    # migration required.
+    memo = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate_id(self, value: str) -> str:
         return value[:SUBTASK_ID_MAX_LENGTH]
 
     def validate_title(self, value: str) -> str:
         return value[:SUBTASK_TITLE_MAX_LENGTH]
+
+    def validate_memo(self, value: str) -> str:
+        return value[:SUBTASK_MEMO_MAX_LENGTH]
 
 
 class CategorySerializer(serializers.ModelSerializer):
