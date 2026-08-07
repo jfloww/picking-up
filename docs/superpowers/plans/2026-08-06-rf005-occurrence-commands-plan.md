@@ -863,7 +863,12 @@ In `frontend/src/features/tasks/data/repository.ts`, add to the object returned 
       if (anchorId) {
         const anchor = tasks.find((t) => t.id === anchorId);
         if (anchor) {
-          const date = occurrence.scope.kind === "day" ? occurrence.scope.date : undefined;
+          const date =
+            occurrence.scope.kind === "day"
+              ? occurrence.scope.date
+              : occurrence.scope.kind === "week" && occurrence.rolledFrom?.kind === "day"
+                ? occurrence.rolledFrom.date
+                : undefined;
           const existing = new Set(anchor.excludedDates ?? []);
           updatedAnchor =
             date && !existing.has(date)
@@ -1025,7 +1030,12 @@ In `frontend/src/features/tasks/test-utils.tsx`, add to the object returned by `
       if (anchorId) {
         const anchor = state.tasks.find((t) => t.id === anchorId);
         if (anchor) {
-          const date = occurrence.scope.kind === "day" ? occurrence.scope.date : undefined;
+          const date =
+            occurrence.scope.kind === "day"
+              ? occurrence.scope.date
+              : occurrence.scope.kind === "week" && occurrence.rolledFrom?.kind === "day"
+                ? occurrence.rolledFrom.date
+                : undefined;
           const existing = new Set(anchor.excludedDates ?? []);
           updatedAnchor =
             date && !existing.has(date)
@@ -1090,7 +1100,6 @@ In `frontend/src/features/tasks/store.tsx`, replace the existing `detachFromRout
         const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const normalized = weekdays && weekdays.length > 0 ? weekdays : undefined;
-        const wasOccurrence = current.repeatSourceId !== undefined;
         const anchorId = current.repeatSourceId;
 
         const updatedOccurrence: Task = {
@@ -1132,8 +1141,6 @@ In `frontend/src/features/tasks/store.tsx`, replace the existing `detachFromRout
           }
           applyCommandState(upserts, []);
         });
-
-        void wasOccurrence; // documents intent; the command itself is a no-op server-side when there's no anchor
       },
 ```
 
@@ -1236,7 +1243,12 @@ Expected: FAIL — `repo.deleteOccurrence is not a function`.
       if (anchorId) {
         const anchor = tasks.find((t) => t.id === anchorId);
         if (anchor) {
-          const date = occurrence.scope.kind === "day" ? occurrence.scope.date : undefined;
+          const date =
+            occurrence.scope.kind === "day"
+              ? occurrence.scope.date
+              : occurrence.scope.kind === "week" && occurrence.rolledFrom?.kind === "day"
+                ? occurrence.rolledFrom.date
+                : undefined;
           const existing = new Set(anchor.excludedDates ?? []);
           updatedAnchor =
             date && !existing.has(date)
@@ -1382,7 +1394,12 @@ In `test-utils.tsx`, add (same logic as Step 4, over `state.tasks`):
       if (anchorId) {
         const anchor = state.tasks.find((t) => t.id === anchorId);
         if (anchor) {
-          const date = occurrence.scope.kind === "day" ? occurrence.scope.date : undefined;
+          const date =
+            occurrence.scope.kind === "day"
+              ? occurrence.scope.date
+              : occurrence.scope.kind === "week" && occurrence.rolledFrom?.kind === "day"
+                ? occurrence.rolledFrom.date
+                : undefined;
           const existing = new Set(anchor.excludedDates ?? []);
           updatedAnchor =
             date && !existing.has(date)
