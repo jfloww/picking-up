@@ -26,11 +26,12 @@ that opens from a subtask's title click, replacing today's inline rename;
 carrying `memo` across Promote and Nest now that subtasks can hold it.
 
 Out of scope: the non-drawer, inline task-expansion view (`task-item.tsx`'s
-use of `SubtaskList` with `drawer` unset — no promote button, denser rows).
-It has no drawer to stack a sheet on top of, so it keeps today's
-inline-rename-on-click behavior unchanged. The subtask row's own checkbox,
-promote, and delete controls are untouched — the sheet only handles title
-and notes.
+use of `SubtaskList` with `drawer` unset, rendering `PlainSubtaskRow`). Its
+title is already a static, non-interactive `<span>` today — no click
+behavior of any kind, inline-rename or otherwise — and it has no drawer to
+stack a sheet on top of, so it's left exactly as-is. The subtask row's own
+checkbox, promote, and delete controls are untouched — the sheet only
+handles title and notes.
 
 ## Layout
 
@@ -75,11 +76,26 @@ above it while the subtask is being edited.
   number — picked to prevent unbounded JSONField growth via one subtask's
   notes, not derived from a measured need. Documented as a judgment call to
   revisit if the owner wants a different number.
-- No migration needed: existing subtask dicts simply lack the `memo` key,
-  which reads as "no notes" on both sides (`subtask.get("memo")` on the
-  backend, `subtask.memo` being `undefined` on the frontend) — the same
-  missing-key-is-a-valid-state approach `excluded_dates`/`repeat_weekdays`
-  already use elsewhere on `Task` itself.
+- Wire representation is `memo: ""` (never `null`) — `SubtaskSerializer.memo`
+  is declared `CharField(required=False, allow_blank=True, default="")`,
+  not the nullable `allow_null=True` pattern `Task.memo` itself uses. This
+  is a deliberate divergence: `Subtask` is a plain dict inside a `JSONField`
+  list, not a model field with its own null/not-null column state, and
+  `subtasks: Subtask[]` is passed straight through by
+  `frontend/src/features/tasks/api/mapping.ts` today with no per-field wire
+  conversion (unlike top-level `Task` fields, which `toApiPayload`/
+  `fromApiPayload` explicitly convert `null` ↔ `undefined` for). Introducing
+  a nullable subtask field would need that same conversion added just for
+  `memo`, for no behavioral benefit over a plain default-`""` string; a
+  legacy subtask dict missing the `memo` key entirely still reads back as
+  `""` (DRF's field-level `default` applies whenever the source key is
+  absent, on both serialization and deserialization), so "no memo" is still
+  representable and requires no migration. `mapping.ts` gains a small
+  `ApiSubtask` wire type and an explicit per-subtask map in
+  `toApiPayload`/`fromApiPayload` (`memo: s.memo ?? ""` outbound, `memo: s.memo
+  ? s.memo : undefined` inbound) so the frontend's own `Subtask.memo` stays
+  `string | undefined`, consistent with how `Task.memo` already reads on
+  this side.
 
 ## Promote and Nest now carry notes
 
@@ -103,18 +119,24 @@ anywhere to live on a subtask.
 ## Testing plan
 
 Backend: `SubtaskSerializer`'s `memo` truncation (accept/reject-length
-pair, matching the existing `id`/`title` tests); a create/update round-trip
-proving `memo` persists and a missing key reads as absent; `promote_subtask`
-copies a subtask's `memo` onto the new task; `nest_task` copies the source
-task's `memo` onto the appended subtask dict, and `_nest_data_loss_fields`
-no longer reports `memo` as lost (update the existing
-`test_nest_detects_data_loss_for_every_lossy_field_individually`
-parametrization to eight fields).
+pair, matching the existing `id`/`title` tests in `TaskApiTests`); a
+create/update round-trip proving `memo` persists and a missing key reads
+as absent; `promote_subtask` copies a subtask's `memo` onto the new task;
+`nest_task` copies the source task's `memo` onto the appended subtask
+dict, and `_nest_data_loss_fields` no longer reports `memo` as lost
+(update the existing `test_nest_requires_explicit_confirmation_for_server_
+detected_data_loss` test, which currently creates its source with both
+`memo="important"` and `priority=True` and asserts
+`lost_fields == ["memo", "priority"]` — that assertion narrows to
+`["priority"]` alone, plus a new assertion that the accepted nest's
+resulting subtask dict carries `"memo": "important"`).
 
 Frontend: the Subtask Detail sheet opens on title click instead of the old
 inline editor; title and notes are both editable and commit correctly;
-close (✕) and re-clicking the row both dismiss it; the plain (non-drawer)
-`SubtaskList` variant is unaffected — same inline-rename behavior as today.
+close (✕) and re-clicking the row both dismiss it; clicking a different
+subtask row while the sheet is open switches it to that subtask instead of
+stacking a second sheet; the plain (non-drawer) `SubtaskList` variant is
+unaffected — its title stays a static, non-interactive span, as today.
 
 ## Open items intentionally deferred
 
