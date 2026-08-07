@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { completedAtLabel } from "../lib/dates";
 import type { Category, Task } from "../types";
 import { PromoteUndoToast } from "./promote-undo-toast";
+import { SubtaskDetailPanel } from "./subtask-detail-panel";
 import { DONE_CHECKBOX_CLASS } from "./task-item";
 import { TaskDetailFields } from "./task-detail-fields";
 
@@ -65,6 +66,7 @@ export function TaskDetailDrawer({
   onToggleSubtask,
   onRemoveSubtask,
   onEditSubtaskTitle,
+  onEditSubtaskMemo,
   onPromoteSubtask,
   onUndoPromoteSubtask,
   bucketCategories = [],
@@ -87,6 +89,7 @@ export function TaskDetailDrawer({
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
   onEditSubtaskTitle: (subtaskId: string, title: string) => void;
+  onEditSubtaskMemo: (subtaskId: string, memo: string) => void;
   onPromoteSubtask: (subtaskId: string) => Task | undefined;
   onUndoPromoteSubtask: (taskId: string) => void;
   // Full Category objects, not names — this drawer needs ids both to
@@ -118,6 +121,7 @@ export function TaskDetailDrawer({
     taskId: string;
     subtaskId: string;
   } | null>(null);
+  const [openSubtaskId, setOpenSubtaskId] = useState<string | null>(null);
 
   useEffect(() => {
     setVisible(true);
@@ -127,6 +131,7 @@ export function TaskDetailDrawer({
     setDraft(draftFromTask(task, bucketCategories));
     setConfirmingDelete(false);
     setPromoteToast(null);
+    setOpenSubtaskId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.id]);
 
@@ -194,6 +199,8 @@ export function TaskDetailDrawer({
       : task.subtasks,
   };
 
+  const openSubtask = task.subtasks?.find((s) => s.id === openSubtaskId);
+
   return (
     <aside
       data-testid="task-detail-drawer"
@@ -255,7 +262,9 @@ export function TaskDetailDrawer({
           onAddSubtask={onAddSubtask}
           onToggleSubtask={onToggleSubtask}
           onRemoveSubtask={onRemoveSubtask}
-          onEditSubtaskTitle={onEditSubtaskTitle}
+          onOpenSubtask={(subtaskId) =>
+            setOpenSubtaskId((current) => (current === subtaskId ? null : subtaskId))
+          }
           onPromoteSubtask={handlePromoteSubtask}
           bucketCategories={bucketCategories.map((c) => c.name)}
           bucketCategoryName={draftCategory}
@@ -312,6 +321,14 @@ export function TaskDetailDrawer({
           </>
         )}
       </footer>
+      {openSubtask && (
+        <SubtaskDetailPanel
+          subtask={openSubtask}
+          onClose={() => setOpenSubtaskId(null)}
+          onTitleChange={(title) => onEditSubtaskTitle(openSubtask.id, title)}
+          onMemoChange={(memo) => onEditSubtaskMemo(openSubtask.id, memo)}
+        />
+      )}
       {promoteToast && (
         <PromoteUndoToast
           key={promoteToast.taskId}

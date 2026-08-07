@@ -128,7 +128,6 @@ export function TaskItem({
   onAddSubtask,
   onToggleSubtask,
   onRemoveSubtask,
-  onEditSubtaskTitle,
   onSelect,
 }: {
   task: Task;
@@ -150,7 +149,6 @@ export function TaskItem({
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
-  onEditSubtaskTitle: (subtaskId: string, title: string) => void;
   onSelect?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -435,7 +433,6 @@ export function TaskItem({
             onAddSubtask={onAddSubtask}
             onToggleSubtask={onToggleSubtask}
             onRemoveSubtask={onRemoveSubtask}
-            onEditSubtaskTitle={onEditSubtaskTitle}
           />
         </div>
       )}

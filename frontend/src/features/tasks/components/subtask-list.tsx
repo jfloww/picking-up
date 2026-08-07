@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpRight, Plus, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -28,37 +28,18 @@ function DrawerSubtaskRow({
   subtask,
   onToggle,
   onRemove,
-  onEditTitle,
+  onOpen,
   onPromote,
   animationClass,
 }: {
   subtask: Subtask;
   onToggle: (subtaskId: string) => void;
   onRemove: (subtaskId: string) => void;
-  onEditTitle: (subtaskId: string, title: string) => void;
+  onOpen?: (subtaskId: string) => void;
   onPromote?: (subtaskId: string) => void;
   animationClass?: string;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(subtask.title);
   const [deleting, setDeleting] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const startEditing = () => {
-    setValue(subtask.title);
-    setEditing(true);
-  };
-
-  const commit = () => {
-    setEditing(false);
-    const trimmed = value.trim();
-    if (trimmed && trimmed !== subtask.title) onEditTitle(subtask.id, trimmed);
-  };
-
-  const cancel = () => {
-    setValue(subtask.title);
-    setEditing(false);
-  };
 
   const handleRemove = () => {
     if (prefersReducedMotion()) {
@@ -82,38 +63,16 @@ function DrawerSubtaskRow({
         aria-label={`Toggle ${subtask.title}`}
         className="shrink-0 border-subtle"
       />
-      {editing ? (
-        <input
-          ref={inputRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commit();
-            }
-            if (e.key === "Escape") {
-              e.preventDefault();
-              cancel();
-            }
-          }}
-          aria-label={`Edit ${subtask.title}`}
-          autoFocus
-          className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 py-1 text-sm outline-none transition-colors duration-200 focus-visible:border-input focus-visible:ring-2 focus-visible:ring-ring/50"
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={startEditing}
-          className={cn(
-            "min-w-0 flex-1 truncate rounded-md px-1 py-1 text-left text-sm text-foreground/80 outline-none transition-colors duration-200 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
-            subtask.done && "text-muted-foreground line-through hover:text-muted-foreground",
-          )}
-        >
-          {subtask.title}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => onOpen?.(subtask.id)}
+        className={cn(
+          "min-w-0 flex-1 truncate rounded-md px-1 py-1 text-left text-sm text-foreground/80 outline-none transition-colors duration-200 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
+          subtask.done && "text-muted-foreground line-through hover:text-muted-foreground",
+        )}
+      >
+        {subtask.title}
+      </button>
       {onPromote && (
         <button
           type="button"
@@ -142,7 +101,7 @@ function DrawerSubtaskList({
   onAdd,
   onToggle,
   onRemove,
-  onEditTitle,
+  onOpenSubtask,
   onPromote,
 }: {
   subtasks: Subtask[];
@@ -150,7 +109,7 @@ function DrawerSubtaskList({
   onAdd: (title: string) => void;
   onToggle: (subtaskId: string) => void;
   onRemove: (subtaskId: string) => void;
-  onEditTitle: (subtaskId: string, title: string) => void;
+  onOpenSubtask?: (subtaskId: string) => void;
   onPromote?: (subtaskId: string) => void;
 }) {
   const withRenderState = subtasks.map((s) => ({
@@ -174,7 +133,7 @@ function DrawerSubtaskList({
               subtask={s}
               onToggle={onToggle}
               onRemove={onRemove}
-              onEditTitle={onEditTitle}
+              onOpen={onOpenSubtask}
               onPromote={onPromote}
               animationClass={state?.enterAnimationClass ?? state?.sectionAnimationClass}
             />
@@ -253,7 +212,7 @@ export function SubtaskList({
   onAdd,
   onToggle,
   onRemove,
-  onEditTitle,
+  onOpenSubtask,
   onPromote,
   drawer = false,
 }: {
@@ -261,7 +220,7 @@ export function SubtaskList({
   onAdd: (title: string) => void;
   onToggle: (subtaskId: string) => void;
   onRemove: (subtaskId: string) => void;
-  onEditTitle: (subtaskId: string, title: string) => void;
+  onOpenSubtask?: (subtaskId: string) => void;
   onPromote?: (subtaskId: string) => void;
   drawer?: boolean;
 }) {
@@ -278,7 +237,7 @@ export function SubtaskList({
         onAdd={onAdd}
         onToggle={onToggle}
         onRemove={onRemove}
-        onEditTitle={onEditTitle}
+        onOpenSubtask={onOpenSubtask}
         onPromote={onPromote}
       />
     );

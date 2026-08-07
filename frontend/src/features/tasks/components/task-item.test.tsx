@@ -18,7 +18,6 @@ const noopHandlers = {
   onAddSubtask: () => {},
   onToggleSubtask: () => {},
   onRemoveSubtask: () => {},
-  onEditSubtaskTitle: () => {},
 };
 
 describe('TaskItem size="week"', () => {

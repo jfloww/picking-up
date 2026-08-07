@@ -613,7 +613,6 @@ describe("SubtaskList", () => {
         onAdd={onAdd}
         onToggle={onToggle}
         onRemove={onRemove}
-        onEditTitle={() => {}}
       />,
     );
     fireEvent.click(screen.getByLabelText("Toggle buy wood"));
