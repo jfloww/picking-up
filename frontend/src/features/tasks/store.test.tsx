@@ -1392,6 +1392,135 @@ describe("TasksProvider", () => {
       expect(listSpy).toHaveBeenCalledTimes(3);
     });
 
+    it("rebases an excludedDates addition as a union onto the resynced anchor instead of overwriting it", async () => {
+      // PR#52 review finding: detachFromRoutine/rescheduleTaskToDay/removeTask
+      // all append one date to an anchor's excludedDates from the optimistic
+      // snapshot at enqueue time. Recording it as the whole resulting array
+      // (rather than an addition set) would let a queued append silently
+      // drop a concurrent exclusion the resync just pulled in from
+      // elsewhere, since applying the patch would overwrite the array
+      // instead of merging into it.
+      const anchor = makeTask({
+        id: "anchor",
+        scope: { kind: "day", date: todayKey() },
+        repeatWeekdays: [1, 2, 3, 4, 5],
+        excludedDates: ["2026-01-01"],
+      });
+      const occurrence = makeTask({
+        id: "occurrence",
+        scope: { kind: "day", date: "2026-03-03" },
+        repeatSourceId: "anchor",
+      });
+      const repo = fakeRepository([anchor, occurrence]);
+
+      let releaseResync: ((tasks: Task[]) => void) | undefined;
+      vi.spyOn(repo, "list")
+        .mockResolvedValueOnce([anchor, occurrence]) // initial load
+        .mockImplementationOnce(
+          () => new Promise<Task[]>((resolve) => (releaseResync = resolve)), // resync, held open
+        );
+      vi.spyOn(repo, "update").mockRejectedValueOnce(new Error("network down"));
+
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => {
+        result.current.setPriority("occurrence", true); // fails, resync held open above
+        result.current.detachFromRoutine("occurrence"); // queued behind the failure
+      });
+      await waitFor(() => expect(result.current.syncError).not.toBeNull());
+
+      // Simulate a concurrent writer completing its own exclusion while the
+      // resync is still in flight — through the fake repo's real update(),
+      // not a fabricated list() response, so its internal version
+      // bookkeeping stays consistent for the queued write that follows.
+      const currentAnchor = repo.tasks.find((task) => task.id === "anchor")!;
+      await act(async () => {
+        await repo.update({
+          ...currentAnchor,
+          excludedDates: [...(currentAnchor.excludedDates ?? []), "2026-02-02"],
+        });
+      });
+
+      await act(async () => {
+        releaseResync?.(repo.tasks);
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        const persistedAnchor = repo.tasks.find((task) => task.id === "anchor");
+        expect(persistedAnchor?.excludedDates).toEqual(
+          expect.arrayContaining(["2026-01-01", "2026-02-02", "2026-03-03"]),
+        );
+      });
+    });
+
+    it("makes a queued edit a no-op, not a resurrection or an error, when its task vanished during reconciliation", async () => {
+      // PR#52 review finding: this is one of four behaviors the RF-005 doc
+      // claims for the reconciliation redesign, and nothing pinned it.
+      const a = makeTask({ id: "a", memo: "old", scope: { kind: "day", date: todayKey() } });
+      const repo = fakeRepository([a]);
+
+      vi.spyOn(repo, "list")
+        .mockResolvedValueOnce([a]) // initial load
+        .mockResolvedValueOnce([]); // resync reveals "a" was deleted elsewhere
+      const updateSpy = vi.spyOn(repo, "update").mockRejectedValueOnce(new Error("network down"));
+
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => {
+        result.current.setMemo("a", "first edit"); // fails, triggers the resync above
+        result.current.setMemo("a", "second edit"); // queued behind the failure
+      });
+
+      await waitFor(() => expect(result.current.syncError).not.toBeNull());
+      await waitFor(() => expect(result.current.tasks.find((task) => task.id === "a")).toBeUndefined());
+
+      // The second edit's queued write reads authoritativeTasksRef post-resync,
+      // finds no entry for "a", and returns without calling repo.update() —
+      // it does not resurrect the task and does not retry indefinitely.
+      // (repo.tasks itself is untouched by this test's mocked list()
+      // response — "a" was never actually removed from the fake repo's own
+      // storage, only from what list() reports the store as seeing.)
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the mutation queue usable even if the failure-resync path itself throws synchronously", async () => {
+      // PR#52 review finding: enqueueMutation's per-item try/catch already
+      // handles operation() rejecting normally, but if something in the
+      // failure-handling path throws synchronously instead — a broken
+      // repository implementation, not just a network error — the queue's
+      // own promise chain used to reject permanently, silently dropping
+      // every mutation enqueued for the rest of the session with no
+      // banner and no error.
+      const a = makeTask({ id: "a", memo: "old a", scope: { kind: "day", date: todayKey() } });
+      const b = makeTask({ id: "b", memo: "old b", scope: { kind: "day", date: todayKey() } });
+      const repo = fakeRepository([a, b]);
+      vi.spyOn(repo, "update").mockRejectedValueOnce(new Error("network down"));
+      // handleSyncFailure() calls repo.list() to resync; make that call
+      // throw synchronously rather than reject, so the exception escapes
+      // enqueueMutation's try/catch instead of being caught by it.
+      vi.spyOn(repo, "list")
+        .mockResolvedValueOnce([a, b]) // initial load
+        .mockImplementationOnce(() => {
+          throw new Error("list() itself threw");
+        });
+
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.setMemo("a", "failed edit"));
+      await waitFor(() => expect(result.current.tasks.find((task) => task.id === "a")?.memo).toBe("failed edit"));
+
+      const laterUpdateSpy = vi
+        .spyOn(repo, "update")
+        .mockResolvedValue({ ...b, memo: "later edit", version: 2 });
+      act(() => result.current.setMemo("b", "later edit"));
+
+      await waitFor(() => expect(laterUpdateSpy).toHaveBeenCalled());
+    });
+
     it("initial list() rejection sets syncError and still reaches loaded:true with an empty list", async () => {
       const repo = fakeRepository();
       vi.spyOn(repo, "list").mockRejectedValueOnce(new Error("offline"));

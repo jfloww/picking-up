@@ -218,6 +218,33 @@ Verification at this checkpoint:
 - frontend server-helper and Google-route selection: 10/10 passing;
 - frontend TypeScript: clean.
 
+## Post-merge review round (2026-08-06)
+
+A post-merge audit re-verified the Google-link-race fix directly against
+Django's actual transaction/constraint behavior (not just the prose above)
+and confirmed it genuinely closes the race for its scenario, not merely
+narrows it — `GoogleIdentity` has independent unique constraints on `sub` and
+on `user`, `ATOMIC_REQUESTS` is unset, and the savepoint-scoped retry query is
+guaranteed to see the winner's already-committed row. One new finding, fixed:
+
+- **`RegisterSerializer.create()`'s blanket `except IntegrityError` mislabeled
+  a username collision as an email collision.** `username` is an exposed,
+  independently-unique optional field on the public register endpoint
+  (`create()` falls back to email only when it's blank), but only
+  `validate_email` had a pre-check — any `IntegrityError` was unconditionally
+  reported as `{"email": [...]}`, a false statement about a field that wasn't
+  actually taken whenever the real collision was on `username` with a genuinely
+  free email. Fixed with a matching `validate_username` pre-check (skipped for
+  a blank value, since that falls through to the already-checked email) and, in
+  `create()`'s exception handler, a re-check of which field actually collided
+  before choosing the error message, exactly mirroring the existing email-race
+  handling. The fix's first version broke on the *concurrent* case with a
+  `TransactionManagementError`: the follow-up re-check query ran after the
+  `IntegrityError` had already poisoned the surrounding transaction. Wrapping
+  the insert in its own `transaction.atomic()` savepoint — the same pattern
+  `services.py`'s `promote_subtask` already uses for its own insert race —
+  fixed it; both the sequential and concurrent cases are covered by new tests.
+
 ## Operational limits
 
 - DRF explicitly implements fuzzy, non-atomic throttling. Concurrent requests

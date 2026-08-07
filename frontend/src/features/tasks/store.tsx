@@ -32,7 +32,7 @@ const CONFLICT_ERROR_MESSAGE = "A task changed elsewhere. Refreshing to show the
 
 type MutableTaskKey = Exclude<
   keyof Task,
-  "id" | "createdAt" | "subtasks" | "version"
+  "id" | "createdAt" | "subtasks" | "version" | "excludedDates"
 >;
 
 const MUTABLE_TASK_KEYS = [
@@ -45,7 +45,6 @@ const MUTABLE_TASK_KEYS = [
   "time",
   "repeatWeekdays",
   "repeatSourceId",
-  "excludedDates",
   "priority",
   "durationMinutes",
   "background",
@@ -62,6 +61,14 @@ interface SubtaskUpsert {
 
 interface TaskPatch {
   values: TaskValuePatch;
+  // Every store mutation that touches excludedDates only ever appends the
+  // one date it just detached/rescheduled/deleted away from an anchor —
+  // recorded as an addition set (like the subtask upserts below) rather
+  // than the whole resulting array, so rebasing unions onto whatever the
+  // authoritative anchor's excludedDates holds after reconciliation
+  // instead of overwriting it and silently dropping another writer's
+  // exclusion (PR#52 review finding).
+  excludedDatesAdded?: string[];
   subtasks?: {
     upserts: SubtaskUpsert[];
     removedIds: string[];
@@ -77,28 +84,34 @@ function buildTaskPatch(before: Task, after: Task): TaskPatch {
     }
   }
 
-  if (Object.is(before.subtasks, after.subtasks)) return { values };
+  const patch: TaskPatch = { values };
+
+  if (!Object.is(before.excludedDates, after.excludedDates)) {
+    const beforeExcluded = new Set(before.excludedDates ?? []);
+    const added = (after.excludedDates ?? []).filter((date) => !beforeExcluded.has(date));
+    if (added.length > 0) patch.excludedDatesAdded = added;
+  }
+
+  if (Object.is(before.subtasks, after.subtasks)) return patch;
 
   const beforeSubtasks = before.subtasks ?? [];
   const afterSubtasks = after.subtasks ?? [];
   const beforeById = new Map(beforeSubtasks.map((subtask) => [subtask.id, subtask]));
   const afterIds = new Set(afterSubtasks.map((subtask) => subtask.id));
 
-  return {
-    values,
-    subtasks: {
-      upserts: afterSubtasks
-        .filter((subtask) => !Object.is(beforeById.get(subtask.id), subtask))
-        .map((subtask) => ({
-          value: subtask,
-          requiresExisting: beforeById.has(subtask.id),
-        })),
-      removedIds: beforeSubtasks
-        .filter((subtask) => !afterIds.has(subtask.id))
-        .map((subtask) => subtask.id),
-      keepEmptyArray: after.subtasks !== undefined,
-    },
+  patch.subtasks = {
+    upserts: afterSubtasks
+      .filter((subtask) => !Object.is(beforeById.get(subtask.id), subtask))
+      .map((subtask) => ({
+        value: subtask,
+        requiresExisting: beforeById.has(subtask.id),
+      })),
+    removedIds: beforeSubtasks
+      .filter((subtask) => !afterIds.has(subtask.id))
+      .map((subtask) => subtask.id),
+    keepEmptyArray: after.subtasks !== undefined,
   };
+  return patch;
 }
 
 function applyTaskPatch(base: Task, patch: TaskPatch): Task | undefined {
@@ -111,6 +124,16 @@ function applyTaskPatch(base: Task, patch: TaskPatch): Task | undefined {
         (values as Record<MutableTaskKey, unknown>)[key] = value;
         changed = true;
       }
+    }
+  }
+
+  let excludedDates = base.excludedDates;
+  if (patch.excludedDatesAdded && patch.excludedDatesAdded.length > 0) {
+    const existing = new Set(base.excludedDates ?? []);
+    const additions = patch.excludedDatesAdded.filter((date) => !existing.has(date));
+    if (additions.length > 0) {
+      excludedDates = [...(base.excludedDates ?? []), ...additions];
+      changed = true;
     }
   }
 
@@ -146,7 +169,7 @@ function applyTaskPatch(base: Task, patch: TaskPatch): Task | undefined {
   }
 
   if (!changed) return undefined;
-  return { ...base, ...values, subtasks };
+  return { ...base, ...values, excludedDates, subtasks };
 }
 
 export interface TasksState {
@@ -367,24 +390,34 @@ export function TasksProvider({
     // delta (buildTaskPatch) and rebases that intent onto the authoritative
     // task after this resync, so waiting here no longer pairs a stale full
     // payload with a newly fetched version.
-    mutationQueueRef.current = mutationQueueRef.current.then(async () => {
-      try {
-        await operation();
-      } catch (error) {
-        // Only a genuine staleness conflict ("someone else changed this")
-        // gets the conflict-specific message. A command can also 409 for a
-        // domain-rule rejection (nesting a task into itself, a target that
-        // already has subtasks, ...) via the same TaskVersionConflictError
-        // type — those aren't a staleness conflict and showing "changed
-        // elsewhere" for them would be a new, incorrect claim (final-review
-        // finding on this fix).
-        await handleSyncFailure(
-          error instanceof TaskVersionConflictError && error.code === "task_version_conflict"
-            ? CONFLICT_ERROR_MESSAGE
-            : SYNC_ERROR_MESSAGE,
-        );
-      }
-    });
+    mutationQueueRef.current = mutationQueueRef.current
+      .then(async () => {
+        try {
+          await operation();
+        } catch (error) {
+          // Only a genuine staleness conflict ("someone else changed this")
+          // gets the conflict-specific message. A command can also 409 for a
+          // domain-rule rejection (nesting a task into itself, a target that
+          // already has subtasks, ...) via the same TaskVersionConflictError
+          // type — those aren't a staleness conflict and showing "changed
+          // elsewhere" for them would be a new, incorrect claim (final-review
+          // finding on this fix).
+          await handleSyncFailure(
+            error instanceof TaskVersionConflictError && error.code === "task_version_conflict"
+              ? CONFLICT_ERROR_MESSAGE
+              : SYNC_ERROR_MESSAGE,
+          );
+        }
+      })
+      // Insurance, not the expected path: everything above already has its
+      // own try/catch, but if something still throws here (dispatch itself
+      // failing, a bug in handleSyncFailure), an uncaught rejection would
+      // make mutationQueueRef.current permanently rejected — every mutation
+      // enqueued afterward for the rest of the session would then silently
+      // skip its callback via .then()'s rejection passthrough, with no
+      // banner and no error, since a .then() without a second argument
+      // never runs on a rejected chain (PR#52 review finding).
+      .catch(() => {});
   }
 
   function persistUpdate(

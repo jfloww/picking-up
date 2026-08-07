@@ -58,6 +58,50 @@ class AuthApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(User.objects.filter(email__iexact="dup@example.com").count(), 1)
 
+    def test_register_rejects_a_duplicate_username_with_an_available_email(self):
+        # `username` is an exposed, independently-unique optional field on
+        # this endpoint (create() falls back to email only when it's
+        # blank) — a caller can collide on username alone while the email
+        # is genuinely free. The response must name the field that's
+        # actually taken.
+        User.objects.create_user(
+            username="taken-name", email="original@example.com", password="StrongPass123!",
+        )
+
+        response = self.client.post(
+            "/api/auth/register/",
+            {"email": "fresh@example.com", "username": "taken-name", "password": "StrongPass123!"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("username", response.data)
+        self.assertFalse(User.objects.filter(email__iexact="fresh@example.com").exists())
+
+    def test_register_converts_a_raced_username_integrity_error_into_a_username_error(self):
+        # Same TOCTOU shape as the email race below, but for username: the
+        # create() exception handler used to assume any IntegrityError
+        # meant an email collision, which would have misreported this case
+        # (a real username collision, an available email) as "email already
+        # exists" — a false statement about a field that isn't taken.
+        # Exercised directly against create() for the same reason as the
+        # email race test: reproducing genuine concurrency isn't practical
+        # here, and the DB-level failure and its handling are identical
+        # either way.
+        User.objects.create_user(
+            username="raced-name", email="original@example.com", password="StrongPass123!",
+        )
+
+        with self.assertRaises(drf_serializers.ValidationError) as ctx:
+            RegisterSerializer().create({
+                "email": "fresh-race@example.com",
+                "username": "raced-name",
+                "password": "StrongPass123!",
+            })
+
+        self.assertIn("username", ctx.exception.detail)
+        self.assertNotIn("email", ctx.exception.detail)
+
     def test_register_converts_a_raced_integrity_error_into_a_validation_error(self):
         # The __iexact pre-check in validate_email narrows the race window
         # but isn't itself atomic — two concurrent registrations for

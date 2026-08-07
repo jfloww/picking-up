@@ -10,10 +10,29 @@ from .models import (
 )
 
 
+SUBTASK_ID_MAX_LENGTH = 255
+SUBTASK_TITLE_MAX_LENGTH = 500
+
+
 class SubtaskSerializer(serializers.Serializer):
-    id = serializers.CharField(max_length=255, allow_blank=False)
-    title = serializers.CharField(max_length=500, allow_blank=False)
+    # Truncate rather than reject (RF-006 review finding): the generic Task
+    # PUT always resends the whole subtasks array, so a hard `max_length`
+    # rejection here would make any task holding one over-length subtask —
+    # new or a pre-limit legacy row — permanently un-editable on every
+    # future write, and would leave a legacy-localStorage task stuck
+    # retrying the migration-upload loop forever. Truncating preserves the
+    # underlying safety goal (nothing this API stores can later fail to
+    # materialize into a Task via Promote) without that failure mode.
+    # Existing DB rows get the same treatment once via migration 0014.
+    id = serializers.CharField(allow_blank=False)
+    title = serializers.CharField(allow_blank=False)
     done = serializers.BooleanField()
+
+    def validate_id(self, value: str) -> str:
+        return value[:SUBTASK_ID_MAX_LENGTH]
+
+    def validate_title(self, value: str) -> str:
+        return value[:SUBTASK_TITLE_MAX_LENGTH]
 
 
 class CategorySerializer(serializers.ModelSerializer):

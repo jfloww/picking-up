@@ -33,7 +33,7 @@ interface TaskItemActions {
   removeSubtask: (id: string, subtaskId: string) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
   promoteSubtaskToTask: (id: string, subtaskId: string) => Task | undefined;
-  convertTaskToSubtask: (id: string, targetId: string) => void;
+  convertTaskToSubtask: (id: string, targetId: string, confirmDataLoss?: boolean) => void;
   setCategory: (id: string, categoryId: string) => void;
   createCategory: (name: string) => Promise<Category | undefined>;
 }
@@ -85,7 +85,16 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onEditSubtaskTitle: (subtaskId: string, title: string) =>
       actions.editSubtaskTitle(id, subtaskId, title),
     onPromoteSubtask: (subtaskId: string) => actions.promoteSubtaskToTask(id, subtaskId),
-    onUndoPromoteSubtask: (taskId: string) => actions.convertTaskToSubtask(taskId, id),
+    // confirmDataLoss: true — undoing a promotion the user just made is a
+    // single-click action, not a place to interrupt with the same
+    // confirmation dialog a regular nest gets. The only field this can
+    // lose that a normal nest couldn't is completedAt, and only when the
+    // promoted subtask was already done — a value the promotion itself
+    // synthesized moments earlier, not something the user is at risk of
+    // losing by surprise (PR#52 review finding: this was previously wired
+    // with no confirmDataLoss at all, so it silently stopped working the
+    // moment completedAt joined the server's lossy-field checks).
+    onUndoPromoteSubtask: (taskId: string) => actions.convertTaskToSubtask(taskId, id, true),
     // The editor works in category names (create-or-reuse UX); resolve to
     // a stable id here before handing off to the store, which only ever
     // deals in categoryId.

@@ -1,5 +1,6 @@
 import re
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.shortcuts import get_object_or_404
@@ -226,11 +227,23 @@ class CategoryListCreateView(generics.ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         name = serializer.validated_data["name"]
-        category, created = Category.objects.get_or_create(
-            user=request.user,
-            normalized_name=normalize_category_name(name),
-            defaults={"name": name},
-        )
+        try:
+            # CategorySerializer.validate_name already enforces the same
+            # 180-character normalized-key boundary Category.save() does,
+            # so this is unreachable via the current call graph. It's
+            # defense-in-depth for a future caller of get_or_create()/save()
+            # that skips the serializer (a management command, a bulk
+            # import) — Model.save() raises django.core.exceptions
+            # .ValidationError, which DRF's default exception handler does
+            # not translate into a clean response on its own, so it must be
+            # caught here rather than left to propagate as a 500.
+            category, created = Category.objects.get_or_create(
+                user=request.user,
+                normalized_name=normalize_category_name(name),
+                defaults={"name": name},
+            )
+        except ValidationError as exc:
+            raise drf_serializers.ValidationError(exc.message_dict) from exc
         response_serializer = self.get_serializer(category)
         return Response(
             response_serializer.data,
@@ -254,3 +267,9 @@ class CategoryDetailView(generics.UpdateAPIView):
             raise drf_serializers.ValidationError(
                 {"name": ["A category with this name already exists."]}
             ) from exc
+        except ValidationError as exc:
+            # Same defense-in-depth as CategoryListCreateView.create() —
+            # unreachable today since CategorySerializer.validate_name
+            # already enforces this, but Model.save()'s ValidationError
+            # isn't one DRF's exception handler recognizes on its own.
+            raise drf_serializers.ValidationError(exc.message_dict) from exc

@@ -436,6 +436,65 @@ The Oracle attempt could not create a test schema because the local database
 user lacks test-schema privileges (`ORA-01031`). This is not an Oracle pass;
 RF-012 remains open.
 
+## Post-merge review round: undo, excludedDates, and queue resilience (2026-08-06)
+
+A post-merge audit of the reconciliation redesign confirmed its core claim by
+tracing the code directly (a pre-resync payload genuinely cannot pair with a
+post-resync version — no mutation path was missed), then found four issues in
+the surrounding surface, all fixed:
+
+- **Undoing a promotion of a done subtask silently stopped working.** Adding
+  `completedAt` to the lossy-field set (the fix in the section above) closed a
+  real gap, but `onUndoPromoteSubtask` still called `convertTaskToSubtask` with
+  no third argument, defaulting `confirmDataLoss` to `false` — so undoing a
+  promoted, already-done subtask now hit `data_loss_confirmation_required` and
+  failed with the generic sync-error banner instead of undoing. Fixed by
+  passing `confirmDataLoss: true` specifically for the undo path: undo is a
+  single click meant to be instant, not a second place to show the same
+  confirmation dialog a regular nest gets, and the only field this can lose
+  that a regular nest couldn't is `completedAt` — a value the promotion itself
+  synthesized moments earlier, not something the user risks losing by
+  surprise. `taskItemHandlers`'s `convertTaskToSubtask` type had also never
+  declared the third parameter it was already receiving from callers.
+- **`excludedDates` rebased as a full-array overwrite, not a merge.**
+  `detachFromRoutine`, `rescheduleTaskToDay`, and `removeTask` all append one
+  date to an anchor's `excludedDates` from the optimistic snapshot at enqueue
+  time. Because the delta mechanism recorded the *whole resulting array* as
+  the patch value (unlike subtasks, which get ID-based upsert/remove deltas),
+  rebasing that patch onto a resynced anchor overwrote its `excludedDates`
+  entirely — silently dropping a concurrent exclusion pulled in by the same
+  resync and letting the next materialization pass resurrect that other
+  writer's detached/deleted occurrence. Fixed by giving `excludedDates` the
+  same shape of treatment subtasks already have: `buildTaskPatch` records only
+  the *added* dates (the set difference from before to after), and
+  `applyTaskPatch` unions them onto whatever the rebased base's
+  `excludedDates` already holds instead of replacing it.
+- **The mutation queue had no tail `.catch`.** Every step already has its own
+  try/catch, but if something in the failure-handling path itself threw
+  synchronously instead of rejecting (a broken repository implementation, not
+  an ordinary network error), the queue's own promise chain would reject
+  permanently — silently dropping every mutation enqueued for the rest of the
+  session, with no banner and no error. One line of insurance closes it:
+  `.catch(() => {})` appended to the chain.
+- **No test pinned the "vanished during reconciliation → no-op" behavior** —
+  one of four properties the reconciliation section above claims. Added.
+
+Regression coverage: a new `taskItemHandlers` test asserts undo passes
+`confirmDataLoss: true`; a new store test drives a real failure + concurrent
+write + resync and asserts the rebased anchor's `excludedDates` contains both
+the concurrent addition and the locally queued one; a new store test asserts
+a queued edit for a task that disappeared during reconciliation calls
+`repo.update()` zero times rather than resurrecting it; a new store test
+forces `repo.list()` to throw synchronously during a resync and asserts a
+later, unrelated mutation still reaches `repo.update()` afterward (verified to
+actually fail — with an unhandled rejection — before the `.catch()` fix, to
+confirm the test catches the regression it targets, not just passes
+trivially).
+
+Verification at this checkpoint: frontend full suite 767/767 passing (4 new),
+TypeScript clean, lint clean (no new warnings beyond the pre-existing
+RF-016-tracked set).
+
 ## Remaining RF-005 work
 
 RF-005 stays **In progress** until the following client-owned mutations move to
