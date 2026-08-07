@@ -6,8 +6,14 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export const VIEWS = ["daily", "weekly", "monthly", "bucket"] as const;
-export type ViewKind = (typeof VIEWS)[number];
+// Bucket List is temporarily disabled — omitted from VIEWS so its tab
+// doesn't render, but kept in ViewKind so every other component that
+// switches on it (task-calendar.tsx's VIEW_COMPONENTS/shiftAnchor/
+// dateLabelFor, drill-down targets) still type-checks untouched. Re-enable
+// by adding "bucket" back to VIEWS (and restoring its task-calendar.test.tsx
+// tab-click test).
+export const VIEWS = ["daily", "weekly", "monthly"] as const;
+export type ViewKind = "daily" | "weekly" | "monthly" | "bucket";
 
 const VIEW_LABELS: Record<ViewKind, string> = {
   daily: "Daily",

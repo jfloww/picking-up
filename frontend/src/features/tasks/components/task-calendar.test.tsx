@@ -80,15 +80,10 @@ describe("TaskCalendar", () => {
     });
   });
 
-  it("switches to the Bucket List tab and shows its content", async () => {
-    render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} />);
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Bucket List" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("tab", { name: "Bucket List" }));
-    await waitFor(() =>
-      expect(screen.getByRole("tab", { name: "Bucket List", selected: true })).toBeTruthy(),
-    );
-    expect(screen.getByText("Your bucket list is empty")).toBeTruthy();
-  });
+  // Bucket List's tab is temporarily disabled (view-switcher.tsx's VIEWS no
+  // longer includes "bucket"), so this tab-click path is currently
+  // unreachable through the UI. Restore this test alongside re-enabling the
+  // tab.
 });
 
 describe("drill-down navigation", () => {
