@@ -3,7 +3,7 @@
 - Date: 2026-08-06
 - Issue: RF-008
 - Priority: P0
-- Status: Sanitized for PR publication; blocked on account/external actions
+- Status: Resolved — sanitized for PR publication; owner confirmed no external exposure
 
 ## Outcome
 
@@ -15,9 +15,11 @@ The publication branch was created separately from `origin/main` and receives
 only the final sanitized tree as a squash. The credential-introducing commit is
 therefore not an ancestor of the PR branch and is not pushed with the PR.
 
-RF-008 is not marked Resolved because the local study branch still retains the
-value, account rotation has not been performed, and local evidence cannot prove
-that an earlier copy was never shared.
+RF-008 was held open rather than marked Resolved for as long as the record
+below relied only on local evidence: the local study branch still retains the
+value, account rotation had not been performed, and local evidence alone
+cannot prove that an earlier copy was never shared. That gap is closed by the
+owner confirmation recorded below.
 
 ## Evidence reviewed
 
@@ -105,6 +107,20 @@ Expected result:
 - the ancestry check returns a non-zero status on the sanitized PR branch;
 - the diff has no whitespace errors;
 - the status lists only the intended PR changes before the squash commit.
+
+## Closure (2026-08-06)
+
+The remaining external actions in this record are not independently verifiable
+by a code review — only the repository owner can attest to whether the
+account was ever live, reused, or shared outside the local study branch. The
+owner has confirmed directly that no such exposure occurred: the credential
+was never live, never reused elsewhere, and never shared. No rotation or
+external purge is required.
+
+This closure record is the evidence for RF-008's `Resolved` status in
+`docs/refining/README.md`; it is owner attestation, not independently
+reproducible verification, and is recorded as such rather than presented as
+something a code change proved.
 
 ## Learning notes
 
