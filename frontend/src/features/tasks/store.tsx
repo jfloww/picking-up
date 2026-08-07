@@ -859,7 +859,7 @@ export function TasksProvider({
           const currentTask = tasksRef.current.find((t) => t.id === result.task.id);
           const reconciledTask =
             currentTask && mutationGenerationsRef.current.get(result.task.id) !== generation
-              ? { ...currentTask, version: result.task.version, order: result.task.order }
+              ? { ...currentTask, version: result.task.version }
               : result.task;
           applyCommandState([reconciledTask], []);
         });
