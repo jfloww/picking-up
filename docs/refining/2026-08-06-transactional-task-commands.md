@@ -1,15 +1,19 @@
 # RF-005 Progress: Transactional Task Commands
 
-- Date: 2026-08-06
+- Date: 2026-08-06 (through 2026-08-07)
 - Issue: RF-005
-- Status: In progress
+- Status: Resolved
 
 **Result:** The first bounded slice is implemented for task-to-subtask nesting
 and subtask-to-task promotion. It adds a shared optimistic-concurrency
 foundation and explicit transactional backend commands. A second slice, on the
 same foundation, adds Detach, Delete-occurrence, and Reschedule as equivalent
-transactional commands with full frontend wiring. RF-005 does not close yet:
-only Reorder still needs a server-owned command.
+transactional commands with full frontend wiring. A third slice (phase 2)
+closes the last two client-authority gaps: Task creation's `order` is now
+computed server-side, and a Reorder command replaces the client-computed
+drag-to-reorder float. RF-005 is now resolved — every planner mutation that
+used to compose independent client-side CRUD requests, or accept a
+client-supplied `order`, is a versioned, transactional server command instead.
 
 The verification numbers in the early checkpoints below are retained as an
 audit trail, not presented as current combined-tree totals. Later independent
@@ -44,15 +48,22 @@ Implemented here:
 - an atomic reschedule command that moves a task to a new day, clears
   rollover/repeat linkage, excludes the original routine date, and calculates
   destination order from locked server state;
+- an atomic reorder command that validates a target neighbor still exists
+  among the task's untimed siblings and calculates the destination fractional
+  `order` from locked server state, rather than trusting a client-computed
+  float;
+- server-computed `order` on Task creation — `POST /api/tasks/` now ignores
+  any client-supplied `order` and computes it the same way the reorder
+  command does for a day-scoped, untimed task (`0.0` for every other scope);
 - owner-scoped lookup, row locking, stale-version rejection, and explicit
   domain-conflict responses; and
 - Next.js command routes that preserve Django's response status and body,
   including `409 Conflict`.
 
 The command, transport, and frontend wiring are complete for Nest, Promote,
-Detach, Delete-occurrence, and Reschedule. This record does not claim every
-planner mutation has moved off generic CRUD; Reorder, the one remaining
-command family under "Remaining RF-005 work," is still client-owned.
+Detach, Delete-occurrence, Reschedule, and Reorder. Every write path that used
+to accept a client-computed `order` — task creation and drag-to-reorder — now
+computes it server-side under the same lock discipline as the other commands.
 
 ## Optimistic-concurrency contract
 
@@ -332,6 +343,83 @@ create endpoint's client-supplied `order`.
 Missing/cross-owner and stale-version handling match the other two commands:
 `404` without a body change, `409` with `code: "task_version_conflict"`
 without a change.
+
+## Reorder command
+
+```http
+POST /api/tasks/{task_id}/commands/reorder/
+Content-Type: application/json
+
+{
+  "task_version": 1,
+  "insert_before_id": "<uuid-or-null>"
+}
+```
+
+On success, the endpoint returns `200 OK` with the authoritative, incremented
+task:
+
+```json
+{
+  "task": { "id": "...", "order": 2.5, "version": 2 }
+}
+```
+
+Unlike Detach/Delete-occurrence/Reschedule, there is no secondary/anchor
+object in the response and no `neighbor_version` precondition — only the
+moved task's own `task_version` is checked; the neighbor named by
+`insert_before_id` is revalidated by list membership, not by version.
+
+The service locks the owner and the task, then rejects one domain conflict as
+`409` before making any change:
+
+- `not_reorderable` — the task is timed, or has no well-defined "current day"
+  (the same day-scoped-or-rolled-over-week-scoped rule Reschedule uses), so
+  there is no untimed sibling list to reorder it within.
+
+Once past that check, it locks every untimed sibling on the task's current
+day (day-scoped tasks on that date, plus week-scoped tasks rolled over from
+it — done and not-done both count, since Weekly interleaves them in one
+order-sorted list) and looks up `insert_before_id` by ID within that locked
+set:
+
+- `insert_before_id: null` places the task past every sibling — `before` is
+  the last sibling in order, `after` is `None`;
+- a matching ID places the task immediately before that sibling — `before` is
+  its predecessor in order (or `None` at the head), `after` is the match
+  itself;
+- an ID that is not found among the locked siblings (already moved, deleted,
+  or never existed) is rejected as `invalid_neighbor` — a `409`, not a `404`,
+  since the *task* being reordered was found; only the *neighbor reference*
+  is stale.
+
+The destination `order` is then the same fractional midpoint calculation
+`_promotion_order`/Reschedule use — `(before + after) / 2` when both exist,
+`after - EDGE_GAP` / `before + EDGE_GAP` at either edge of the list, `0.0` for
+an empty list — computed from the just-locked sibling rows, not from a
+client-supplied float. `POST /api/tasks/` accepting a client-supplied `order`
+was the last remaining gap this closes: task creation now computes its own
+`order` server-side under the same rule (see "Server-computed creation
+order" below), so no write path in the Task API still trusts a client-chosen
+position.
+
+Missing/cross-owner and stale-version handling match the other commands:
+`404` without a change, `409 task_version_conflict` without a change.
+
+## Server-computed creation order
+
+`POST /api/tasks/` no longer accepts a client-supplied `order`. A new
+`_next_untimed_order_for_day(user, scope_value)` helper computes it as
+`max(existing untimed, not-done, day-scoped siblings' order, 0) + 1.0` for a
+day-scoped task, and `0.0` for every other scope — the same "append past the
+end" rule the frontend's `nextUntimedOrderFor` mirrors for optimistic UI
+state. `TaskListCreateView.perform_create` locks the owner row and computes
+this inside the same transaction as the insert, closing the read-siblings/
+compute-order/concurrent-insert race that Promote-subtask's and Reschedule's
+own order calculations note but do not themselves close, since both of those
+commands still had to coexist with a generic create endpoint that accepted an
+arbitrary float. That coexistence gap is gone: creation, promotion,
+reschedule, and reorder all compute `order` under the owner lock now.
 
 ## Verification checkpoint
 
