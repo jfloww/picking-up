@@ -136,6 +136,8 @@
   --animate-task-complete: task-complete-pop 220ms ease-out;
   --animate-task-exit: task-exit 260ms ease-in both;
   --animate-task-enter: task-enter 260ms ease-out both;
+  --animate-subtask-exit: subtask-exit 200ms ease-in both;
+  --animate-subtask-enter: subtask-enter 200ms ease-out both;
   --animate-fade-up: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-hero-demo-row: hero-demo-row 7s ease infinite;
   --animate-hero-demo-dot: hero-demo-dot 7s ease infinite;
@@ -202,6 +204,34 @@
   from {
     opacity: 0;
     transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Reused for both a subtask genuinely appearing/disappearing (add/delete)
+   and, in the drawer's active/completed grouping, a subtask moving between
+   sections when its done state toggles — visually identical fade+slide in
+   either case, only the JS-side trigger differs. Lighter/faster than the
+   task-level exit/enter (200ms vs 260ms) since a subtask row is a much
+   smaller, denser element. */
+@keyframes subtask-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes subtask-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
   }
   to {
     opacity: 1;
@@ -289,7 +319,9 @@
   .animate-hero-demo-dot,
   .animate-hero-demo-title,
   .animate-task-exit,
-  .animate-task-enter {
+  .animate-task-enter,
+  .animate-subtask-exit,
+  .animate-subtask-enter {
     animation: none;
   }
 }

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { makeCategory, makeTask } from "../test-utils";
@@ -613,11 +613,13 @@ describe("TaskDetailDrawer", () => {
       expect(onToggleSubtask).toHaveBeenCalledWith("s1");
     });
 
-    it("deletes a subtask via its hover-revealed delete control", () => {
+    it("deletes a subtask via its hover-revealed delete control", async () => {
       const onRemoveSubtask = vi.fn();
       render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} onRemoveSubtask={onRemoveSubtask} />);
       fireEvent.click(screen.getByLabelText("Delete buy wood"));
-      expect(onRemoveSubtask).toHaveBeenCalledWith("s2");
+      // Deferred until the row's exit animation finishes (see
+      // use-subtask-transition-classes.ts), not called synchronously on click.
+      await waitFor(() => expect(onRemoveSubtask).toHaveBeenCalledWith("s2"));
     });
 
     it("adds several subtasks in a row with Enter, without losing focus or requiring a re-click", () => {
