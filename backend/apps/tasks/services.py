@@ -72,6 +72,19 @@ def _current_effective_date(task: Task) -> str | None:
     return None
 
 
+_EDGE_GAP = 1.0
+
+
+def _order_between(before: float | None, after: float | None) -> float:
+    if before is None and after is None:
+        return 0.0
+    if before is None:
+        return after - _EDGE_GAP
+    if after is None:
+        return before + _EDGE_GAP
+    return (before + after) / 2.0
+
+
 def _append_anchor_exclusion(user, occurrence: Task) -> Task | None:
     # Additive set-union onto the anchor's excluded_dates — never a whole-
     # array replace — so a concurrent exclusion from another writer always
@@ -338,6 +351,78 @@ def reschedule_task(
     )
 
     return RescheduleTaskResult(task=task, anchor=anchor)
+
+
+@dataclass(frozen=True)
+class ReorderTaskResult:
+    task: Task
+
+
+@transaction.atomic
+def reorder_task(
+    *,
+    user,
+    task_id,
+    task_version: int,
+    insert_before_id,
+) -> ReorderTaskResult:
+    _lock_user(user)
+    task_key = str(task_id)
+    tasks = _locked_owned_tasks(user, [task_id])
+    if task_key not in tasks:
+        raise TaskCommandNotFound
+
+    task = tasks[task_key]
+    _assert_versions({task_key: task_version}, tasks)
+
+    date = _current_effective_date(task)
+    if task.time or date is None:
+        raise TaskCommandConflict(
+            "not_reorderable",
+            "Only an untimed day-scoped or rolled-over week-scoped task can be reordered.",
+        )
+
+    # Same sibling rule reschedule_task uses: day-scope or rolled-over
+    # week-scope at this date, untimed, not filtered by done — Weekly
+    # interleaves done and not-done untimed tasks in one order-sorted list,
+    # so a done sibling must still count.
+    siblings = list(
+        Task.objects.select_for_update()
+        .filter(user=user)
+        .filter(
+            Q(scope_kind="day", scope_value=date)
+            | Q(scope_kind="week", rolled_from_kind="day", rolled_from_value=date)
+        )
+        .filter(Q(time__isnull=True) | Q(time=""))
+        .exclude(id=task.id)
+        .order_by("order", "id")
+    )
+
+    if insert_before_id is None:
+        before = siblings[-1] if siblings else None
+        after = None
+    else:
+        insert_before_key = str(insert_before_id)
+        match_index = next(
+            (i for i, sibling in enumerate(siblings) if str(sibling.id) == insert_before_key),
+            None,
+        )
+        if match_index is None:
+            raise TaskCommandConflict(
+                "invalid_neighbor",
+                "The neighbor task is not a valid insertion point.",
+            )
+        after = siblings[match_index]
+        before = siblings[match_index - 1] if match_index > 0 else None
+
+    task.order = _order_between(
+        before.order if before else None,
+        after.order if after else None,
+    )
+    task.version += 1
+    task.save(update_fields=["order", "version", "updated_at"])
+
+    return ReorderTaskResult(task=task)
 
 
 def _promotion_order(user, parent: Task) -> float:

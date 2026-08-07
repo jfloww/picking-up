@@ -376,3 +376,8 @@ class DeleteOccurrenceCommandSerializer(serializers.Serializer):
 class RescheduleTaskCommandSerializer(serializers.Serializer):
     task_version = serializers.IntegerField(min_value=1)
     date = serializers.CharField(max_length=10)
+
+
+class ReorderTaskCommandSerializer(serializers.Serializer):
+    task_version = serializers.IntegerField(min_value=1)
+    insert_before_id = serializers.UUIDField(allow_null=True, required=False, default=None)

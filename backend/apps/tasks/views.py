@@ -17,6 +17,7 @@ from .serializers import (
     NestTaskCommandSerializer,
     PromoteSubtaskCommandSerializer,
     RescheduleTaskCommandSerializer,
+    ReorderTaskCommandSerializer,
     TaskSerializer,
 )
 from .services import (
@@ -27,6 +28,7 @@ from .services import (
     detach_task,
     nest_task,
     promote_subtask,
+    reorder_task,
     reschedule_task,
 )
 
@@ -299,6 +301,33 @@ class PromoteSubtaskCommandView(APIView):
                 "task": TaskSerializer(result.task, context={"request": request}).data,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+class ReorderTaskCommandView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, pk):
+        serializer = ReorderTaskCommandSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = reorder_task(
+                user=request.user,
+                task_id=pk,
+                task_version=data["task_version"],
+                insert_before_id=data["insert_before_id"],
+            )
+        except TaskCommandNotFound as exc:
+            raise NotFound from exc
+        except TaskVersionConflict as exc:
+            raise TaskVersionConflictResponse(exc.current_versions) from exc
+        except TaskCommandConflict as exc:
+            raise TaskCommandConflictResponse(exc) from exc
+
+        return Response(
+            {"task": TaskSerializer(result.task, context={"request": request}).data},
+            status=status.HTTP_200_OK,
         )
 
 
