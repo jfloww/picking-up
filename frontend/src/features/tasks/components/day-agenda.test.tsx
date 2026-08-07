@@ -361,6 +361,7 @@ describe("DayAgenda reorder handle", () => {
       </TasksProvider>,
     );
     await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
+    const reorderSpy = vi.spyOn(repo, "reorderTask");
 
     const handleA = screen.getByLabelText("Reorder alpha");
     const cardA = screen.getByTestId("agenda-a");
@@ -387,6 +388,16 @@ describe("DayAgenda reorder handle", () => {
     fireEvent.pointerMove(handleA, { pointerId: 1, clientX: 10, clientY: 60 });
     fireEvent.pointerUp(handleA, { pointerId: 1, clientX: 10, clientY: 60 });
 
+    // The guard (if it fires) runs synchronously inside the pointerUp
+    // handler, but `enqueueMutation` defers the actual `repo.reorderTask`
+    // call by one microtask hop, so asserting immediately after fireEvent
+    // would pass trivially regardless of whether the guard fired — the call
+    // just hasn't reached the repo *yet* either way. Flushing past that hop
+    // first (a macrotask boundary always runs after any already-queued
+    // microtask) makes these assertions prove the guard actually suppressed
+    // the call, not just that it hasn't landed within the same tick.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reorderSpy).not.toHaveBeenCalled();
     expect(repo.tasks.find((t) => t.id === "a")?.order).toBe(0.5);
     expect(repo.tasks.find((t) => t.id === "b")?.order).toBe(2);
     expect(repo.tasks.find((t) => t.id === "c")?.order).toBe(3);
