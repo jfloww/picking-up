@@ -91,6 +91,19 @@ broken relative Markdown targets under `docs/`.
 The Oracle test attempt was not a pass: the configured user could not create a
 test schema because of `ORA-01031`. Oracle integration remains open as RF-012.
 
+### Remote CI portability follow-up
+
+The first PR run passed Backend but failed nine tests in one frontend route-
+integration file. Production code correctly read `DJANGO_API_BASE_URL`; the
+test router instead hardcoded `http://localhost:8000`, while CI intentionally
+set `http://127.0.0.1:8000`. The router therefore rejected every real BFF-to-
+Django request as unexpected and caused nine secondary assertion failures.
+
+The test now derives its Django origin from the same environment variable with
+the production fallback. Verification using CI's exact origin passed all 13
+tests in that file and then all 763 frontend tests. This was a test-environment
+contract defect, not a production request-routing failure.
+
 ## Recommended execution order
 
 1. Complete RF-008's remaining external actions. This PR has sanitized

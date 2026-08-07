@@ -16,7 +16,7 @@ import { createApiTaskRepository } from "./api-task-repository";
 import { TaskVersionConflictError } from "./repository";
 import type { Task } from "../types";
 
-const DJANGO_ORIGIN = "http://localhost:8000";
+const DJANGO_ORIGIN = process.env.DJANGO_API_BASE_URL ?? "http://localhost:8000";
 const NEXT_ORIGIN = "http://localhost:3000";
 
 const apiTask: ApiTask = {
