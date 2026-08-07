@@ -9,11 +9,16 @@ and subtask-to-task promotion. It adds a shared optimistic-concurrency
 foundation and explicit transactional backend commands. A second slice, on the
 same foundation, adds Detach, Delete-occurrence, and Reschedule as equivalent
 transactional commands with full frontend wiring. A third slice (phase 2)
-closes the last two client-authority gaps: Task creation's `order` is now
-computed server-side, and a Reorder command replaces the client-computed
-drag-to-reorder float. RF-005 is now resolved — every planner mutation that
-used to compose independent client-side CRUD requests, or accept a
-client-supplied `order`, is a versioned, transactional server command instead.
+closes the last two client-authority gaps this feature targeted: Task
+creation's `order` is now computed server-side, and a Reorder command replaces
+the client-computed drag-to-reorder float. RF-005 is now resolved — every
+planner mutation that used to compose independent client-side CRUD requests,
+or accept a client-computed `order` for creation or drag-to-reorder, is a
+versioned, transactional server command instead. Generic `PUT` on an existing
+task still accepts and writes a client-supplied `order`; narrowing that was a
+deliberate, documented scope boundary for this phase (see "Open items
+intentionally deferred" in the phase 2 design doc), not something this
+resolution leaves open by oversight.
 
 The verification numbers in the early checkpoints below are retained as an
 audit trail, not presented as current combined-tree totals. Later independent
@@ -61,9 +66,13 @@ Implemented here:
   including `409 Conflict`.
 
 The command, transport, and frontend wiring are complete for Nest, Promote,
-Detach, Delete-occurrence, Reschedule, and Reorder. Every write path that used
-to accept a client-computed `order` — task creation and drag-to-reorder — now
-computes it server-side under the same lock discipline as the other commands.
+Detach, Delete-occurrence, Reschedule, and Reorder. Task creation and
+drag-to-reorder — the two write paths that used to accept a client-computed
+`order` as part of this feature's scope — now compute it server-side under the
+same lock discipline as the other commands. Generic `PUT` on an existing task
+is a separate write path and is unchanged: it still accepts and persists
+whatever `order` the client sends (see "Open items intentionally deferred" in
+the phase 2 design doc).
 
 ## Optimistic-concurrency contract
 
@@ -185,14 +194,21 @@ calculating the promoted Task's fractional order.
 
 Row locks on the sibling rows block concurrent *updates* to those rows, not
 inserts between them, so this does not by itself close a read-siblings/
-compute-midpoint/someone-inserts-between race. `POST /api/tasks/` accepts a
-client-supplied `order` float and takes no owner lock, so an ordinary
-concurrent task creation can still land at an ambiguous position while a
-promotion is mid-flight. The owner lock closes this race between two
-*commands* for the same user; it does not close it against the generic create
-endpoint. Net effect today is a duplicate/ambiguous `order` value, not
-corruption — but "locks siblings before calculating order" should not be read
-as a complete guarantee until reorder also moves server-side.
+compute-midpoint/someone-inserts-between race. At the time this section was
+first written, `POST /api/tasks/` accepted a client-supplied `order` float and
+took no owner lock, so an ordinary concurrent task creation could land at an
+ambiguous position while a promotion was mid-flight; the owner lock closed
+this race between two *commands* for the same user but not against the
+generic create endpoint. Net effect then was a duplicate/ambiguous `order`
+value, not corruption.
+
+**Superseded below:** phase 2's "Server-computed creation order" section
+closes exactly this gap. `POST /api/tasks/` now locks the owner row and
+computes `order` server-side under the same rule Promote-subtask and Reorder
+use, so a concurrent creation racing a mid-flight promotion is now serialized
+against it instead of landing ambiguously. This paragraph is kept as the
+historical record of the gap at the time Promote-subtask shipped, not a
+description of current behavior.
 
 It then:
 
@@ -336,9 +352,15 @@ rolls back together with the anchor write.
 
 Row locks on the destination day's siblings block concurrent *updates* to
 those rows, not inserts between them — the same caveat Promote-subtask's
-order calculation documents above, and unresolved for the same reason: it
-closes the race between two *commands* for one user, not against the generic
-create endpoint's client-supplied `order`.
+order calculation documents above. At the time this section was first
+written, it was unresolved for the same reason: it closed the race between
+two *commands* for one user, not against the generic create endpoint's
+client-supplied `order`.
+
+**Superseded below:** see the note under "Promote-subtask command" above —
+phase 2's "Server-computed creation order" section closes this gap for the
+generic create endpoint too, so this caveat no longer describes current
+behavior.
 
 Missing/cross-owner and stale-version handling match the other two commands:
 `404` without a body change, `409` with `code: "task_version_conflict"`
@@ -398,10 +420,14 @@ The destination `order` is then the same fractional midpoint calculation
 `after - EDGE_GAP` / `before + EDGE_GAP` at either edge of the list, `0.0` for
 an empty list — computed from the just-locked sibling rows, not from a
 client-supplied float. `POST /api/tasks/` accepting a client-supplied `order`
-was the last remaining gap this closes: task creation now computes its own
-`order` server-side under the same rule (see "Server-computed creation
-order" below), so no write path in the Task API still trusts a client-chosen
-position.
+on task creation was the other remaining gap this feature targeted: task
+creation now computes its own `order` server-side under the same rule (see
+"Server-computed creation order" below), so neither task creation nor
+drag-to-reorder trusts a client-chosen position anymore. Generic `PUT` on an
+existing task is unchanged and still accepts a client-supplied `order` — a
+separate, deliberately deferred gap (see "Open items intentionally deferred"
+in the phase 2 design doc), not something Reorder or Task creation's
+server-computed `order` closes.
 
 Missing/cross-owner and stale-version handling match the other commands:
 `404` without a change, `409 task_version_conflict` without a change.

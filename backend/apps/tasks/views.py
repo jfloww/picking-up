@@ -106,6 +106,15 @@ class TaskListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         with transaction.atomic():
             _lock_user(self.request.user)
+            if serializer.validated_data.get("repeat_source") is not None:
+                # Routine-materialized occurrences deliberately request order=0
+                # so they sort to the top of the day's list (routines.ts) — this
+                # predates and is unrelated to RF-005 phase 2's actual target
+                # (the ambiguous-concurrent-create race for genuine
+                # user-initiated creates), so their client-supplied order is
+                # left untouched rather than overridden.
+                serializer.save(user=self.request.user)
+                return
             scope_kind = serializer.validated_data.get("scope_kind")
             scope_value = serializer.validated_data.get("scope_value")
             order = (

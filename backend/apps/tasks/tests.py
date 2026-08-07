@@ -690,6 +690,32 @@ class TaskApiTests(TestCase):
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data["order"], 0.0)
 
+    def test_create_leaves_a_routine_occurrences_client_supplied_order_untouched(self):
+        # Final-review finding: a routine-materialized occurrence
+        # (routines.ts) always requests order=0 so it sorts to the top of
+        # the day's list — long-standing, intentional behavior that
+        # predates this order-override rule entirely and that the rule
+        # unintentionally started overriding. A sibling with a much higher
+        # order already exists, so if perform_create appended past it
+        # (the general day-scope rule), the occurrence's order would come
+        # back as 6.0, not the client-supplied 0.0.
+        anchor = self.create_task(title="anchor", scope_value="2026-07-16", repeat_weekdays=[3])
+        self.create_task(title="existing sibling", scope_value="2026-07-16", order=5.0)
+
+        response = self.client.post(
+            "/api/tasks/",
+            make_task_payload(
+                title="occurrence",
+                scope_value="2026-07-16",
+                order=0.0,
+                repeat_source=str(anchor.id),
+            ),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["order"], 0.0)
+
 
 class TaskDomainValidationTests(TestCase):
     # RF-006 round 2: cross-field scope, bucket/category, rolled-from,
