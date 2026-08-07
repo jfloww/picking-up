@@ -133,6 +133,119 @@ describe("createLocalStorageRepository", () => {
     expect(await repo.list()).toEqual([result.parent, result.task]);
   });
 
+  it("detaches an occurrence, clearing repeatSourceId and excluding the date on the anchor", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const anchor: Task = {
+      ...task,
+      id: "anchor",
+      scope: { kind: "day", date: "2026-07-01" },
+      repeatWeekdays: [4],
+    };
+    const occurrence: Task = {
+      ...task,
+      id: "occ",
+      scope: { kind: "day", date: "2026-07-16" },
+      repeatSourceId: "anchor",
+    };
+    await repo.create(anchor);
+    await repo.create(occurrence);
+
+    const result = await repo.detachTask({ occurrenceId: "occ", occurrenceVersion: 1 });
+
+    expect(result.occurrence.repeatSourceId).toBeUndefined();
+    expect(result.anchor?.excludedDates).toEqual(["2026-07-16"]);
+    expect(await repo.list()).toEqual([result.anchor, result.occurrence]);
+  });
+
+  it("detachTask throws TaskVersionConflictError on a stale version", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const occurrence = { ...task, id: "occ" };
+    await repo.create(occurrence);
+
+    await expect(
+      repo.detachTask({ occurrenceId: "occ", occurrenceVersion: 99 }),
+    ).rejects.toBeInstanceOf(TaskVersionConflictError);
+  });
+
+  it("deleteOccurrence removes the task and excludes its date on the anchor", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const anchor: Task = {
+      ...task,
+      id: "anchor",
+      scope: { kind: "day", date: "2026-07-01" },
+      repeatWeekdays: [4],
+    };
+    const occurrence: Task = {
+      ...task,
+      id: "occ",
+      scope: { kind: "day", date: "2026-07-16" },
+      repeatSourceId: "anchor",
+    };
+    await repo.create(anchor);
+    await repo.create(occurrence);
+
+    const result = await repo.deleteOccurrence({ occurrenceId: "occ", occurrenceVersion: 1 });
+
+    expect(result.removedTaskId).toBe("occ");
+    expect(result.anchor?.excludedDates).toEqual(["2026-07-16"]);
+    expect(await repo.list()).toEqual([result.anchor]);
+  });
+
+  it("deleteOccurrence throws TaskVersionConflictError on a stale version", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const occurrence = { ...task, id: "occ" };
+    await repo.create(occurrence);
+
+    await expect(
+      repo.deleteOccurrence({ occurrenceId: "occ", occurrenceVersion: 99 }),
+    ).rejects.toBeInstanceOf(TaskVersionConflictError);
+  });
+
+  it("rescheduleTask moves a day-scoped task and excludes the old date on its anchor", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const anchor: Task = {
+      ...task,
+      id: "anchor",
+      scope: { kind: "day", date: "2026-07-01" },
+      repeatWeekdays: [4],
+    };
+    const occurrence: Task = {
+      ...task,
+      id: "occ",
+      scope: { kind: "day", date: "2026-07-16" },
+      repeatSourceId: "anchor",
+    };
+    await repo.create(anchor);
+    await repo.create(occurrence);
+
+    const result = await repo.rescheduleTask({ taskId: "occ", taskVersion: 1, date: "2026-07-20" });
+
+    expect(result.task.scope).toEqual({ kind: "day", date: "2026-07-20" });
+    expect(result.task.repeatSourceId).toBeUndefined();
+    expect(result.anchor?.excludedDates).toEqual(["2026-07-16"]);
+    expect(await repo.list()).toEqual([result.anchor, result.task]);
+  });
+
+  it("rescheduleTask rejects the same effective date", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const a: Task = { ...task, id: "a", scope: { kind: "day", date: "2026-07-16" } };
+    await repo.create(a);
+
+    await expect(
+      repo.rescheduleTask({ taskId: "a", taskVersion: 1, date: "2026-07-16" }),
+    ).rejects.toThrow();
+  });
+
+  it("rescheduleTask throws TaskVersionConflictError on a stale version", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const a = { ...task, id: "a" };
+    await repo.create(a);
+
+    await expect(
+      repo.rescheduleTask({ taskId: "a", taskVersion: 99, date: "2026-07-20" }),
+    ).rejects.toBeInstanceOf(TaskVersionConflictError);
+  });
+
   it("returns [] for missing, corrupt, or non-array data", async () => {
     expect(
       await createLocalStorageRepository(fakeStorage()).list(),

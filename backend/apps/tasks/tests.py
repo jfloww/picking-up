@@ -14,7 +14,13 @@ from rest_framework.test import APIClient
 
 from .models import Category, Task, normalize_category_name
 from .serializers import EXCLUDED_DATES_MAX_COUNT, SUBTASKS_MAX_COUNT
-from .services import nest_task, promote_subtask
+from .services import (
+    delete_occurrence,
+    detach_task,
+    nest_task,
+    promote_subtask,
+    reschedule_task,
+)
 
 
 User = get_user_model()
@@ -1018,6 +1024,33 @@ class TaskCommandApiTests(TestCase):
             format="json",
         )
 
+    def detach(self, occurrence, **overrides):
+        payload = {"occurrence_version": occurrence.version}
+        payload.update(overrides)
+        return self.client.post(
+            f"/api/tasks/{occurrence.id}/commands/detach/",
+            payload,
+            format="json",
+        )
+
+    def delete_occurrence(self, occurrence, **overrides):
+        payload = {"occurrence_version": occurrence.version}
+        payload.update(overrides)
+        return self.client.post(
+            f"/api/tasks/{occurrence.id}/commands/delete-occurrence/",
+            payload,
+            format="json",
+        )
+
+    def reschedule(self, task, date, **overrides):
+        payload = {"task_version": task.version, "date": date}
+        payload.update(overrides)
+        return self.client.post(
+            f"/api/tasks/{task.id}/commands/reschedule/",
+            payload,
+            format="json",
+        )
+
     def test_nest_atomically_appends_subtask_and_removes_source(self):
         source = self.create_task(title="buy milk", done=True)
         target = self.create_task(
@@ -1398,6 +1431,179 @@ class TaskCommandApiTests(TestCase):
         collision_parent.refresh_from_db()
         self.assertEqual(len(collision_parent.subtasks), 1)
 
+    def test_detach_clears_repeat_source_and_excludes_the_date_on_the_anchor(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+
+        response = self.detach(occurrence)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        occurrence.refresh_from_db()
+        self.assertIsNone(occurrence.repeat_source_id)
+        self.assertIsNone(occurrence.repeat_weekdays)
+        self.assertEqual(occurrence.version, 2)
+        anchor.refresh_from_db()
+        self.assertEqual(anchor.excluded_dates, ["2026-07-16"])
+        self.assertEqual(anchor.version, 2)
+        self.assertEqual(response.data["occurrence"]["version"], 2)
+        self.assertEqual(response.data["anchor"]["version"], 2)
+
+    def test_detach_appends_to_existing_excluded_dates_rather_than_replacing_them(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+            excluded_dates=["2026-07-09"],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+
+        self.detach(occurrence)
+
+        anchor.refresh_from_db()
+        self.assertEqual(anchor.excluded_dates, ["2026-07-09", "2026-07-16"])
+
+    def test_detach_can_immediately_establish_a_new_repeat_schedule(self):
+        occurrence = self.create_task(title="solo")
+
+        response = self.detach(occurrence, repeat_weekdays=[2, 4])
+
+        self.assertEqual(response.status_code, 200, response.data)
+        occurrence.refresh_from_db()
+        self.assertEqual(occurrence.repeat_weekdays, [2, 4])
+
+    def test_detach_on_an_already_standalone_task_touches_no_anchor(self):
+        response = self.detach(self.create_task(title="solo"))
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn("anchor", response.data)
+
+    def test_detach_returns_409_for_a_stale_version(self):
+        occurrence = self.create_task(title="solo")
+
+        response = self.detach(occurrence, occurrence_version=occurrence.version + 1)
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "task_version_conflict")
+
+    def test_detach_returns_404_for_a_missing_or_unowned_occurrence(self):
+        response = self.client.post(
+            f"/api/tasks/{uuid.uuid4()}/commands/detach/",
+            {"occurrence_version": 1},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+
+        other_user, other_client = auth_client("detach-other@example.com")
+        other_task = Task.objects.create(
+            id=uuid.uuid4(), user=other_user, title="not yours",
+            scope_kind="day", scope_value="2026-07-16",
+        )
+        response = self.detach(other_task)
+        self.assertEqual(response.status_code, 404)
+
+    def test_detach_rolls_back_anchor_exclusion_when_occurrence_save_fails(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+        original_save = Task.save
+
+        def fail_occurrence_save(instance, *args, **kwargs):
+            if instance.id == occurrence.id:
+                raise RuntimeError("occurrence save failed")
+            return original_save(instance, *args, **kwargs)
+
+        with patch.object(Task, "save", autospec=True, side_effect=fail_occurrence_save):
+            with self.assertRaisesRegex(RuntimeError, "occurrence save failed"):
+                detach_task(
+                    user=self.user,
+                    occurrence_id=occurrence.id,
+                    occurrence_version=occurrence.version,
+                    repeat_weekdays=None,
+                )
+
+        occurrence.refresh_from_db()
+        self.assertEqual(occurrence.repeat_source_id, anchor.id)
+        self.assertEqual(occurrence.version, 1)
+        anchor.refresh_from_db()
+        self.assertIsNone(anchor.excluded_dates)
+        self.assertEqual(anchor.version, 1)
+
+    def test_delete_occurrence_removes_the_task_and_excludes_its_date_on_the_anchor(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+
+        response = self.delete_occurrence(occurrence)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["removed_task_id"], str(occurrence.id))
+        self.assertFalse(Task.objects.filter(id=occurrence.id).exists())
+        anchor.refresh_from_db()
+        self.assertEqual(anchor.excluded_dates, ["2026-07-16"])
+
+    def test_delete_occurrence_on_a_standalone_task_touches_no_anchor(self):
+        response = self.delete_occurrence(self.create_task(title="solo"))
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn("anchor", response.data)
+        self.assertFalse(Task.objects.filter(title="solo").exists())
+
+    def test_delete_occurrence_returns_409_for_a_stale_version(self):
+        occurrence = self.create_task(title="solo")
+
+        response = self.delete_occurrence(occurrence, occurrence_version=occurrence.version + 1)
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertTrue(Task.objects.filter(id=occurrence.id).exists())
+
+    def test_delete_occurrence_returns_404_for_a_missing_or_unowned_occurrence(self):
+        response = self.client.post(
+            f"/api/tasks/{uuid.uuid4()}/commands/delete-occurrence/",
+            {"occurrence_version": 1},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+
+        other_user, other_client = auth_client("delete-occ-other@example.com")
+        other_task = Task.objects.create(
+            id=uuid.uuid4(), user=other_user, title="not yours",
+            scope_kind="day", scope_value="2026-07-16",
+        )
+        response = self.delete_occurrence(other_task)
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Task.objects.filter(id=other_task.id).exists())
+
+    def test_delete_occurrence_rolls_back_anchor_exclusion_when_occurrence_delete_fails(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+
+        with patch.object(Task, "delete", side_effect=RuntimeError("delete failed")):
+            with self.assertRaisesRegex(RuntimeError, "delete failed"):
+                delete_occurrence(
+                    user=self.user,
+                    occurrence_id=occurrence.id,
+                    occurrence_version=occurrence.version,
+                )
+
+        self.assertTrue(Task.objects.filter(id=occurrence.id).exists())
+        anchor.refresh_from_db()
+        self.assertIsNone(anchor.excluded_dates)
+        self.assertEqual(anchor.version, 1)
+
     def test_promote_returns_404_for_a_missing_or_unowned_parent(self):
         missing = self.client.post(
             f"/api/tasks/{uuid.uuid4()}/commands/promote-subtask/",
@@ -1506,6 +1712,139 @@ class TaskCommandApiTests(TestCase):
         parent.refresh_from_db()
         self.assertEqual(len(parent.subtasks), 1)
         self.assertEqual(parent.version, 1)
+
+    def test_reschedule_moves_a_day_scoped_task_and_clears_repeat_source(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+
+        response = self.reschedule(occurrence, "2026-07-20")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        occurrence.refresh_from_db()
+        self.assertEqual(occurrence.scope_kind, "day")
+        self.assertEqual(occurrence.scope_value, "2026-07-20")
+        self.assertIsNone(occurrence.repeat_source_id)
+        anchor.refresh_from_db()
+        self.assertEqual(anchor.excluded_dates, ["2026-07-16"])
+
+    def test_reschedule_moves_a_rolled_over_week_scoped_task_clearing_rolled_from(self):
+        task = self.create_task(title="overdue thing", scope_kind="week")
+        task.scope_kind = "week"
+        task.scope_value = "2026-07-13"
+        task.rolled_from_kind = "day"
+        task.rolled_from_value = "2026-07-10"
+        task.save(update_fields=["scope_kind", "scope_value", "rolled_from_kind", "rolled_from_value"])
+
+        response = self.reschedule(task, "2026-07-20")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        task.refresh_from_db()
+        self.assertEqual(task.scope_kind, "day")
+        self.assertEqual(task.scope_value, "2026-07-20")
+        self.assertIsNone(task.rolled_from_kind)
+        self.assertIsNone(task.rolled_from_value)
+
+    def test_reschedule_appends_order_past_the_destinations_untimed_tasks(self):
+        existing = self.create_task(title="already there", scope_value="2026-07-20", order=3)
+        task = self.create_task(title="moving in", scope_value="2026-07-16")
+
+        self.reschedule(task, "2026-07-20")
+
+        task.refresh_from_db()
+        self.assertEqual(task.order, 4.0)
+
+    def test_reschedule_leaves_a_timed_tasks_order_untouched(self):
+        task = self.create_task(title="timed", scope_value="2026-07-16", time="09:00", order=7)
+
+        self.reschedule(task, "2026-07-20")
+
+        task.refresh_from_db()
+        self.assertEqual(task.order, 7)
+
+    def test_reschedule_appends_order_accounting_for_rolled_over_week_scoped_siblings(self):
+        # Test the week-scoped OR-branch of the order-calculation query: ensure
+        # week-scoped tasks rolled over from the destination date are counted
+        # when calculating the new order.
+        rolled_sibling = self.create_task(title="rolled task", scope_kind="week", scope_value="2026-07-13")
+        rolled_sibling.scope_kind = "week"
+        rolled_sibling.scope_value = "2026-07-13"
+        rolled_sibling.rolled_from_kind = "day"
+        rolled_sibling.rolled_from_value = "2026-07-20"
+        rolled_sibling.order = 5.0
+        rolled_sibling.save(update_fields=["scope_kind", "scope_value", "rolled_from_kind", "rolled_from_value", "order"])
+
+        task = self.create_task(title="moving in", scope_value="2026-07-16")
+
+        self.reschedule(task, "2026-07-20")
+
+        task.refresh_from_db()
+        self.assertEqual(task.order, 6.0)
+
+    def test_reschedule_rejects_the_same_effective_date_as_a_conflict(self):
+        task = self.create_task(title="staying put", scope_value="2026-07-16")
+
+        response = self.reschedule(task, "2026-07-16")
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "same_date")
+
+    def test_reschedule_rejects_a_month_scoped_task_as_not_reschedulable(self):
+        task = self.create_task(title="goal", scope_kind="month", scope_value="2026-07")
+
+        response = self.reschedule(task, "2026-07-20")
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "not_reschedulable")
+
+    def test_reschedule_returns_409_for_a_stale_version(self):
+        task = self.create_task(title="solo", scope_value="2026-07-16")
+
+        response = self.reschedule(task, "2026-07-20", task_version=task.version + 1)
+
+        self.assertEqual(response.status_code, 409, response.data)
+
+    def test_reschedule_returns_404_for_a_missing_or_unowned_task(self):
+        response = self.client.post(
+            f"/api/tasks/{uuid.uuid4()}/commands/reschedule/",
+            {"task_version": 1, "date": "2026-07-20"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_reschedule_rolls_back_anchor_exclusion_when_task_save_fails(self):
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        occurrence = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+        original_save = Task.save
+
+        def fail_occurrence_save(instance, *args, **kwargs):
+            if instance.id == occurrence.id:
+                raise RuntimeError("reschedule save failed")
+            return original_save(instance, *args, **kwargs)
+
+        with patch.object(Task, "save", autospec=True, side_effect=fail_occurrence_save):
+            with self.assertRaisesRegex(RuntimeError, "reschedule save failed"):
+                reschedule_task(
+                    user=self.user,
+                    task_id=occurrence.id,
+                    task_version=occurrence.version,
+                    date="2026-07-20",
+                )
+
+        occurrence.refresh_from_db()
+        self.assertEqual(occurrence.scope_value, "2026-07-16")
+        self.assertIsNotNone(occurrence.repeat_source_id)
+        self.assertEqual(occurrence.version, 1)
+        anchor.refresh_from_db()
+        self.assertIsNone(anchor.excluded_dates)
+        self.assertEqual(anchor.version, 1)
 
 
 class BucketScopeTests(TestCase):

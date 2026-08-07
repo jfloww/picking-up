@@ -6,9 +6,10 @@
 
 **Result:** The first bounded slice is implemented for task-to-subtask nesting
 and subtask-to-task promotion. It adds a shared optimistic-concurrency
-foundation and explicit transactional backend commands, but it does not close
-RF-005. Detach, occurrence deletion, reschedule, and reorder still need
-server-owned commands.
+foundation and explicit transactional backend commands. A second slice, on the
+same foundation, adds Detach, Delete-occurrence, and Reschedule as equivalent
+transactional commands with full frontend wiring. RF-005 does not close yet:
+only Reorder still needs a server-owned command.
 
 The verification numbers in the early checkpoints below are retained as an
 audit trail, not presented as current combined-tree totals. Later independent
@@ -34,14 +35,24 @@ Implemented here:
   database transaction;
 - an atomic promotion command that creates the standalone task and removes the
   source subtask from its parent as one database transaction;
+- an atomic detach command that clears an occurrence's `repeat_source`,
+  optionally establishes a new repeat schedule, and adds the occurrence's
+  original date to its anchor's exclusions;
+- an atomic delete-occurrence command that removes the occurrence and adds its
+  original date to its anchor's exclusions so the next materialization pass
+  cannot resurrect it;
+- an atomic reschedule command that moves a task to a new day, clears
+  rollover/repeat linkage, excludes the original routine date, and calculates
+  destination order from locked server state;
 - owner-scoped lookup, row locking, stale-version rejection, and explicit
   domain-conflict responses; and
 - Next.js command routes that preserve Django's response status and body,
   including `409 Conflict`.
 
-The command, transport, and frontend wiring are complete for Nest and Promote.
-This record does not claim every planner mutation has moved off generic CRUD;
-the four command families under "Remaining RF-005 work" are still client-owned.
+The command, transport, and frontend wiring are complete for Nest, Promote,
+Detach, Delete-occurrence, and Reschedule. This record does not claim every
+planner mutation has moved off generic CRUD; Reorder, the one remaining
+command family under "Remaining RF-005 work," is still client-owned.
 
 ## Optimistic-concurrency contract
 
@@ -187,6 +198,140 @@ It then:
 Creation and parent mutation either commit together or roll back together.
 Missing and cross-owner parents return `404`; stale parents and domain
 conflicts return `409` without a partial create or removal.
+
+## Detach command
+
+```http
+POST /api/tasks/{occurrence_id}/commands/detach/
+Content-Type: application/json
+
+{
+  "occurrence_version": 2,
+  "repeat_weekdays": [2, 4]
+}
+```
+
+On success, the endpoint returns `200 OK` with the authoritative, incremented
+occurrence and — if the occurrence had a repeat anchor — the authoritative,
+incremented anchor:
+
+```json
+{
+  "occurrence": { "id": "...", "version": 2 },
+  "anchor": { "id": "...", "version": 2 }
+}
+```
+
+`anchor` is omitted from the body entirely when the occurrence was already
+standalone, rather than serialized as `null`.
+
+The service locks the owner row, then the occurrence, inside
+`transaction.atomic()`. It clears `repeat_source`, optionally sets a new
+`repeat_weekdays` in the same write, and — before doing so, since the clear
+would otherwise erase the pointer needed to find the anchor — appends the
+occurrence's current effective date to the anchor's `excluded_dates` via the
+shared `_append_anchor_exclusion` helper (also used by Delete-occurrence and
+Reschedule below). "Current effective date" is `scope_value` for a day-scoped
+occurrence, or `rolled_from_value` for a week-scoped occurrence rolled over
+from a day — the same rule Reschedule and the frontend's rollover/materialize
+logic use, not merely `scope_kind == "day"`.
+
+The anchor write is additive-only: it unions the date into the existing
+`excluded_dates` set rather than replacing the array, and is a no-op if the
+date is already present, so a concurrent exclusion from another writer always
+survives. No `anchor_version` precondition is required — the owner-row lock
+already serializes command-level writes for one user, and the write itself is
+idempotent.
+
+Missing and cross-owner occurrences share the same `404 Not Found` behavior as
+Nest and Promote. A stale occurrence version returns `409 Conflict` with
+`code: "task_version_conflict"`, without touching either row.
+
+## Delete-occurrence command
+
+```http
+POST /api/tasks/{occurrence_id}/commands/delete-occurrence/
+Content-Type: application/json
+
+{
+  "occurrence_version": 1
+}
+```
+
+On success, the endpoint returns `200 OK` with the removed task's ID and — if
+it had a repeat anchor — the authoritative, incremented anchor:
+
+```json
+{
+  "removed_task_id": "...",
+  "anchor": { "id": "...", "version": 2 }
+}
+```
+
+The service locks the owner and the occurrence, appends the occurrence's
+current effective date to the anchor's exclusions using the same
+`_append_anchor_exclusion` helper Detach uses, then deletes the occurrence row
+— all inside one `transaction.atomic()`. Recording the exclusion before the
+row disappears is what stops the next client materialization pass from
+reading "no occurrence exists for this date" and resurrecting a task the user
+just deleted; the older detach/delete design that left the anchor untouched is
+superseded by this behavior.
+
+Missing, cross-owner, and stale-version handling match Detach: `404` for a
+missing or unowned occurrence (no row deleted), `409` for a stale version (no
+row deleted).
+
+## Reschedule command
+
+```http
+POST /api/tasks/{task_id}/commands/reschedule/
+Content-Type: application/json
+
+{
+  "task_version": 1,
+  "date": "2026-07-20"
+}
+```
+
+On success, the endpoint returns `200 OK` with the authoritative, incremented
+task and — if it had a repeat anchor — the authoritative, incremented anchor:
+
+```json
+{
+  "task": { "id": "...", "version": 2 },
+  "anchor": { "id": "...", "version": 2 }
+}
+```
+
+The service locks the owner and the task, then rejects two domain conflicts as
+`409` before making any change:
+
+- `not_reschedulable` — the task is neither day-scoped nor a rolled-over
+  week-scoped task (month/year/bucket scope, or a week-scoped task with no
+  `rolled_from`), so it has no well-defined "current day" to move from;
+- `same_date` — the destination date equals the task's current effective
+  date, a no-op the caller should have skipped client-side.
+
+Once past those checks, it appends the original effective date to the
+anchor's exclusions (same shared helper and additive-union behavior as
+Detach/Delete-occurrence), then moves the task: sets `scope_kind`/`scope_value`
+to the destination day, clears `rolled_from_kind`/`rolled_from_value` and
+`repeat_source`, and — for an untimed task only — recalculates `order` by
+locking every untimed sibling already on the destination day (day-scoped
+tasks on that date, plus week-scoped tasks rolled over from it) and placing
+the moved task past the maximum. A timed task's `order` is left untouched,
+since its position is driven by `time`, not `order`. All of this commits or
+rolls back together with the anchor write.
+
+Row locks on the destination day's siblings block concurrent *updates* to
+those rows, not inserts between them — the same caveat Promote-subtask's
+order calculation documents above, and unresolved for the same reason: it
+closes the race between two *commands* for one user, not against the generic
+create endpoint's client-supplied `order`.
+
+Missing/cross-owner and stale-version handling match the other two commands:
+`404` without a body change, `409` with `code: "task_version_conflict"`
+without a change.
 
 ## Verification checkpoint
 
@@ -497,19 +642,67 @@ Verification at this checkpoint: frontend full suite 767/767 passing (4 new),
 TypeScript clean, lint clean (no new warnings beyond the pre-existing
 RF-016-tracked set).
 
+## Second slice: Detach, Delete-occurrence, and Reschedule (2026-08-06)
+
+Built on the same foundation as Nest/Promote — versioned rows, the owner-row
+lock, and `_lock_user`/`_locked_owned_tasks`/`_assert_versions` — three more
+command families moved off generic client-composed CRUD, backend and frontend
+both:
+
+- **Detach** (`services.py`'s `detach_task`, `POST
+  /api/tasks/{id}/commands/detach/`): see the "Detach command" section above.
+- **Delete-occurrence** (`delete_occurrence`, `POST
+  /api/tasks/{id}/commands/delete-occurrence/`): see "Delete-occurrence
+  command" above.
+- **Reschedule** (`reschedule_task`, `POST
+  /api/tasks/{id}/commands/reschedule/`): see "Reschedule command" above.
+
+All three share one new backend helper, `_current_effective_date(task)`,
+which resolves a task's "current day" as `scope_value` for a day-scoped task
+or `rolled_from_value` for a week-scoped task rolled over from a day, and
+`None` otherwise — the single definition of "current day" every one of these
+commands and the frontend's mirrored logic now agree on. They also share
+`_append_anchor_exclusion(user, occurrence)`, the additive-union anchor write
+described under "Detach command" above.
+
+On the frontend, `detachFromRoutine`, `removeTask`, and `rescheduleTaskToDay`
+in `store.tsx` were each rewritten from a pair of generic `persistUpdate`
+calls (one for the occurrence/task, one for the anchor — two independent,
+non-atomic writes) to a single call into the matching repository command,
+following the same `<verb>Task`/`<Verb>Command`/`<Verb>Result` shape Nest and
+Promote established (`detachTask`/`DetachTaskCommand`/`DetachTaskResult`,
+`deleteOccurrence`/`DeleteOccurrenceCommand`/`DeleteOccurrenceResult`,
+`rescheduleTask`/`RescheduleTaskCommand`/`RescheduleTaskResult`) across
+`repository.ts`, `api-task-repository.ts`, `api/tasks.ts`, three new BFF
+route files, `test-utils.tsx`, and `store.tsx`. Each of the three store
+actions still applies an optimistic local update — including the anchor's
+`excludedDates`, using the same day-scope-or-rolled-week-scope rule as the
+backend's `_current_effective_date` — before the command resolves, then
+reconciles both the primary task/occurrence and the anchor against the
+command's authoritative response, using the same mutation-generation
+reconciliation Nest/Promote already established for a mutation racing a
+resync.
+
+Verification at this checkpoint:
+
+- backend `apps.tasks` full suite on SQLite: 103/103 passing (up from the
+  94 that predate this slice);
+- frontend full suite: 780/780 passing across 53 files;
+- frontend TypeScript (`tsc --noEmit`): clean;
+- frontend lint (`next lint`): no new warnings beyond the pre-existing
+  `store.tsx` `react-hooks/exhaustive-deps` warning tracked since the first
+  slice.
+
+Oracle row-lock contention is still unverified for these three commands, for
+the same reason noted in the first slice's checkpoint above: SQLite accepts
+`select_for_update()` but treats it as a no-op. This remains connected to
+RF-012.
+
 ## Remaining RF-005 work
 
-RF-005 stays **In progress** until the following client-owned mutations move to
-equivalent server commands and their callers stop composing generic writes:
+RF-005 stays **In progress** until the following client-owned mutation moves to
+an equivalent server command and its callers stop composing generic writes:
 
-- **Detach occurrence:** clear `repeat_source`, optionally establish a new
-  repeat schedule, and add the occurrence's original date to the old anchor's
-  exclusions atomically.
-- **Delete occurrence:** delete the occurrence and update the old anchor's
-  exclusions atomically so the next materialization pass cannot resurrect it.
-- **Reschedule:** move the Task, clear rollover/repeat linkage where required,
-  exclude the original routine date, and calculate destination order from
-  locked server state.
 - **Reorder:** send structural intent such as neighboring Task IDs and let the
   server validate list membership and calculate the fractional order. Sending
   an arbitrary client-computed float would leave the business rule client

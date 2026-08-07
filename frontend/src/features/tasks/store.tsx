@@ -594,17 +594,77 @@ export function TasksProvider({
         const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const normalized = weekdays && weekdays.length > 0 ? weekdays : undefined;
-        const task: Task = { ...current, repeatSourceId: undefined, repeatWeekdays: normalized };
-        persistUpdate(task);
+        const anchorId = current.repeatSourceId;
 
-        if (current.repeatSourceId !== undefined && current.scope.kind === "day") {
-          const anchor = tasksRef.current.find((t) => t.id === current.repeatSourceId);
-          if (anchor) {
-            const excludedDates = [...(anchor.excludedDates ?? []), current.scope.date];
-            const updatedAnchor: Task = { ...anchor, excludedDates };
-            persistUpdate(updatedAnchor);
+        const updatedOccurrence: Task = {
+          ...current,
+          repeatSourceId: undefined,
+          repeatWeekdays: normalized,
+        };
+        const occurrenceGeneration = nextMutationGeneration(current.id);
+        const anchorGeneration = anchorId ? nextMutationGeneration(anchorId) : undefined;
+
+        // Optimistically mirror the anchor's excludedDates update so the UI
+        // reflects the detach immediately, same as every other
+        // anchor-touching mutation in this store. Uses the same broader
+        // effective-date rule as the authoritative repo.detachTask
+        // implementations (repository.ts/test-utils.tsx) and
+        // rescheduleTaskToDay below: a plain day-scoped occurrence, or a
+        // rolled-over week-scoped one, contributes its original day. The
+        // authoritative anchor from the command response is applied once
+        // the command resolves below, regardless of whether this
+        // optimistic branch ran.
+        let optimisticAnchor: Task | undefined;
+        const originalDate =
+          current.scope.kind === "day"
+            ? current.scope.date
+            : current.scope.kind === "week" && current.rolledFrom?.kind === "day"
+              ? current.rolledFrom.date
+              : undefined;
+        if (anchorId !== undefined && originalDate !== undefined) {
+          const anchor = tasksRef.current.find((t) => t.id === anchorId);
+          if (anchor && !(anchor.excludedDates ?? []).includes(originalDate)) {
+            optimisticAnchor = {
+              ...anchor,
+              excludedDates: [...(anchor.excludedDates ?? []), originalDate],
+            };
           }
         }
+        applyCommandState(
+          optimisticAnchor ? [updatedOccurrence, optimisticAnchor] : [updatedOccurrence],
+          [],
+        );
+
+        enqueueMutation(async () => {
+          const result = await repo.detachTask({
+            occurrenceId: current.id,
+            occurrenceVersion: authoritativeVersionsRef.current.get(current.id) ?? current.version,
+            repeatWeekdays: normalized,
+          });
+          authoritativeVersionsRef.current.set(result.occurrence.id, result.occurrence.version);
+          authoritativeTasksRef.current.set(result.occurrence.id, result.occurrence);
+
+          const currentOccurrence = tasksRef.current.find((t) => t.id === result.occurrence.id);
+          const reconciledOccurrence =
+            currentOccurrence &&
+            mutationGenerationsRef.current.get(result.occurrence.id) !== occurrenceGeneration
+              ? { ...currentOccurrence, version: result.occurrence.version }
+              : result.occurrence;
+
+          const upserts = [reconciledOccurrence];
+          if (result.anchor) {
+            authoritativeVersionsRef.current.set(result.anchor.id, result.anchor.version);
+            authoritativeTasksRef.current.set(result.anchor.id, result.anchor);
+            const currentAnchor = tasksRef.current.find((t) => t.id === result.anchor!.id);
+            const reconciledAnchor =
+              currentAnchor && anchorGeneration !== undefined &&
+              mutationGenerationsRef.current.get(result.anchor.id) !== anchorGeneration
+                ? { ...currentAnchor, version: result.anchor.version }
+                : result.anchor;
+            upserts.push(reconciledAnchor);
+          }
+          applyCommandState(upserts, []);
+        });
       },
       rescheduleTaskToDay(id, date) {
         const current = tasksRef.current.find((t) => t.id === id);
@@ -645,25 +705,69 @@ export function TasksProvider({
                 .map((t) => t.order),
             ) + 1;
 
-        const task: Task = {
+        const updatedTask: Task = {
           ...current,
           scope: { kind: "day", date },
           rolledFrom: undefined,
+          repeatSourceId: undefined,
           order,
         };
-        if (current.repeatSourceId !== undefined) {
-          task.repeatSourceId = undefined;
-        }
-        persistUpdate(task);
+        const anchorId = current.repeatSourceId;
+        const taskGeneration = nextMutationGeneration(current.id);
+        const anchorGeneration = anchorId ? nextMutationGeneration(anchorId) : undefined;
 
-        if (current.repeatSourceId !== undefined) {
-          const anchor = tasksRef.current.find((t) => t.id === current.repeatSourceId);
-          if (anchor) {
-            const excludedDates = [...(anchor.excludedDates ?? []), originalDate];
-            const updatedAnchor: Task = { ...anchor, excludedDates };
-            persistUpdate(updatedAnchor);
+        // Optimistically mirror the anchor's excludedDates update so the UI
+        // reflects the reschedule immediately, same as
+        // detachFromRoutine/removeTask above. Uses the same broader
+        // effective-date rule (day scope, or a rolled-over week scope) as
+        // the authoritative repo.rescheduleTask implementations
+        // (repository.ts/test-utils.tsx). The authoritative anchor from the
+        // command response is applied once the command resolves below,
+        // regardless of whether this optimistic branch ran.
+        let optimisticAnchor: Task | undefined;
+        if (anchorId !== undefined) {
+          const anchor = tasksRef.current.find((t) => t.id === anchorId);
+          if (anchor && !(anchor.excludedDates ?? []).includes(originalDate)) {
+            optimisticAnchor = {
+              ...anchor,
+              excludedDates: [...(anchor.excludedDates ?? []), originalDate],
+            };
           }
         }
+        applyCommandState(
+          optimisticAnchor ? [updatedTask, optimisticAnchor] : [updatedTask],
+          [],
+        );
+
+        enqueueMutation(async () => {
+          const result = await repo.rescheduleTask({
+            taskId: current.id,
+            taskVersion: authoritativeVersionsRef.current.get(current.id) ?? current.version,
+            date,
+          });
+          authoritativeVersionsRef.current.set(result.task.id, result.task.version);
+          authoritativeTasksRef.current.set(result.task.id, result.task);
+
+          const currentTask = tasksRef.current.find((t) => t.id === result.task.id);
+          const reconciledTask =
+            currentTask && mutationGenerationsRef.current.get(result.task.id) !== taskGeneration
+              ? { ...currentTask, version: result.task.version }
+              : result.task;
+
+          const upserts = [reconciledTask];
+          if (result.anchor) {
+            authoritativeVersionsRef.current.set(result.anchor.id, result.anchor.version);
+            authoritativeTasksRef.current.set(result.anchor.id, result.anchor);
+            const currentAnchor = tasksRef.current.find((t) => t.id === result.anchor!.id);
+            const reconciledAnchor =
+              currentAnchor && anchorGeneration !== undefined &&
+              mutationGenerationsRef.current.get(result.anchor.id) !== anchorGeneration
+                ? { ...currentAnchor, version: result.anchor.version }
+                : result.anchor;
+            upserts.push(reconciledAnchor);
+          }
+          applyCommandState(upserts, []);
+        });
       },
       setPriority(id, priority) {
         const current = tasksRef.current.find((t) => t.id === id);
@@ -888,27 +992,68 @@ export function TasksProvider({
         const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         nextMutationGeneration(id);
-        removeTaskState(id);
-        enqueueMutation(async () => {
-          const version = authoritativeVersionsRef.current.get(id) ?? current.version;
-          await repo.remove(id, version);
-          authoritativeVersionsRef.current.delete(id);
-          authoritativeTasksRef.current.delete(id);
-        });
+        const anchorId = current.repeatSourceId;
+
+        if (anchorId === undefined) {
+          removeTaskState(id);
+          enqueueMutation(async () => {
+            const version = authoritativeVersionsRef.current.get(id) ?? current.version;
+            await repo.remove(id, version);
+            authoritativeVersionsRef.current.delete(id);
+            authoritativeTasksRef.current.delete(id);
+          });
+          return;
+        }
 
         // Deleting a spawned occurrence must tell its anchor not to
         // re-spawn it — otherwise the next load's materializeRoutines()
         // sees no same-day occurrence and recreates it, "resurrecting" a
-        // task the user just deleted. Same excludedDates handling as
-        // detachFromRoutine/rescheduleTaskToDay above.
-        if (current?.repeatSourceId !== undefined && current.scope.kind === "day") {
-          const anchor = tasksRef.current.find((t) => t.id === current.repeatSourceId);
-          if (anchor) {
-            const excludedDates = [...(anchor.excludedDates ?? []), current.scope.date];
-            const updatedAnchor: Task = { ...anchor, excludedDates };
-            persistUpdate(updatedAnchor);
+        // task the user just deleted. This is folded into the same
+        // deleteOccurrence command below so the removal and the anchor's
+        // excludedDates update are atomic, but the anchor is also mirrored
+        // optimistically here (before the command resolves) using the same
+        // "day-scope or rolled-over week-scope" effective-date rule as
+        // detachFromRoutine/rescheduleTaskToDay, so the UI reflects it
+        // immediately.
+        const anchorGeneration = nextMutationGeneration(anchorId);
+        let optimisticAnchor: Task | undefined;
+        const originalDate =
+          current.scope.kind === "day"
+            ? current.scope.date
+            : current.scope.kind === "week" && current.rolledFrom?.kind === "day"
+              ? current.rolledFrom.date
+              : undefined;
+        if (originalDate !== undefined) {
+          const anchor = tasksRef.current.find((t) => t.id === anchorId);
+          if (anchor && !(anchor.excludedDates ?? []).includes(originalDate)) {
+            optimisticAnchor = {
+              ...anchor,
+              excludedDates: [...(anchor.excludedDates ?? []), originalDate],
+            };
           }
         }
+        applyCommandState(optimisticAnchor ? [optimisticAnchor] : [], [id]);
+
+        enqueueMutation(async () => {
+          const result = await repo.deleteOccurrence({
+            occurrenceId: id,
+            occurrenceVersion: authoritativeVersionsRef.current.get(id) ?? current.version,
+          });
+          authoritativeVersionsRef.current.delete(result.removedTaskId);
+          authoritativeTasksRef.current.delete(result.removedTaskId);
+
+          if (result.anchor) {
+            authoritativeVersionsRef.current.set(result.anchor.id, result.anchor.version);
+            authoritativeTasksRef.current.set(result.anchor.id, result.anchor);
+            const currentAnchor = tasksRef.current.find((t) => t.id === result.anchor!.id);
+            const reconciledAnchor =
+              currentAnchor &&
+              mutationGenerationsRef.current.get(result.anchor.id) !== anchorGeneration
+                ? { ...currentAnchor, version: result.anchor.version }
+                : result.anchor;
+            applyCommandState([reconciledAnchor], []);
+          }
+        });
       },
       dismissSyncError() {
         dispatch({ type: "syncErrorDismissed" });

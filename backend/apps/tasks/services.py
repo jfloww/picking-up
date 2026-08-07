@@ -43,6 +43,12 @@ class PromoteSubtaskResult:
     task: Task
 
 
+@dataclass(frozen=True)
+class DetachTaskResult:
+    occurrence: Task
+    anchor: Task | None
+
+
 def _lock_user(user):
     # Serializing commands per owner gives sibling-order calculations a stable
     # boundary even when two commands touch different Task rows.
@@ -56,6 +62,40 @@ def _locked_owned_tasks(user, task_ids) -> dict[str, Task]:
         .order_by("id")
     )
     return {str(task.id): task for task in tasks}
+
+
+def _current_effective_date(task: Task) -> str | None:
+    if task.scope_kind == "day":
+        return task.scope_value
+    if task.scope_kind == "week" and task.rolled_from_kind == "day":
+        return task.rolled_from_value
+    return None
+
+
+def _append_anchor_exclusion(user, occurrence: Task) -> Task | None:
+    # Additive set-union onto the anchor's excluded_dates — never a whole-
+    # array replace — so a concurrent exclusion from another writer always
+    # survives regardless of what this command does. No anchor_version
+    # precondition: the owner-row lock (_lock_user, already held by every
+    # caller) is the only concurrency guarantee this write needs, since the
+    # write is idempotent (adding the same date twice is a no-op).
+    anchor_id = occurrence.repeat_source_id
+    if not anchor_id:
+        return None
+    anchors = _locked_owned_tasks(user, [anchor_id])
+    anchor = anchors.get(str(anchor_id))
+    if anchor is None:
+        return None
+    date = _current_effective_date(occurrence)
+    if date is None:
+        return None
+    existing = set(anchor.excluded_dates or [])
+    if date in existing:
+        return anchor
+    anchor.excluded_dates = [*(anchor.excluded_dates or []), date]
+    anchor.version += 1
+    anchor.save(update_fields=["excluded_dates", "version", "updated_at"])
+    return anchor
 
 
 def _assert_versions(expected: dict[str, int], tasks: dict[str, Task]):
@@ -157,6 +197,147 @@ def nest_task(
     source.delete()
 
     return NestTaskResult(target=target, removed_task_id=removed_task_id)
+
+
+@transaction.atomic
+def detach_task(
+    *,
+    user,
+    occurrence_id,
+    occurrence_version: int,
+    repeat_weekdays: list[int] | None,
+) -> DetachTaskResult:
+    _lock_user(user)
+    occurrence_key = str(occurrence_id)
+    tasks = _locked_owned_tasks(user, [occurrence_id])
+    if occurrence_key not in tasks:
+        raise TaskCommandNotFound
+
+    occurrence = tasks[occurrence_key]
+    _assert_versions({occurrence_key: occurrence_version}, tasks)
+
+    # Must run before repeat_source is cleared below — it reads
+    # occurrence.repeat_source_id to find the anchor.
+    anchor = _append_anchor_exclusion(user, occurrence)
+
+    occurrence.repeat_source = None
+    occurrence.repeat_weekdays = repeat_weekdays
+    occurrence.version += 1
+    occurrence.save(
+        update_fields=["repeat_source", "repeat_weekdays", "version", "updated_at"]
+    )
+
+    return DetachTaskResult(occurrence=occurrence, anchor=anchor)
+
+
+@dataclass(frozen=True)
+class DeleteOccurrenceResult:
+    removed_task_id: str
+    anchor: Task | None
+
+
+@transaction.atomic
+def delete_occurrence(
+    *,
+    user,
+    occurrence_id,
+    occurrence_version: int,
+) -> DeleteOccurrenceResult:
+    _lock_user(user)
+    occurrence_key = str(occurrence_id)
+    tasks = _locked_owned_tasks(user, [occurrence_id])
+    if occurrence_key not in tasks:
+        raise TaskCommandNotFound
+
+    occurrence = tasks[occurrence_key]
+    _assert_versions({occurrence_key: occurrence_version}, tasks)
+
+    # Must run before occurrence.delete() below — it reads
+    # occurrence.repeat_source_id and the occurrence's effective date, both
+    # of which need the row to still exist and be unmutated.
+    anchor = _append_anchor_exclusion(user, occurrence)
+    removed_task_id = str(occurrence.id)
+    occurrence.delete()
+
+    return DeleteOccurrenceResult(removed_task_id=removed_task_id, anchor=anchor)
+
+
+@dataclass(frozen=True)
+class RescheduleTaskResult:
+    task: Task
+    anchor: Task | None
+
+
+@transaction.atomic
+def reschedule_task(
+    *,
+    user,
+    task_id,
+    task_version: int,
+    date: str,
+) -> RescheduleTaskResult:
+    _lock_user(user)
+    task_key = str(task_id)
+    tasks = _locked_owned_tasks(user, [task_id])
+    if task_key not in tasks:
+        raise TaskCommandNotFound
+
+    task = tasks[task_key]
+    _assert_versions({task_key: task_version}, tasks)
+
+    current_date = _current_effective_date(task)
+    if current_date is None:
+        raise TaskCommandConflict(
+            "not_reschedulable",
+            "Only a day-scoped task or a rolled-over week-scoped task can be rescheduled.",
+        )
+    if current_date == date:
+        raise TaskCommandConflict("same_date", "The task is already scheduled on this date.")
+
+    # Must run before repeat_source is cleared below.
+    anchor = _append_anchor_exclusion(user, task)
+
+    if not task.time:
+        # Mirrors the frontend's current dayTasksForWeek-based scan: counts
+        # both day-scoped tasks already on the destination date and
+        # week-scoped tasks rolled over from it, including done tasks
+        # (position, not completion, drives this list). Unlike the
+        # frontend, this query doesn't also require scope_value/weekStart
+        # to match the destination's current week: a week-scoped task that
+        # rolled off `date` and has since rolled forward again (weekStart
+        # now a later week, rolled_from_value still `date`) matches here
+        # but wouldn't match dayTasksForWeek on the frontend. There's no
+        # week_start_of helper on the backend today to close that gap, and
+        # it's harmless to leave open — the extra rows can only inflate the
+        # computed max(), so the rescheduled task still lands past every
+        # currently-visible sibling; it never causes an incorrect exclusion
+        # or lost order value, just a possibly-larger-than-strictly-
+        # necessary one.
+        siblings = list(
+            Task.objects.select_for_update()
+            .filter(user=user)
+            .filter(
+                Q(scope_kind="day", scope_value=date)
+                | Q(scope_kind="week", rolled_from_kind="day", rolled_from_value=date)
+            )
+            .filter(Q(time__isnull=True) | Q(time=""))
+        )
+        task.order = max([0.0, *(sibling.order for sibling in siblings)]) + 1.0
+
+    task.scope_kind = "day"
+    task.scope_value = date
+    task.rolled_from_kind = None
+    task.rolled_from_value = None
+    task.repeat_source = None
+    task.version += 1
+    task.save(
+        update_fields=[
+            "scope_kind", "scope_value", "rolled_from_kind", "rolled_from_value",
+            "repeat_source", "order", "version", "updated_at",
+        ]
+    )
+
+    return RescheduleTaskResult(task=task, anchor=anchor)
 
 
 def _promotion_order(user, parent: Task) -> float:

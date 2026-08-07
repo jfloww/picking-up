@@ -6,8 +6,11 @@ vi.mock("@/lib/auth/server-cookies", () => ({
 
 import { NextRequest } from "next/server";
 
+import { POST as DELETE_OCCURRENCE } from "@/app/api/tasks/[id]/commands/delete-occurrence/route";
+import { POST as DETACH } from "@/app/api/tasks/[id]/commands/detach/route";
 import { POST as NEST } from "@/app/api/tasks/[id]/commands/nest/route";
 import { POST as PROMOTE_SUBTASK } from "@/app/api/tasks/[id]/commands/promote-subtask/route";
+import { POST as RESCHEDULE } from "@/app/api/tasks/[id]/commands/reschedule/route";
 import { DELETE, PUT } from "@/app/api/tasks/[id]/route";
 import { GET, POST } from "@/app/api/tasks/route";
 import type { ApiTask } from "@/features/tasks/api/mapping";
@@ -119,6 +122,15 @@ function installFetchRouter(django: (call: DjangoCall) => Response | Promise<Res
       }
       if (segment === "commands" && command === "promote-subtask") {
         return PROMOTE_SUBTASK(request, params);
+      }
+      if (segment === "commands" && command === "detach") {
+        return DETACH(request, params);
+      }
+      if (segment === "commands" && command === "delete-occurrence") {
+        return DELETE_OCCURRENCE(request, params);
+      }
+      if (segment === "commands" && command === "reschedule") {
+        return RESCHEDULE(request, params);
       }
       return method === "DELETE"
         ? DELETE(request, params)
@@ -339,6 +351,97 @@ describe("client repository -> real route handlers -> mapping (no mocked seams b
     });
   });
 
+  it("detachTask() crosses both real route layers as one command and maps its result", async () => {
+    const occurrenceApi = { ...apiTask, id: "occ-id", repeat_source: "anchor-id", version: 3 };
+    const anchorApi = { ...apiTask, id: "anchor-id", excluded_dates: ["2026-07-16"], version: 6 };
+    const { djangoCalls } = installFetchRouter(() =>
+      Response.json({ occurrence: occurrenceApi, anchor: anchorApi }),
+    );
+
+    const result = await createApiTaskRepository().detachTask({
+      occurrenceId: "occ-id",
+      occurrenceVersion: 2,
+      repeatWeekdays: [1, 3],
+    });
+
+    expect(result).toEqual({
+      occurrence: { ...expectedTask, id: "occ-id", repeatSourceId: "anchor-id", version: 3 },
+      anchor: { ...expectedTask, id: "anchor-id", excludedDates: ["2026-07-16"], version: 6 },
+    });
+    expect(djangoCalls).toHaveLength(1);
+    expect(djangoCalls[0]).toMatchObject({
+      url: `${DJANGO_ORIGIN}/api/tasks/occ-id/commands/detach/`,
+      method: "POST",
+      authorization: "Bearer test-token",
+      body: { occurrence_version: 2, repeat_weekdays: [1, 3] },
+    });
+  });
+
+  it("deleteOccurrence() crosses both real route layers and returns the removed id plus anchor", async () => {
+    const anchorApi = { ...apiTask, id: "anchor-id", excluded_dates: ["2026-07-16"], version: 6 };
+    const { djangoCalls } = installFetchRouter(() =>
+      Response.json({ removed_task_id: "occ-id", anchor: anchorApi }),
+    );
+
+    const result = await createApiTaskRepository().deleteOccurrence({
+      occurrenceId: "occ-id",
+      occurrenceVersion: 2,
+    });
+
+    expect(result).toEqual({
+      removedTaskId: "occ-id",
+      anchor: { ...expectedTask, id: "anchor-id", excludedDates: ["2026-07-16"], version: 6 },
+    });
+    expect(djangoCalls).toHaveLength(1);
+    expect(djangoCalls[0]).toMatchObject({
+      url: `${DJANGO_ORIGIN}/api/tasks/occ-id/commands/delete-occurrence/`,
+      method: "POST",
+      authorization: "Bearer test-token",
+      body: { occurrence_version: 2 },
+    });
+  });
+
+  it("rescheduleTask() crosses both real route layers and maps the moved task plus anchor", async () => {
+    const taskApi = {
+      ...apiTask,
+      id: "task-id",
+      scope_value: "2026-08-03",
+      rolled_from_kind: null,
+      rolled_from_value: null,
+      repeat_source: null,
+      version: 5,
+    };
+    const anchorApi = { ...apiTask, id: "anchor-id", excluded_dates: ["2026-07-27"], version: 9 };
+    const { djangoCalls } = installFetchRouter(() =>
+      Response.json({ task: taskApi, anchor: anchorApi }),
+    );
+
+    const result = await createApiTaskRepository().rescheduleTask({
+      taskId: "task-id",
+      taskVersion: 4,
+      date: "2026-08-03",
+    });
+
+    expect(result).toEqual({
+      task: {
+        ...expectedTask,
+        id: "task-id",
+        scope: { kind: "day", date: "2026-08-03" },
+        rolledFrom: undefined,
+        repeatSourceId: undefined,
+        version: 5,
+      },
+      anchor: { ...expectedTask, id: "anchor-id", excludedDates: ["2026-07-27"], version: 9 },
+    });
+    expect(djangoCalls).toHaveLength(1);
+    expect(djangoCalls[0]).toMatchObject({
+      url: `${DJANGO_ORIGIN}/api/tasks/task-id/commands/reschedule/`,
+      method: "POST",
+      authorization: "Bearer test-token",
+      body: { task_version: 4, date: "2026-08-03" },
+    });
+  });
+
   it("the command BFF routes reject a malformed body before ever calling Django", async () => {
     // RF-005 review finding: these routes used to hand the parsed body
     // straight to Django with no shape check, unlike the PUT route's
@@ -375,6 +478,39 @@ describe("client repository -> real route handlers -> mapping (no mocked seams b
     const promoteResponse = await PROMOTE_SUBTASK(missingVersion, params);
     expect(promoteResponse.status).toBe(400);
 
+    const missingOccurrenceVersion = new NextRequest(
+      `${NEXT_ORIGIN}/api/tasks/source-id/commands/detach`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}), // occurrenceVersion omitted
+      },
+    );
+    const detachResponse = await DETACH(missingOccurrenceVersion, params);
+    expect(detachResponse.status).toBe(400);
+
+    const missingDeleteOccurrenceVersion = new NextRequest(
+      `${NEXT_ORIGIN}/api/tasks/source-id/commands/delete-occurrence`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}), // occurrenceVersion omitted
+      },
+    );
+    const deleteOccurrenceResponse = await DELETE_OCCURRENCE(missingDeleteOccurrenceVersion, params);
+    expect(deleteOccurrenceResponse.status).toBe(400);
+
+    const missingRescheduleFields = new NextRequest(
+      `${NEXT_ORIGIN}/api/tasks/source-id/commands/reschedule`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskVersion: 1 }), // date omitted
+      },
+    );
+    const rescheduleResponse = await RESCHEDULE(missingRescheduleFields, params);
+    expect(rescheduleResponse.status).toBe(400);
+
     expect(djangoCalls).toHaveLength(0);
   });
 
@@ -396,6 +532,79 @@ describe("client repository -> real route handlers -> mapping (no mocked seams b
         confirmDataLoss: false,
       }),
     ).rejects.toBeInstanceOf(TaskVersionConflictError);
+  });
+
+  it("preserves Django's detach 409 through the BFF as a typed repository conflict", async () => {
+    installFetchRouter(() =>
+      Response.json(
+        { code: "task_version_conflict", detail: "The task changed after it was loaded." },
+        { status: 409 },
+      ),
+    );
+
+    const error = await createApiTaskRepository()
+      .detachTask({ occurrenceId: "occ-id", occurrenceVersion: 1 })
+      .catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(TaskVersionConflictError);
+    expect((error as InstanceType<typeof TaskVersionConflictError>).code).toBe(
+      "task_version_conflict",
+    );
+  });
+
+  it("preserves Django's delete-occurrence 409 through the BFF as a typed repository conflict", async () => {
+    installFetchRouter(() =>
+      Response.json(
+        { code: "task_version_conflict", detail: "The task changed after it was loaded." },
+        { status: 409 },
+      ),
+    );
+
+    const error = await createApiTaskRepository()
+      .deleteOccurrence({ occurrenceId: "occ-id", occurrenceVersion: 1 })
+      .catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(TaskVersionConflictError);
+    expect((error as InstanceType<typeof TaskVersionConflictError>).code).toBe(
+      "task_version_conflict",
+    );
+  });
+
+  it("preserves Django's reschedule same_date 409 through the BFF as a typed repository conflict", async () => {
+    installFetchRouter(() =>
+      Response.json(
+        { code: "same_date", detail: "The task is already scheduled on this date." },
+        { status: 409 },
+      ),
+    );
+
+    const error = await createApiTaskRepository()
+      .rescheduleTask({ taskId: "task-id", taskVersion: 1, date: "2026-07-16" })
+      .catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(TaskVersionConflictError);
+    expect((error as InstanceType<typeof TaskVersionConflictError>).code).toBe("same_date");
+  });
+
+  it("preserves Django's reschedule not_reschedulable 409 through the BFF as a typed repository conflict", async () => {
+    installFetchRouter(() =>
+      Response.json(
+        {
+          code: "not_reschedulable",
+          detail: "Only a day-scoped task or a rolled-over week-scoped task can be rescheduled.",
+        },
+        { status: 409 },
+      ),
+    );
+
+    const error = await createApiTaskRepository()
+      .rescheduleTask({ taskId: "task-id", taskVersion: 1, date: "2026-07-16" })
+      .catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(TaskVersionConflictError);
+    expect((error as InstanceType<typeof TaskVersionConflictError>).code).toBe(
+      "not_reschedulable",
+    );
   });
 
   it("a non-auth Django failure propagates through the real route handler as a rejected list()", async () => {

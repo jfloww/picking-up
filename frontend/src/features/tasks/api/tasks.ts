@@ -169,3 +169,89 @@ export async function requestPromoteSubtask(
     status: response.status,
   };
 }
+
+export interface DetachTaskRequest {
+  occurrenceVersion: number;
+  repeatWeekdays?: number[];
+}
+
+export interface DetachTaskResponse {
+  occurrence: Task;
+  anchor?: Task;
+  status: number;
+}
+
+export async function requestDetachTask(
+  occurrenceId: string,
+  command: DetachTaskRequest,
+): Promise<DetachTaskResponse> {
+  const response = await taskMutationRequest(`/api/tasks/${occurrenceId}/commands/detach/`, {
+    method: "POST",
+    body: JSON.stringify({
+      occurrence_version: command.occurrenceVersion,
+      repeat_weekdays: command.repeatWeekdays ?? null,
+    }),
+  });
+  const payload = (await response.json()) as { occurrence: ApiTask; anchor?: ApiTask };
+  return {
+    occurrence: fromApiPayload(payload.occurrence),
+    anchor: payload.anchor ? fromApiPayload(payload.anchor) : undefined,
+    status: response.status,
+  };
+}
+
+export interface DeleteOccurrenceRequest {
+  occurrenceVersion: number;
+}
+
+export interface DeleteOccurrenceResponse {
+  removedTaskId: string;
+  anchor?: Task;
+  status: number;
+}
+
+export async function requestDeleteOccurrence(
+  occurrenceId: string,
+  command: DeleteOccurrenceRequest,
+): Promise<DeleteOccurrenceResponse> {
+  const response = await taskMutationRequest(
+    `/api/tasks/${occurrenceId}/commands/delete-occurrence/`,
+    {
+      method: "POST",
+      body: JSON.stringify({ occurrence_version: command.occurrenceVersion }),
+    },
+  );
+  const payload = (await response.json()) as { removed_task_id: string; anchor?: ApiTask };
+  return {
+    removedTaskId: payload.removed_task_id,
+    anchor: payload.anchor ? fromApiPayload(payload.anchor) : undefined,
+    status: response.status,
+  };
+}
+
+export interface RescheduleTaskRequest {
+  taskVersion: number;
+  date: string;
+}
+
+export interface RescheduleTaskResponse {
+  task: Task;
+  anchor?: Task;
+  status: number;
+}
+
+export async function requestRescheduleTask(
+  taskId: string,
+  command: RescheduleTaskRequest,
+): Promise<RescheduleTaskResponse> {
+  const response = await taskMutationRequest(`/api/tasks/${taskId}/commands/reschedule/`, {
+    method: "POST",
+    body: JSON.stringify({ task_version: command.taskVersion, date: command.date }),
+  });
+  const payload = (await response.json()) as { task: ApiTask; anchor?: ApiTask };
+  return {
+    task: fromApiPayload(payload.task),
+    anchor: payload.anchor ? fromApiPayload(payload.anchor) : undefined,
+    status: response.status,
+  };
+}
