@@ -7,6 +7,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -132,23 +133,55 @@ class TaskApiTests(TestCase):
         self.assertEqual(stored.duration_minutes, 45)
         self.assertTrue(stored.background)
 
-    def test_create_rejects_subtask_fields_that_commands_cannot_store_safely(self):
+    def test_create_truncates_subtask_fields_that_commands_cannot_store_safely(self):
+        # RF-006 review finding: an outright 400 here means an unrelated
+        # edit to a task carrying one legacy over-length subtask can never
+        # be saved again (the generic PUT always resends the whole
+        # subtasks array), and a legacy-localStorage task with one would
+        # never clear the migration-upload retry loop. Truncating instead
+        # of rejecting keeps the write-path limit (nothing this API stores
+        # can later fail to materialize into a Task via Promote) without
+        # permanently locking out old data — existing DB rows get the same
+        # treatment once via migration 0014.
         owner, client = auth_client("subtask-limits@example.com")
-        cases = [
-            {"id": "x" * 256, "title": "valid", "done": False},
-            {"id": "valid", "title": "x" * 501, "done": False},
-        ]
+        task_id = str(uuid.uuid4())
 
-        for subtask in cases:
-            with self.subTest(field="id" if len(subtask["id"]) > 255 else "title"):
-                response = client.post(
-                    "/api/tasks/",
-                    make_task_payload(subtasks=[subtask]),
-                    format="json",
-                )
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(
+                id=task_id,
+                subtasks=[
+                    {"id": "a" * 300, "title": "valid", "done": False},
+                    {"id": "valid-2", "title": "b" * 600, "done": False},
+                ],
+            ),
+            format="json",
+        )
 
-                self.assertEqual(response.status_code, 400)
-        self.assertEqual(Task.objects.filter(user=owner).count(), 0)
+        self.assertEqual(response.status_code, 201, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertEqual(len(stored.subtasks[0]["id"]), 255)
+        self.assertEqual(stored.subtasks[0]["id"], "a" * 255)
+        self.assertEqual(len(stored.subtasks[1]["title"]), 500)
+        self.assertEqual(stored.subtasks[1]["title"], "b" * 500)
+
+    def test_create_accepts_subtask_fields_at_exactly_the_length_boundary(self):
+        owner, client = auth_client("subtask-limits-boundary@example.com")
+        task_id = str(uuid.uuid4())
+
+        response = client.post(
+            "/api/tasks/",
+            make_task_payload(
+                id=task_id,
+                subtasks=[{"id": "a" * 255, "title": "b" * 500, "done": False}],
+            ),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        stored = Task.objects.get(id=task_id)
+        self.assertEqual(stored.subtasks[0]["id"], "a" * 255)
+        self.assertEqual(stored.subtasks[0]["title"], "b" * 500)
 
     def test_update_fully_replaces_a_tasks_fields(self):
         owner, client = auth_client()
@@ -1523,6 +1556,50 @@ class TaskVersionMigrationTests(TransactionTestCase):
         self.assertEqual(NewTask.objects.get(id=task.id).version, 1)
 
 
+class TruncateOverlengthSubtaskFieldsMigrationTests(TransactionTestCase):
+    def test_truncates_overlength_legacy_subtask_id_and_title(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0013_task_version")])
+
+        old_state = executor.loader.project_state([("tasks", "0013_task_version")])
+        OldUser = old_state.apps.get_model("auth", "User")
+        OldTask = old_state.apps.get_model("tasks", "Task")
+
+        user = OldUser.objects.create(username="legacy-subtasks@example.com", email="legacy-subtasks@example.com")
+        # Written directly against the pre-migration historical model,
+        # bypassing SubtaskSerializer entirely — simulates data stored
+        # before RF-006's length limit existed.
+        task = OldTask.objects.create(
+            id=uuid_module.uuid4(),
+            user_id=user.id,
+            title="legacy",
+            scope_kind="day",
+            scope_value="2026-08-06",
+            subtasks=[
+                {"id": "a" * 300, "title": "valid", "done": False},
+                {"id": "valid-2", "title": "b" * 600, "done": False},
+                {"id": "valid-3", "title": "unaffected", "done": True},
+                "not-a-dict-entry",
+            ],
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0014_truncate_overlength_subtask_fields")])
+
+        new_state = executor.loader.project_state([("tasks", "0014_truncate_overlength_subtask_fields")])
+        NewTask = new_state.apps.get_model("tasks", "Task")
+        subtasks = NewTask.objects.get(id=task.id).subtasks
+
+        self.assertEqual(len(subtasks[0]["id"]), 255)
+        self.assertEqual(subtasks[0]["id"], "a" * 255)
+        self.assertEqual(subtasks[0]["title"], "valid")
+        self.assertEqual(subtasks[1]["id"], "valid-2")
+        self.assertEqual(len(subtasks[1]["title"]), 500)
+        self.assertEqual(subtasks[1]["title"], "b" * 500)
+        self.assertEqual(subtasks[2], {"id": "valid-3", "title": "unaffected", "done": True})
+        self.assertEqual(subtasks[3], "not-a-dict-entry")
+
+
 class CategoryApiTests(TestCase):
     def test_list_only_returns_the_authenticated_users_own_categories_ordered_by_created_at(self):
         owner, owner_client = auth_client("cat-list-owner@example.com")
@@ -1582,6 +1659,39 @@ class CategoryApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("normalized", str(response.data).lower())
         self.assertEqual(Category.objects.filter(user=owner).count(), 0)
+
+    def test_create_converts_a_model_level_validation_error_into_a_clean_400(self):
+        # CategorySerializer.validate_name already enforces the 180-char
+        # boundary, so Category.save()'s own check is unreachable through
+        # this view today — this proves the defense-in-depth path itself,
+        # in case a future caller ever reaches get_or_create() with a name
+        # the serializer didn't validate. Without the view's
+        # ValidationError catch, this would surface as an unhandled 500
+        # (django.core.exceptions.ValidationError isn't one DRF's default
+        # exception handler translates).
+        owner, client = auth_client("cat-create-model-validation@example.com")
+
+        with patch(
+            "apps.tasks.views.Category.objects.get_or_create",
+            side_effect=DjangoValidationError({"name": "forced for test"}),
+        ):
+            response = client.post("/api/categories/", {"name": "To Eat"}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("name", response.data)
+
+    def test_rename_converts_a_model_level_validation_error_into_a_clean_400(self):
+        owner, client = auth_client("cat-rename-model-validation@example.com")
+        category = Category.objects.create(user=owner, name="To Go")
+
+        with patch(
+            "apps.tasks.models.Category.save",
+            side_effect=DjangoValidationError({"name": "forced for test"}),
+        ):
+            response = client.patch(f"/api/categories/{category.id}/", {"name": "To Visit"}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("name", response.data)
 
     def test_a_different_users_category_with_the_same_name_is_not_reused(self):
         owner, owner_client = auth_client("cat-create-scope@example.com")

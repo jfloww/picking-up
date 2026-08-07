@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .models import Task
+from .serializers import SUBTASK_TITLE_MAX_LENGTH
 
 
 User = get_user_model()
@@ -212,8 +213,13 @@ def promote_subtask(
         raise TaskCommandConflict("task_id_conflict", "The new task id is already in use.")
 
     subtask = matches[0]
-    subtask_title = subtask.get("title")
-    if not isinstance(subtask_title, str) or not subtask_title.strip() or len(subtask_title) > 500:
+    raw_title = subtask.get("title")
+    subtask_title = raw_title.strip() if isinstance(raw_title, str) else raw_title
+    if (
+        not isinstance(subtask_title, str)
+        or not subtask_title
+        or len(subtask_title) > SUBTASK_TITLE_MAX_LENGTH
+    ):
         raise TaskCommandConflict(
             "invalid_subtask_title",
             "The subtask title cannot be promoted safely.",

@@ -164,3 +164,42 @@ Coverage added for:
 The full suite still prints pre-existing logging and development-secret
 warnings. They do not fail the suite and are tracked separately as operational
 and test-output cleanup work.
+
+## Post-merge review round (2026-08-06)
+
+A post-merge audit of the 4-way migration split (after it had already landed
+on `main`) found the graph itself correct end-to-end — dependency chain, the
+0011/0012 non-redundancy, the 180-char preflight, and the finalize test's Task
+FK repoint assertion all held up under direct inspection of Django's executor
+internals, not just a re-read of this doc. Two findings, one fixed, one
+recorded rather than fixed:
+
+- **`Category.save()`'s 180-char guard raised the wrong exception class to be
+  a safety net outside the serializer — fixed.** It raised
+  `django.core.exceptions.ValidationError`, which DRF's default exception
+  handler does not translate into a clean response; a future code path that
+  writes a `Category` without going through `CategorySerializer.validate_name`
+  first (a management command, a bulk import) would have surfaced this as an
+  unhandled 500 instead of the same clean 400 the serializer already
+  guarantees on the two current live paths. Both `CategoryListCreateView.create()`
+  and `CategoryDetailView.perform_update()` now also catch
+  `django.core.exceptions.ValidationError` and re-raise it as a DRF
+  `ValidationError`, matching the existing `IntegrityError` handling in
+  `perform_update()`. Covered by two new tests that mock the model/manager
+  layer to force this path, since the serializer's identical check makes it
+  otherwise unreachable through the live API.
+- **Migration 0012's own DDL sequence (`AlterField`/`RemoveConstraint`/`AddConstraint`)
+  has the same un-closed Oracle retry hazard 0009 already has — recorded, not
+  fixed.** Each of those three operations auto-commits independently on
+  Oracle. If `AddConstraint` fails after `AlterField`/`RemoveConstraint`
+  already committed, Django records 0012 as unapplied, and a retry replays
+  all four operations from the top — `merge_stragglers` is idempotent and
+  safe to rerun, but re-running `AlterField` on an already-NOT-NULL column or
+  `RemoveConstraint` on an already-removed constraint risks Oracle DDL errors
+  requiring manual recovery. This is not new to the 4-way split — `0009`
+  (`Task.created_at`/`completed_at`) has the identical multi-step-DDL shape
+  and is the pattern this project has otherwise treated as acceptable — so
+  this is an inherited, accepted risk class, not a regression. Worth testing
+  explicitly (a forced mid-0012 failure-and-retry, not just the happy path)
+  whenever RF-012's Oracle verification actually happens, rather than being
+  discovered live against production data.
