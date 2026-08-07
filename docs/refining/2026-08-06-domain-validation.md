@@ -223,8 +223,8 @@ which this sandbox has no credentials for.)
 ```text
 System check identified no issues
 No migration changes detected
-Found <N> tests
-Ran <N> tests
+Found 117 tests
+Ran 117 tests
 OK
 ```
 
