@@ -3,7 +3,7 @@ from typing import Any
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from .models import Task
@@ -83,6 +83,14 @@ def _order_between(before: float | None, after: float | None) -> float:
     if after is None:
         return before + _EDGE_GAP
     return (before + after) / 2.0
+
+
+def _next_untimed_order_for_day(user, scope_value: str) -> float:
+    siblings = Task.objects.filter(
+        user=user, scope_kind="day", scope_value=scope_value, done=False,
+    ).filter(Q(time__isnull=True) | Q(time=""))
+    max_order = siblings.aggregate(Max("order"))["order__max"]
+    return (max_order or 0.0) + 1.0
 
 
 def _append_anchor_exclusion(user, occurrence: Task) -> Task | None:

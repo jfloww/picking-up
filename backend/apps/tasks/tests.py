@@ -48,6 +48,7 @@ def make_task_payload(**overrides):
         "done": False,
         "scope_kind": "day",
         "scope_value": "2026-07-27",
+        "order": 0.0,
         "bucket_category": None,
         "rolled_from_kind": None,
         "rolled_from_value": None,
@@ -610,7 +611,7 @@ class TaskApiTests(TestCase):
             "/api/tasks/", make_task_payload(id=str(uuid.uuid4())), format="json",
         )
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data["order"], 0)
+        self.assertEqual(response.data["order"], 1.0)
 
         task_id = response.data["id"]
         response = client.put(
@@ -621,6 +622,73 @@ class TaskApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["order"], 2.5)
+
+    def setUp(self):
+        self.user, self.client = auth_client("order-creation@example.com")
+
+    def create_task(self, **overrides):
+        """Create a task, optionally with a specific order value by bypassing the API."""
+        task_id = overrides.pop("id", str(uuid.uuid4()))
+        order = overrides.pop("order", None)
+        # If a specific order is provided, create directly in DB to set it exactly.
+        # Otherwise use the API which computes the order.
+        if order is not None:
+            # Build full payload with defaults, then override with specific values
+            payload = make_task_payload(id=task_id, **overrides)
+            # Remove read-only/server-controlled fields before creating
+            payload.pop("created_at", None)
+            payload.pop("id", None)  # Will set explicitly
+            payload.pop("order", None)  # Will set explicitly
+            task = Task.objects.create(
+                id=task_id,
+                user=self.user,
+                created_at=timezone.now(),
+                order=order,
+                **payload,
+            )
+            return task
+        else:
+            response = self.client.post(
+                "/api/tasks/",
+                make_task_payload(id=task_id, **overrides),
+                format="json",
+            )
+            self.assertEqual(response.status_code, 201, response.data)
+            return Task.objects.get(id=task_id)
+
+    def test_create_ignores_a_client_supplied_order_and_appends_past_existing_siblings(self):
+        self.create_task(title="existing", scope_value="2026-07-16", order=3.0)
+
+        response = self.client.post(
+            "/api/tasks/",
+            make_task_payload(title="new", scope_value="2026-07-16", order=999.0),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["order"], 4.0)
+
+    def test_create_ignores_done_siblings_when_computing_the_appended_order(self):
+        self.create_task(title="done sibling", scope_value="2026-07-16", order=10.0, done=True)
+
+        response = self.client.post(
+            "/api/tasks/",
+            make_task_payload(title="new", scope_value="2026-07-16"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["order"], 1.0)
+
+    def test_create_uses_order_zero_for_a_non_day_scope_regardless_of_client_input(self):
+        response = self.client.post(
+            "/api/tasks/",
+            make_task_payload(title="goal", scope_kind="month", scope_value="2026-07", order=42.0),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["order"], 0.0)
 
 
 class TaskDomainValidationTests(TestCase):
@@ -987,14 +1055,34 @@ class TaskCommandApiTests(TestCase):
         self.user, self.client = auth_client("commands@example.com")
 
     def create_task(self, **overrides):
+        """Create a task, optionally with a specific order value by bypassing the API."""
         task_id = overrides.pop("id", str(uuid.uuid4()))
-        response = self.client.post(
-            "/api/tasks/",
-            make_task_payload(id=task_id, **overrides),
-            format="json",
-        )
-        self.assertEqual(response.status_code, 201, response.data)
-        return Task.objects.get(id=task_id)
+        order = overrides.pop("order", None)
+        # If a specific order is provided, create directly in DB to set it exactly.
+        # Otherwise use the API which computes the order.
+        if order is not None:
+            # Build full payload with defaults, then override with specific values
+            payload = make_task_payload(id=task_id, **overrides)
+            # Remove read-only/server-controlled fields before creating
+            payload.pop("created_at", None)
+            payload.pop("id", None)  # Will set explicitly
+            payload.pop("order", None)  # Will set explicitly
+            task = Task.objects.create(
+                id=task_id,
+                user=self.user,
+                created_at=timezone.now(),
+                order=order,
+                **payload,
+            )
+            return task
+        else:
+            response = self.client.post(
+                "/api/tasks/",
+                make_task_payload(id=task_id, **overrides),
+                format="json",
+            )
+            self.assertEqual(response.status_code, 201, response.data)
+            return Task.objects.get(id=task_id)
 
     def nest(self, source, target, **overrides):
         payload = {

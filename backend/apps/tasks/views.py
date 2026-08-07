@@ -24,6 +24,8 @@ from .services import (
     TaskCommandConflict,
     TaskCommandNotFound,
     TaskVersionConflict,
+    _lock_user,
+    _next_untimed_order_for_day,
     delete_occurrence,
     detach_task,
     nest_task,
@@ -102,7 +104,16 @@ class TaskListCreateView(generics.ListCreateAPIView):
         return Task.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        with transaction.atomic():
+            _lock_user(self.request.user)
+            scope_kind = serializer.validated_data.get("scope_kind")
+            scope_value = serializer.validated_data.get("scope_value")
+            order = (
+                _next_untimed_order_for_day(self.request.user, scope_value)
+                if scope_kind == "day"
+                else 0.0
+            )
+            serializer.save(user=self.request.user, order=order)
 
 
 class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
