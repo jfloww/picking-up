@@ -773,6 +773,25 @@ describe("TasksProvider", () => {
       await waitFor(() => expect(repo.tasks[0].subtasks).toHaveLength(1));
     });
 
+    it("editSubtaskMemo trims and clears a blank memo to undefined", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [{ id: "s1", title: "one", done: false, memo: "old note" }],
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.editSubtaskMemo("a", "s1", "  new note  "));
+      expect(result.current.tasks[0].subtasks).toEqual([
+        { id: "s1", title: "one", done: false, memo: "new note" },
+      ]);
+
+      act(() => result.current.editSubtaskMemo("a", "s1", "   "));
+      expect(result.current.tasks[0].subtasks?.[0].memo).toBeUndefined();
+      await waitFor(() => expect(repo.tasks[0].subtasks?.[0].memo).toBeUndefined());
+    });
+
     it("convertTaskToSubtask moves a simple task into the target's subtasks and removes it", async () => {
       const source = makeTask({ id: "s", title: "buy milk", scope: { kind: "day", date: todayKey() } });
       const target = makeTask({ id: "t", title: "groceries", scope: { kind: "day", date: todayKey() } });
@@ -806,6 +825,38 @@ describe("TasksProvider", () => {
       expect(updateSpy).not.toHaveBeenCalled();
       expect(removeSpy).not.toHaveBeenCalled();
       await waitFor(() => expect(result.current.tasks.find((t) => t.id === "t")?.version).toBe(2));
+    });
+
+    it("convertTaskToSubtask carries the source task's memo onto the new subtask", async () => {
+      const source = makeTask({
+        id: "s",
+        title: "buy milk",
+        memo: "2%",
+        scope: { kind: "day", date: todayKey() },
+      });
+      const target = makeTask({ id: "t", title: "groceries", scope: { kind: "day", date: todayKey() } });
+      const { result } = setup(fakeRepository([source, target]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.convertTaskToSubtask("s", "t", true));
+
+      await waitFor(() =>
+        expect(result.current.tasks.find((t) => t.id === "t")?.subtasks?.[0].memo).toBe("2%"),
+      );
+    });
+
+    it("promoteSubtaskToTask carries the subtask's memo onto the new task", async () => {
+      const parent = makeTask({
+        id: "p",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [{ id: "s1", title: "book flights", done: false, memo: "window seat" }],
+      });
+      const { result } = setup(fakeRepository([parent]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      const created = result.current.promoteSubtaskToTask("p", "s1");
+
+      expect(created?.memo).toBe("window seat");
     });
 
     it("convertTaskToSubtask forwards explicit data-loss confirmation", async () => {

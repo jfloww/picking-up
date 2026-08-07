@@ -32,6 +32,7 @@ interface TaskItemActions {
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
+  editSubtaskMemo: (id: string, subtaskId: string, memo: string) => void;
   promoteSubtaskToTask: (id: string, subtaskId: string) => Task | undefined;
   convertTaskToSubtask: (id: string, targetId: string, confirmDataLoss?: boolean) => void;
   setCategory: (id: string, categoryId: string) => void;
@@ -84,6 +85,7 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onRemoveSubtask: (subtaskId: string) => actions.removeSubtask(id, subtaskId),
     onEditSubtaskTitle: (subtaskId: string, title: string) =>
       actions.editSubtaskTitle(id, subtaskId, title),
+    onEditSubtaskMemo: (subtaskId: string, memo: string) => actions.editSubtaskMemo(id, subtaskId, memo),
     onPromoteSubtask: (subtaskId: string) => actions.promoteSubtaskToTask(id, subtaskId),
     // confirmDataLoss: true — undoing a promotion the user just made is a
     // single-click action, not a place to interrupt with the same

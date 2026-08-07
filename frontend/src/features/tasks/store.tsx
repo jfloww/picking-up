@@ -259,6 +259,7 @@ interface TasksContextValue extends TasksState {
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
+  editSubtaskMemo: (id: string, subtaskId: string, memo: string) => void;
   convertTaskToSubtask: (
     id: string,
     targetId: string,
@@ -943,6 +944,17 @@ export function TasksProvider({
         };
         persistUpdate(task);
       },
+      editSubtaskMemo(id, subtaskId, memo) {
+        const current = tasksRef.current.find((t) => t.id === id);
+        if (!current?.subtasks) return;
+        const task: Task = {
+          ...current,
+          subtasks: current.subtasks.map((s) =>
+            s.id === subtaskId ? { ...s, memo: memo.trim() || undefined } : s,
+          ),
+        };
+        persistUpdate(task);
+      },
       convertTaskToSubtask(id, targetId, confirmDataLoss = false) {
         // One repository command mirrors the optimistic two-entity state change.
         if (id === targetId) return;
@@ -956,7 +968,7 @@ export function TasksProvider({
           ...target,
           subtasks: [
             ...(target.subtasks ?? []),
-            { id: subtaskId, title: source.title, done: source.done },
+            { id: subtaskId, title: source.title, done: source.done, memo: source.memo },
           ],
         };
         const targetGeneration = nextMutationGeneration(target.id);
@@ -1002,6 +1014,7 @@ export function TasksProvider({
         const task: Task = {
           id: crypto.randomUUID(),
           title: subtask.title,
+          memo: subtask.memo,
           done: subtask.done,
           scope: parent.scope,
           order,
