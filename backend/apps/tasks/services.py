@@ -7,7 +7,7 @@ from django.db.models import Max, Q
 from django.utils import timezone
 
 from .models import Task
-from .serializers import SUBTASK_TITLE_MAX_LENGTH
+from .serializers import SUBTASK_MEMO_MAX_LENGTH, SUBTASK_TITLE_MAX_LENGTH
 
 
 User = get_user_model()
@@ -127,8 +127,6 @@ def _assert_versions(expected: dict[str, int], tasks: dict[str, Task]):
 
 def _nest_data_loss_fields(task: Task) -> list[str]:
     fields = []
-    if task.memo:
-        fields.append("memo")
     if task.completed_at:
         fields.append("completed_at")
     if task.time:
@@ -210,7 +208,18 @@ def nest_task(
 
     target.subtasks = [
         *target_subtasks,
-        {"id": subtask_id, "title": source.title, "done": source.done},
+        {
+            "id": subtask_id,
+            "title": source.title,
+            "done": source.done,
+            # source.memo is nullable (Task.memo); subtask memo is not — see
+            # SubtaskSerializer.memo's comment for why "" is the "no memo"
+            # value at this layer, not None. Truncated to match
+            # SubtaskSerializer.validate_memo's cap so this bypass of the
+            # serializer can't write a subtask longer than a normal write
+            # would ever allow.
+            "memo": (source.memo or "")[:SUBTASK_MEMO_MAX_LENGTH],
+        },
     ]
     target.version += 1
     target.save(update_fields=["subtasks", "version", "updated_at"])
@@ -514,6 +523,9 @@ def promote_subtask(
         id=new_task_id,
         user=user,
         title=subtask_title,
+        # Mirrors nest_task's inverse conversion: an empty subtask memo
+        # becomes Task.memo's own "no memo" value (None), not "".
+        memo=subtask.get("memo") or None,
         done=subtask["done"],
         completed_at=timezone.now() if subtask["done"] else None,
         scope_kind=parent.scope_kind,

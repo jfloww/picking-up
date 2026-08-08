@@ -2,6 +2,13 @@ import type { Category, Scope, Subtask, Task } from "../types";
 
 type ScopeKind = Scope["kind"];
 
+export interface ApiSubtask {
+  id: string;
+  title: string;
+  done: boolean;
+  memo: string;
+}
+
 export interface ApiTask {
   id: string;
   title: string;
@@ -16,7 +23,7 @@ export interface ApiTask {
   completed_at: string | null;
   time: string | null;
   due_date: string | null;
-  subtasks: Subtask[];
+  subtasks: ApiSubtask[];
   repeat_weekdays: number[] | null;
   repeat_source: string | null;
   excluded_dates: string[] | null;
@@ -65,6 +72,24 @@ function scopeFromParts(kind: ScopeKind, value: string, bucketCategoryId: string
   }
 }
 
+function toApiSubtask(subtask: Subtask): ApiSubtask {
+  return {
+    id: subtask.id,
+    title: subtask.title,
+    done: subtask.done,
+    memo: subtask.memo ?? "",
+  };
+}
+
+function fromApiSubtask(subtask: ApiSubtask): Subtask {
+  return {
+    id: subtask.id,
+    title: subtask.title,
+    done: subtask.done,
+    memo: subtask.memo ? subtask.memo : undefined,
+  };
+}
+
 export function toApiPayload(task: Task): ApiTask {
   return {
     id: task.id,
@@ -80,7 +105,7 @@ export function toApiPayload(task: Task): ApiTask {
     completed_at: task.completedAt ?? null,
     time: task.time ?? null,
     due_date: task.dueDate ?? null,
-    subtasks: task.subtasks ?? [],
+    subtasks: (task.subtasks ?? []).map(toApiSubtask),
     repeat_weekdays: task.repeatWeekdays ?? null,
     repeat_source: task.repeatSourceId ?? null,
     excluded_dates: task.excludedDates ?? null,
@@ -106,7 +131,7 @@ export function fromApiPayload(payload: ApiTask): Task {
     createdAt: payload.created_at,
     completedAt: payload.completed_at ?? undefined,
     time: payload.time ?? undefined,
-    subtasks: payload.subtasks.length > 0 ? payload.subtasks : undefined,
+    subtasks: payload.subtasks.length > 0 ? payload.subtasks.map(fromApiSubtask) : undefined,
     repeatWeekdays: payload.repeat_weekdays ?? undefined,
     repeatSourceId: payload.repeat_source ?? undefined,
     excludedDates: payload.excluded_dates ?? undefined,

@@ -37,7 +37,7 @@ const apiTask: ApiTask = {
   completed_at: null,
   time: "09:30",
   due_date: "2026-07-31",
-  subtasks: [{ id: "s1", title: "one", done: false }],
+  subtasks: [{ id: "s1", title: "one", done: false, memo: "" }],
   repeat_weekdays: [1, 3],
   repeat_source: null,
   excluded_dates: null,

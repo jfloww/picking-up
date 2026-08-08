@@ -71,7 +71,7 @@ export function fakeRepository(
         version: target.version + 1,
         subtasks: [
           ...(target.subtasks ?? []),
-          { id: command.subtaskId, title: source.title, done: source.done },
+          { id: command.subtaskId, title: source.title, done: source.done, memo: source.memo },
         ],
       };
       state.tasks = state.tasks
@@ -93,6 +93,7 @@ export function fakeRepository(
       const task: Task = {
         id: command.newTaskId,
         title: subtask.title,
+        memo: subtask.memo,
         done: subtask.done,
         scope: parent.scope,
         createdAt: now,

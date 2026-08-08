@@ -104,6 +104,27 @@ describe("createLocalStorageRepository", () => {
     expect(await repo.list()).toEqual([result.target]);
   });
 
+  it("nestTask no longer treats memo as lossy, and carries it onto the appended subtask", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const source = { ...task, id: "source", title: "buy milk", memo: "2%" };
+    const target = { ...task, id: "target", title: "groceries", version: 1 };
+    await repo.create(source);
+    await repo.create(target);
+
+    const result = await repo.nestTask({
+      sourceId: source.id,
+      targetId: target.id,
+      sourceVersion: 1,
+      targetVersion: 1,
+      subtaskId: "subtask-id",
+      confirmDataLoss: false,
+    });
+
+    expect(result.target.subtasks).toEqual([
+      { id: "subtask-id", title: "buy milk", done: false, memo: "2%" },
+    ]);
+  });
+
   it("promotes a subtask and increments only the existing parent's version", async () => {
     const repo = createLocalStorageRepository(fakeStorage());
     const parent = {
@@ -131,6 +152,26 @@ describe("createLocalStorageRepository", () => {
       version: 1,
     });
     expect(await repo.list()).toEqual([result.parent, result.task]);
+  });
+
+  it("promoteSubtask carries the subtask's memo onto the new task", async () => {
+    const repo = createLocalStorageRepository(fakeStorage());
+    const parent = {
+      ...task,
+      id: "parent",
+      title: "trip",
+      subtasks: [{ id: "subtask-id", title: "book flights", done: true, memo: "window seat" }],
+    };
+    await repo.create(parent);
+
+    const result = await repo.promoteSubtask({
+      parentId: parent.id,
+      subtaskId: "subtask-id",
+      parentVersion: 1,
+      newTaskId: "promoted-id",
+    });
+
+    expect(result.task.memo).toBe("window seat");
   });
 
   it("detaches an occurrence, clearing repeatSourceId and excluding the date on the anchor", async () => {

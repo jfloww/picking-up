@@ -307,8 +307,7 @@ export function createLocalStorageRepository(
         throw new Error("The subtask id already exists on the target.");
       }
       const losesTaskOnlyData = Boolean(
-        source.memo ||
-          source.time ||
+        source.time ||
           source.durationMinutes ||
           source.priority ||
           source.dueDate ||
@@ -324,7 +323,7 @@ export function createLocalStorageRepository(
         version: target.version + 1,
         subtasks: [
           ...(target.subtasks ?? []),
-          { id: command.subtaskId, title: source.title, done: source.done },
+          { id: command.subtaskId, title: source.title, done: source.done, memo: source.memo },
         ],
       };
       write(
@@ -354,6 +353,7 @@ export function createLocalStorageRepository(
       const task: Task = {
         id: command.newTaskId,
         title: subtask.title,
+        memo: subtask.memo,
         done: subtask.done,
         scope: parent.scope,
         createdAt: now,

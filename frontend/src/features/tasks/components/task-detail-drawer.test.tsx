@@ -20,6 +20,7 @@ const noopHandlers = {
   onToggleSubtask: (_id: string) => {},
   onRemoveSubtask: (_id: string) => {},
   onEditSubtaskTitle: (_id: string, _title: string) => {},
+  onEditSubtaskMemo: (_id: string, _memo: string) => {},
   onPromoteSubtask: (_subtaskId: string) => undefined,
   onUndoPromoteSubtask: (_taskId: string) => {},
   onCategoryChange: (_category: string) => {},
@@ -552,48 +553,24 @@ describe("TaskDetailDrawer", () => {
       expect(deleteButton.className).toContain("group-focus-within:opacity-100");
     });
 
-    it("clicking a subtask's title turns it into an editable input", () => {
+    it("clicking a subtask's title opens the Subtask Detail panel instead of an inline editor", () => {
       render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
       fireEvent.click(screen.getByText("buy wood"));
-      expect(screen.getByLabelText("Edit buy wood")).toBeTruthy();
-    });
-
-    it("commits the new title via onEditSubtaskTitle when Enter is pressed", () => {
-      const onEditSubtaskTitle = vi.fn();
-      render(
-        <TaskDetailDrawer task={subtasksTask} {...noopHandlers} onEditSubtaskTitle={onEditSubtaskTitle} />,
-      );
-      fireEvent.click(screen.getByText("buy wood"));
-      const input = screen.getByLabelText("Edit buy wood");
-      fireEvent.change(input, { target: { value: "buy pine wood" } });
-      fireEvent.keyDown(input, { key: "Enter" });
-      expect(onEditSubtaskTitle).toHaveBeenCalledWith("s2", "buy pine wood");
+      expect(screen.getByTestId("subtask-detail-panel")).toBeTruthy();
+      expect(screen.getByLabelText("Subtask title")).toBeTruthy();
       expect(screen.queryByLabelText("Edit buy wood")).toBeNull();
     });
 
-    it("commits the new title on blur too", () => {
+    it("commits the new title via onEditSubtaskTitle on blur", () => {
       const onEditSubtaskTitle = vi.fn();
       render(
         <TaskDetailDrawer task={subtasksTask} {...noopHandlers} onEditSubtaskTitle={onEditSubtaskTitle} />,
       );
       fireEvent.click(screen.getByText("buy wood"));
-      const input = screen.getByLabelText("Edit buy wood");
+      const input = screen.getByLabelText("Subtask title");
       fireEvent.change(input, { target: { value: "buy pine wood" } });
       fireEvent.blur(input);
       expect(onEditSubtaskTitle).toHaveBeenCalledWith("s2", "buy pine wood");
-    });
-
-    it("Escape cancels the edit without calling onEditSubtaskTitle, restoring the original title", () => {
-      const onEditSubtaskTitle = vi.fn();
-      render(
-        <TaskDetailDrawer task={subtasksTask} {...noopHandlers} onEditSubtaskTitle={onEditSubtaskTitle} />,
-      );
-      fireEvent.click(screen.getByText("buy wood"));
-      const input = screen.getByLabelText("Edit buy wood");
-      fireEvent.change(input, { target: { value: "something else entirely" } });
-      fireEvent.keyDown(input, { key: "Escape" });
-      expect(onEditSubtaskTitle).not.toHaveBeenCalled();
-      expect(screen.getByText("buy wood")).toBeTruthy();
     });
 
     it("does not call onEditSubtaskTitle when the title is unchanged", () => {
@@ -602,8 +579,78 @@ describe("TaskDetailDrawer", () => {
         <TaskDetailDrawer task={subtasksTask} {...noopHandlers} onEditSubtaskTitle={onEditSubtaskTitle} />,
       );
       fireEvent.click(screen.getByText("buy wood"));
-      fireEvent.keyDown(screen.getByLabelText("Edit buy wood"), { key: "Enter" });
+      fireEvent.blur(screen.getByLabelText("Subtask title"));
       expect(onEditSubtaskTitle).not.toHaveBeenCalled();
+    });
+
+    it("commits notes via onEditSubtaskMemo on blur", () => {
+      const onEditSubtaskMemo = vi.fn();
+      render(
+        <TaskDetailDrawer task={subtasksTask} {...noopHandlers} onEditSubtaskMemo={onEditSubtaskMemo} />,
+      );
+      fireEvent.click(screen.getByText("buy wood"));
+      const notes = screen.getByLabelText("Subtask notes");
+      fireEvent.change(notes, { target: { value: "oak, 2x4" } });
+      fireEvent.blur(notes);
+      expect(onEditSubtaskMemo).toHaveBeenCalledWith("s2", "oak, 2x4");
+    });
+
+    it("closes via its own close control", () => {
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      fireEvent.click(screen.getByText("buy wood"));
+      fireEvent.click(screen.getByLabelText("Close subtask detail"));
+      expect(screen.queryByTestId("subtask-detail-panel")).toBeNull();
+    });
+
+    it("clicking the same subtask row again closes the panel", () => {
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      fireEvent.click(screen.getByText("buy wood"));
+      fireEvent.click(screen.getByText("buy wood"));
+      expect(screen.queryByTestId("subtask-detail-panel")).toBeNull();
+    });
+
+    it("clicking a different subtask switches the panel instead of stacking a second one", () => {
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      fireEvent.click(screen.getByText("buy wood"));
+      fireEvent.click(screen.getByText("cut boards"));
+      expect(screen.getAllByTestId("subtask-detail-panel")).toHaveLength(1);
+      expect((screen.getByLabelText("Subtask title") as HTMLInputElement).value).toBe("cut boards");
+    });
+
+    it("switching to a different task closes any open panel", () => {
+      const { rerender } = render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      fireEvent.click(screen.getByText("buy wood"));
+      expect(screen.getByTestId("subtask-detail-panel")).toBeTruthy();
+
+      rerender(<TaskDetailDrawer task={makeTask({ id: "other", title: "unrelated" })} {...noopHandlers} />);
+      expect(screen.queryByTestId("subtask-detail-panel")).toBeNull();
+    });
+
+    it("Escape closes only the Subtask Detail panel, leaving the drawer open with buffered draft edits intact", () => {
+      const onClose = vi.fn();
+      const onMemoChange = vi.fn();
+      const comboTask = makeTask({
+        id: "combo",
+        title: "build shelf",
+        memo: "initial note",
+        subtasks: [{ id: "s1", title: "measure wall", done: false }],
+      });
+      render(
+        <TaskDetailDrawer task={comboTask} {...noopHandlers} onClose={onClose} onMemoChange={onMemoChange} />,
+      );
+
+      // Buffer a draft edit before opening the panel — it must survive.
+      fireEvent.change(screen.getByPlaceholderText("Memo"), { target: { value: "draft edit" } });
+
+      fireEvent.click(screen.getByText("measure wall"));
+      expect(screen.getByTestId("subtask-detail-panel")).toBeTruthy();
+
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(screen.queryByTestId("subtask-detail-panel")).toBeNull();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onMemoChange).not.toHaveBeenCalled();
+      expect((screen.getByPlaceholderText("Memo") as HTMLTextAreaElement).value).toBe("draft edit");
     });
 
     it("toggling a completed subtask un-completes it", () => {

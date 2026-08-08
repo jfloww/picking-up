@@ -57,7 +57,6 @@ describe("lostFieldsFor", () => {
         }),
       ),
     ).toEqual([
-      "note",
       "completion time",
       "time",
       "duration",
