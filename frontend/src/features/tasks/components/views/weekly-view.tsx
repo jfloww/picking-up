@@ -130,7 +130,7 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
         />
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-7 gap-1.5">
+      <div className="grid min-h-0 flex-1 grid-cols-7 gap-1.5 px-px">
         {dates.map((date, i) => {
           const dayTasks = dayTasksForWeek(tasks, date, weekStart);
           const dayDone = dayTasks.filter((t) => t.done).length;
