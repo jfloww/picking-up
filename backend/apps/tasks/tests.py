@@ -1288,6 +1288,21 @@ class TaskCommandApiTests(TestCase):
         self.assertEqual(accepted.status_code, 200, accepted.data)
         self.assertEqual(accepted.data["target"]["subtasks"][0]["memo"], "important")
 
+    def test_nest_truncates_an_overlength_source_memo_onto_the_appended_subtask(self):
+        # Task.memo is an unbounded TextField, but the subtask-level memo
+        # cap is SUBTASK_MEMO_MAX_LENGTH (enforced by
+        # SubtaskSerializer.validate_memo on normal writes). nest_task
+        # writes the subtask dict directly, bypassing that serializer, so
+        # it must truncate itself here rather than storing an over-length
+        # value that a later unrelated PUT would silently shrink.
+        source = self.create_task(title="lossy", memo="m" * 3000)
+        target = self.create_task(title="target")
+
+        response = self.nest(source, target, confirm_data_loss=True)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(response.data["target"]["subtasks"][0]["memo"]), 2000)
+
     def test_nest_detects_data_loss_for_every_lossy_field_individually(self):
         # RF-005 review finding: the prior test only exercised memo and
         # priority, out of the fields _nest_data_loss_fields actually

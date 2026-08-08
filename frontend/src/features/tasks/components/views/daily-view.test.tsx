@@ -400,10 +400,12 @@ describe("DailyView drag-to-nest-subtask", () => {
   });
 
   it("shows a confirmation dialog for a task with extra fields, and converts on Confirm", async () => {
+    // memo isn't lossy — it survives onto the appended subtask — so this
+    // uses priority to exercise a field that's genuinely dropped.
     const source = makeTask({
       id: "s",
       title: "call plumber",
-      memo: "ask about pricing",
+      priority: true,
       scope: { kind: "day", date: ANCHOR },
     });
     const target = makeTask({ id: "t", title: "house stuff", scope: { kind: "day", date: ANCHOR } });
@@ -416,7 +418,7 @@ describe("DailyView drag-to-nest-subtask", () => {
     fireEvent.pointerUp(sourceEl, { pointerId: 1, clientX: 410, clientY: 120 });
 
     expect(await screen.findByRole("alertdialog")).toBeTruthy();
-    expect(screen.getByText(/note/)).toBeTruthy();
+    expect(screen.getByText(/priority/)).toBeTruthy();
     expect(screen.getByTestId("agenda-s")).toBeTruthy(); // not converted yet
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
@@ -426,10 +428,12 @@ describe("DailyView drag-to-nest-subtask", () => {
   });
 
   it("cancelling the confirmation dialog leaves the task unchanged", async () => {
+    // memo isn't lossy — it survives onto the appended subtask — so this
+    // uses priority to exercise a field that's genuinely dropped.
     const source = makeTask({
       id: "s",
       title: "call plumber",
-      memo: "ask about pricing",
+      priority: true,
       scope: { kind: "day", date: ANCHOR },
     });
     const target = makeTask({ id: "t", title: "house stuff", scope: { kind: "day", date: ANCHOR } });

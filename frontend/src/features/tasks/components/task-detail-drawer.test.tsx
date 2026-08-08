@@ -626,6 +626,33 @@ describe("TaskDetailDrawer", () => {
       expect(screen.queryByTestId("subtask-detail-panel")).toBeNull();
     });
 
+    it("Escape closes only the Subtask Detail panel, leaving the drawer open with buffered draft edits intact", () => {
+      const onClose = vi.fn();
+      const onMemoChange = vi.fn();
+      const comboTask = makeTask({
+        id: "combo",
+        title: "build shelf",
+        memo: "initial note",
+        subtasks: [{ id: "s1", title: "measure wall", done: false }],
+      });
+      render(
+        <TaskDetailDrawer task={comboTask} {...noopHandlers} onClose={onClose} onMemoChange={onMemoChange} />,
+      );
+
+      // Buffer a draft edit before opening the panel — it must survive.
+      fireEvent.change(screen.getByPlaceholderText("Memo"), { target: { value: "draft edit" } });
+
+      fireEvent.click(screen.getByText("measure wall"));
+      expect(screen.getByTestId("subtask-detail-panel")).toBeTruthy();
+
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(screen.queryByTestId("subtask-detail-panel")).toBeNull();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onMemoChange).not.toHaveBeenCalled();
+      expect((screen.getByPlaceholderText("Memo") as HTMLTextAreaElement).value).toBe("draft edit");
+    });
+
     it("toggling a completed subtask un-completes it", () => {
       const onToggleSubtask = vi.fn();
       render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} onToggleSubtask={onToggleSubtask} />);

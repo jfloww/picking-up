@@ -7,7 +7,7 @@ from django.db.models import Max, Q
 from django.utils import timezone
 
 from .models import Task
-from .serializers import SUBTASK_TITLE_MAX_LENGTH
+from .serializers import SUBTASK_MEMO_MAX_LENGTH, SUBTASK_TITLE_MAX_LENGTH
 
 
 User = get_user_model()
@@ -214,8 +214,11 @@ def nest_task(
             "done": source.done,
             # source.memo is nullable (Task.memo); subtask memo is not — see
             # SubtaskSerializer.memo's comment for why "" is the "no memo"
-            # value at this layer, not None.
-            "memo": source.memo or "",
+            # value at this layer, not None. Truncated to match
+            # SubtaskSerializer.validate_memo's cap so this bypass of the
+            # serializer can't write a subtask longer than a normal write
+            # would ever allow.
+            "memo": (source.memo or "")[:SUBTASK_MEMO_MAX_LENGTH],
         },
     ]
     target.version += 1

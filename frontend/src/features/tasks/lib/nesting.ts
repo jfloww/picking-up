@@ -13,7 +13,7 @@ export function isRoutineTask(task: Task): boolean {
   return (task.repeatWeekdays?.length ?? 0) > 0 || task.repeatSourceId !== undefined;
 }
 
-// A Subtask can only hold a title and done state (types.ts) — a task with
+// A Subtask can hold a title, done state, and memo (types.ts) — a task with
 // its own subtasks, or one that's part of a repeat series (removing it has
 // side effects on the rest of the series, not just data loss), can't be
 // converted into a subtask at all.
@@ -33,7 +33,6 @@ export function nestBlockMessage(reason: NestBlockReason): string {
 // a task is converted, so the caller must confirm with the user first.
 export function lostFieldsFor(task: Task): string[] {
   const fields: string[] = [];
-  if (task.memo) fields.push("note");
   if (task.completedAt) fields.push("completion time");
   if (task.time) fields.push("time");
   if (task.durationMinutes) fields.push("duration");

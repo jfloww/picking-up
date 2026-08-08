@@ -89,6 +89,13 @@ export function SubtaskDetailPanel({
             }
             if (e.key === "Escape") {
               e.preventDefault();
+              // Stop this from bubbling to the drawer's document-level
+              // Escape handler too — that handler would (redundantly but
+              // harmlessly) also close this panel, since it's now the
+              // innermost layer in its Escape ladder. Stopping propagation
+              // keeps this local cancel-the-title-edit action fully
+              // predictable and independent of that outer handler.
+              e.stopPropagation();
               setTitle(subtask.title);
             }
           }}

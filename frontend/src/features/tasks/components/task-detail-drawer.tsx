@@ -138,8 +138,14 @@ export function TaskDetailDrawer({
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
-      // Back out of the delete confirmation first; a second Escape closes
-      // the drawer, same as if delete had never been clicked.
+      // Layered like a stack: the Subtask Detail panel is the most
+      // recently opened layer, so it backs out first. Next, back out of
+      // the delete confirmation. Only once both are closed does a further
+      // Escape close the whole drawer, discarding buffered draft edits.
+      if (openSubtaskId) {
+        setOpenSubtaskId(null);
+        return;
+      }
       if (confirmingDelete) {
         setConfirmingDelete(false);
         return;
@@ -148,7 +154,7 @@ export function TaskDetailDrawer({
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose, confirmingDelete]);
+  }, [onClose, confirmingDelete, openSubtaskId]);
 
   const handleDone = () => {
     if (draft.done !== task.done) onToggle();
