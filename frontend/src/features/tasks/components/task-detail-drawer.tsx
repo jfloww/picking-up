@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Trash2, X } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,6 +12,7 @@ import { PromoteUndoToast } from "./promote-undo-toast";
 import { SubtaskDetailPanel } from "./subtask-detail-panel";
 import { DONE_CHECKBOX_CLASS } from "./task-item";
 import { TaskDetailFields } from "./task-detail-fields";
+import { useFocusTrap, useRestoreFocusOnUnmount } from "./use-focus-trap";
 
 interface Draft {
   done: boolean;
@@ -122,10 +123,19 @@ export function TaskDetailDrawer({
     subtaskId: string;
   } | null>(null);
   const [openSubtaskId, setOpenSubtaskId] = useState<string | null>(null);
+  const asideRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setVisible(true);
   }, []);
+
+  // Bounds Tab-cycling to the whole drawer, except while the Subtask Detail
+  // panel is open — then it hands that boundary over to the panel's own
+  // trap, so the drawer's now-covered footer controls (Cancel/Done/Delete)
+  // fall out of the keyboard tab order instead of staying reachable behind
+  // the panel.
+  useFocusTrap(asideRef, !openSubtaskId);
+  useRestoreFocusOnUnmount(asideRef);
 
   useEffect(() => {
     setDraft(draftFromTask(task, bucketCategories));
@@ -209,8 +219,12 @@ export function TaskDetailDrawer({
 
   return (
     <aside
+      ref={asideRef}
       data-testid="task-detail-drawer"
+      role="dialog"
+      aria-modal="true"
       aria-label="Task details"
+      tabIndex={-1}
       className={cn(
         "fixed inset-y-0 right-0 z-50 flex w-[420px] max-w-full flex-col border-l border-border bg-card shadow-2xl transition-transform duration-200 ease-out",
         visible ? "translate-x-0" : "translate-x-full",

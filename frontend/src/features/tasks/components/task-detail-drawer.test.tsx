@@ -657,6 +657,49 @@ describe("TaskDetailDrawer", () => {
       expect((screen.getByPlaceholderText("Memo") as HTMLTextAreaElement).value).toBe("draft edit");
     });
 
+    it("opening the panel moves focus into it, and closing it restores focus to the row that opened it", () => {
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      const row = screen.getByText("buy wood");
+
+      row.focus();
+      fireEvent.click(row);
+      expect(document.activeElement).toBe(screen.getByLabelText("Subtask title"));
+
+      fireEvent.click(screen.getByLabelText("Close subtask detail"));
+      expect(screen.queryByTestId("subtask-detail-panel")).toBeNull();
+      expect(document.activeElement).toBe(row);
+    });
+
+    it("the drawer's trap covers the whole drawer again once the panel closes, not just its own now-unmounted boundary", () => {
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      fireEvent.click(screen.getByText("buy wood"));
+      fireEvent.click(screen.getByLabelText("Close subtask detail"));
+
+      const aside = screen.getByTestId("task-detail-drawer");
+      const focusable = Array.from(
+        aside.querySelectorAll<HTMLElement>("button, textarea, input, [tabindex]"),
+      );
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+
+      last.focus();
+      fireEvent.keyDown(last, { key: "Tab" });
+
+      expect(document.activeElement).toBe(first);
+    });
+
+    it("Tab cycling stays inside the panel while it is open, excluding the drawer's covered footer", () => {
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      fireEvent.click(screen.getByText("buy wood"));
+      const panel = screen.getByTestId("subtask-detail-panel");
+      const notes = screen.getByLabelText("Subtask notes");
+
+      notes.focus();
+      fireEvent.keyDown(notes, { key: "Tab" });
+
+      expect(panel.contains(document.activeElement)).toBe(true);
+    });
+
     it("toggling a completed subtask un-completes it", () => {
       const onToggleSubtask = vi.fn();
       render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} onToggleSubtask={onToggleSubtask} />);

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import type { Subtask } from "../types";
+import { useFocusTrap, useRestoreFocusOnUnmount } from "./use-focus-trap";
 
 // A single-line <input> clips a long title instead of showing all of it —
 // exactly the "sometimes it's too long to show" problem this panel exists
@@ -36,8 +37,18 @@ export function SubtaskDetailPanel({
   const [visible, setVisible] = useState(false);
   const [title, setTitle] = useState(subtask.title);
   const [memo, setMemo] = useState(subtask.memo ?? "");
+  const panelRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const memoRef = useRef<HTMLTextAreaElement>(null);
+
+  // Always the topmost layer while mounted, so its trap is unconditional —
+  // unlike TaskDetailDrawer's, which releases its own trap while this one
+  // is active. Mounting/unmounting this component (opening/closing the
+  // panel) is exactly when focus should move in and later be restored, so
+  // useRestoreFocusOnUnmount is tied to this component's own lifetime
+  // rather than a toggling prop.
+  useFocusTrap(panelRef, true);
+  useRestoreFocusOnUnmount(panelRef, titleRef);
 
   useEffect(() => {
     setVisible(true);
@@ -69,7 +80,12 @@ export function SubtaskDetailPanel({
 
   return (
     <div
+      ref={panelRef}
       data-testid="subtask-detail-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Subtask detail"
+      tabIndex={-1}
       className={cn(
         "absolute inset-x-0 bottom-0 z-10 flex max-h-[70%] flex-col rounded-t-xl border-t border-border bg-card shadow-[0_-8px_24px_rgba(0,0,0,0.25)] transition-transform duration-200 ease-out",
         visible ? "translate-y-0" : "translate-y-full",
