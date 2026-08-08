@@ -15,8 +15,20 @@ describe("SubtaskDetailPanel", () => {
         onMemoChange={() => {}}
       />,
     );
-    expect((screen.getByLabelText("Subtask title") as HTMLInputElement).value).toBe("buy wood");
+    expect((screen.getByLabelText("Subtask title") as HTMLTextAreaElement).value).toBe("buy wood");
     expect((screen.getByLabelText("Subtask notes") as HTMLTextAreaElement).value).toBe("oak, 2x4");
+  });
+
+  it("renders the title as a wrapping textarea, not a single-line input that clips long text", () => {
+    render(
+      <SubtaskDetailPanel
+        subtask={subtask}
+        onClose={() => {}}
+        onTitleChange={() => {}}
+        onMemoChange={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText("Subtask title").tagName).toBe("TEXTAREA");
   });
 
   it("commits a changed title via onTitleChange on blur", () => {
@@ -61,7 +73,7 @@ describe("SubtaskDetailPanel", () => {
         onMemoChange={() => {}}
       />,
     );
-    const input = screen.getByLabelText("Subtask title") as HTMLInputElement;
+    const input = screen.getByLabelText("Subtask title") as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "something else" } });
     fireEvent.keyDown(input, { key: "Escape" });
     expect(onTitleChange).not.toHaveBeenCalled();
@@ -136,7 +148,7 @@ describe("SubtaskDetailPanel", () => {
         onMemoChange={() => {}}
       />,
     );
-    expect((screen.getByLabelText("Subtask title") as HTMLInputElement).value).toBe("cut boards");
+    expect((screen.getByLabelText("Subtask title") as HTMLTextAreaElement).value).toBe("cut boards");
     expect((screen.getByLabelText("Subtask notes") as HTMLTextAreaElement).value).toBe("");
   });
 });

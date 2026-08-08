@@ -7,6 +7,16 @@ import { cn } from "@/lib/utils";
 
 import type { Subtask } from "../types";
 
+// A single-line <input> clips a long title instead of showing all of it —
+// exactly the "sometimes it's too long to show" problem this panel exists
+// to fix. Both the title and the notes field auto-grow with this same
+// technique so long text always wraps into view instead of scrolling.
+function autoGrow(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 // Rendered by TaskDetailDrawer as an absolutely-positioned sibling of its
 // own <footer> — this component owns none of that positioning or the
 // open/closed decision, only the sheet's own content and its slide-in.
@@ -26,6 +36,7 @@ export function SubtaskDetailPanel({
   const [visible, setVisible] = useState(false);
   const [title, setTitle] = useState(subtask.title);
   const [memo, setMemo] = useState(subtask.memo ?? "");
+  const titleRef = useRef<HTMLTextAreaElement>(null);
   const memoRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -39,11 +50,11 @@ export function SubtaskDetailPanel({
   }, [subtask.id]);
 
   useEffect(() => {
-    const el = memoRef.current;
-    if (el) {
-      el.style.height = "auto";
-      el.style.height = `${el.scrollHeight}px`;
-    }
+    autoGrow(titleRef.current);
+  }, [title]);
+
+  useEffect(() => {
+    autoGrow(memoRef.current);
   }, [memo]);
 
   const commitTitle = () => {
@@ -78,12 +89,16 @@ export function SubtaskDetailPanel({
         </button>
       </header>
       <div className="thin-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
-        <input
+        <textarea
+          ref={titleRef}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onBlur={commitTitle}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
+              // A title is a single logical line even once it wraps onto
+              // several visual ones — Enter commits it, same as the old
+              // single-line <input>, instead of inserting a newline.
               e.preventDefault();
               commitTitle();
             }
@@ -99,8 +114,9 @@ export function SubtaskDetailPanel({
               setTitle(subtask.title);
             }
           }}
+          rows={1}
           aria-label="Subtask title"
-          className="w-full rounded-md border border-transparent bg-transparent px-1 py-1 text-base font-semibold outline-none transition-colors duration-200 focus-visible:border-input focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 py-1 text-base font-semibold leading-snug outline-none transition-colors duration-200 focus-visible:border-input focus-visible:ring-2 focus-visible:ring-ring/50"
         />
         <textarea
           ref={memoRef}

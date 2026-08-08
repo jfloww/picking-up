@@ -605,7 +605,11 @@ describe("TaskDetailDrawer", () => {
     it("clicking the same subtask row again closes the panel", () => {
       render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
       fireEvent.click(screen.getByText("buy wood"));
-      fireEvent.click(screen.getByText("buy wood"));
+      // Once the panel is open, its title textarea also renders "buy wood"
+      // (React seeds a textarea's initial text-node content from `value`),
+      // so getByText would now match two elements — target the row's
+      // button specifically instead.
+      fireEvent.click(screen.getByRole("button", { name: "buy wood" }));
       expect(screen.queryByTestId("subtask-detail-panel")).toBeNull();
     });
 
@@ -614,7 +618,7 @@ describe("TaskDetailDrawer", () => {
       fireEvent.click(screen.getByText("buy wood"));
       fireEvent.click(screen.getByText("cut boards"));
       expect(screen.getAllByTestId("subtask-detail-panel")).toHaveLength(1);
-      expect((screen.getByLabelText("Subtask title") as HTMLInputElement).value).toBe("cut boards");
+      expect((screen.getByLabelText("Subtask title") as HTMLTextAreaElement).value).toBe("cut boards");
     });
 
     it("switching to a different task closes any open panel", () => {
