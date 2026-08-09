@@ -19,6 +19,7 @@ const noopHandlers = {
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
   onRemoveSubtask: (_id: string) => {},
+  onReorderSubtask: (_id: string, _insertBeforeId: string | null) => {},
   onEditSubtaskTitle: (_id: string, _title: string) => {},
   onEditSubtaskMemo: (_id: string, _memo: string) => {},
   onPromoteSubtask: (_subtaskId: string) => undefined,

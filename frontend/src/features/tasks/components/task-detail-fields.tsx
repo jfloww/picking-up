@@ -27,6 +27,7 @@ export function TaskDetailFields({
   onAddSubtask,
   onToggleSubtask,
   onRemoveSubtask,
+  onReorderSubtask,
   onOpenSubtask,
   onPromoteSubtask,
   bucketCategories = [],
@@ -50,6 +51,7 @@ export function TaskDetailFields({
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
+  onReorderSubtask?: (subtaskId: string, insertBeforeId: string | null) => void;
   onOpenSubtask?: (subtaskId: string) => void;
   onPromoteSubtask?: (subtaskId: string) => void;
   // Category *names* only — categories are resolved to ids by the caller
@@ -177,6 +179,7 @@ export function TaskDetailFields({
         onAdd={onAddSubtask}
         onToggle={onToggleSubtask}
         onRemove={onRemoveSubtask}
+        onReorder={onReorderSubtask}
         onOpenSubtask={onOpenSubtask}
         onPromote={onPromoteSubtask}
         drawer={drawer}

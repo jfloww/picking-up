@@ -1,19 +1,24 @@
 "use client";
 
-import { ArrowUpRight, Plus, X } from "lucide-react";
-import { useState } from "react";
+import { ArrowUpRight, GripVertical, Plus, X } from "lucide-react";
+import { useRef, useState } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
 import type { Subtask } from "../types";
 import { QuickAdd } from "./quick-add";
+import { useDragToReorder } from "./use-drag-to-reorder";
 import {
   prefersReducedMotion,
   SUBTASK_TRANSITION_DURATION_MS,
   useSubtaskTransitionClasses,
   type SubtaskRenderState,
 } from "./use-subtask-transition-classes";
+
+// Handle-bag type derived from the hook itself (not hand-duplicated) so it
+// can't drift if useDragToReorder's return shape ever changes.
+type ReorderHandlers = ReturnType<ReturnType<typeof useDragToReorder>["getDragHandlers"]>;
 
 // Cardless, ~40px row: checkbox, click-to-edit title, and a delete control
 // that only shows on hover/focus/while editing — never a permanent "×" per
@@ -31,6 +36,10 @@ function DrawerSubtaskRow({
   onOpen,
   onPromote,
   animationClass,
+  reorderable = false,
+  getReorderHandlers,
+  itemRef,
+  showDropIndicatorAbove = false,
 }: {
   subtask: Subtask;
   onToggle: (subtaskId: string) => void;
@@ -38,6 +47,10 @@ function DrawerSubtaskRow({
   onOpen?: (subtaskId: string) => void;
   onPromote?: (subtaskId: string) => void;
   animationClass?: string;
+  reorderable?: boolean;
+  getReorderHandlers?: (id: string, title: string) => ReorderHandlers;
+  itemRef?: (el: HTMLLIElement | null) => void;
+  showDropIndicatorAbove?: boolean;
 }) {
   const [deleting, setDeleting] = useState(false);
 
@@ -52,11 +65,27 @@ function DrawerSubtaskRow({
 
   return (
     <li
+      ref={itemRef}
       className={cn(
-        "group flex h-10 items-center gap-2.5 rounded-md px-1.5 transition-colors duration-200 hover:bg-muted/40 focus-within:bg-muted/40",
+        // border-t-2 border-transparent is the baseline (not just added
+        // when active) so toggling the drop indicator never changes the
+        // row's box height — box-sizing: border-box (Tailwind's preflight)
+        // means this border eats into the existing h-10 box, not adds to it.
+        "group flex h-10 items-center gap-2.5 rounded-md border-t-2 border-transparent px-1.5 transition-colors duration-200 hover:bg-muted/40 focus-within:bg-muted/40",
+        showDropIndicatorAbove && "border-brand",
         deleting ? "animate-subtask-exit" : animationClass,
       )}
     >
+      {reorderable && getReorderHandlers && (
+        <button
+          type="button"
+          aria-label={`Reorder ${subtask.title}`}
+          className="flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-subtle outline-none transition-colors duration-200 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 active:cursor-grabbing"
+          {...getReorderHandlers(subtask.id, subtask.title)}
+        >
+          <GripVertical className="size-3.5" />
+        </button>
+      )}
       <Checkbox
         checked={subtask.done}
         onCheckedChange={() => onToggle(subtask.id)}
@@ -103,6 +132,7 @@ function DrawerSubtaskList({
   onRemove,
   onOpenSubtask,
   onPromote,
+  onReorder,
 }: {
   subtasks: Subtask[];
   renderStates: Map<string, SubtaskRenderState>;
@@ -111,6 +141,7 @@ function DrawerSubtaskList({
   onRemove: (subtaskId: string) => void;
   onOpenSubtask?: (subtaskId: string) => void;
   onPromote?: (subtaskId: string) => void;
+  onReorder?: (subtaskId: string, insertBeforeId: string | null) => void;
 }) {
   const withRenderState = subtasks.map((s) => ({
     subtask: s,
@@ -123,22 +154,62 @@ function DrawerSubtaskList({
   const active = withRenderState.filter((x) => !(x.state?.done ?? x.subtask.done));
   const completed = withRenderState.filter((x) => x.state?.done ?? x.subtask.done);
 
+  const reorderContainerRef = useRef<HTMLDivElement | null>(null);
+  const reorderItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Only active subtasks are reorderable, matching the existing top-level
+  // task reorder's scope (day-agenda.tsx's allDayToDo excludes done tasks
+  // the same way) — dragging a completed subtask back into order isn't
+  // supported here.
+  const { dragState: reorderDragState, getDragHandlers: getReorderHandlers } = useDragToReorder({
+    containerRef: reorderContainerRef,
+    itemRefs: reorderItemRefs,
+    orderedIds: active.map(({ subtask: s }) => s.id),
+    onReorder: (id, insertBeforeId) => onReorder?.(id, insertBeforeId),
+  });
+
   return (
     <div className="space-y-1">
       {(active.length > 0 || completed.length > 0) && (
-        <ul>
-          {[...active, ...completed].map(({ subtask: s, state }) => (
-            <DrawerSubtaskRow
-              key={s.id}
-              subtask={s}
-              onToggle={onToggle}
-              onRemove={onRemove}
-              onOpen={onOpenSubtask}
-              onPromote={onPromote}
-              animationClass={state?.enterAnimationClass ?? state?.sectionAnimationClass}
-            />
-          ))}
-        </ul>
+        <div ref={reorderContainerRef} data-testid="drawer-subtask-list">
+          <ul>
+            {[...active, ...completed].map(({ subtask: s, state }) => {
+              const isActive = !(state?.done ?? s.done);
+              const reorderable = !!onReorder && isActive;
+              return (
+                <DrawerSubtaskRow
+                  key={s.id}
+                  subtask={s}
+                  onToggle={onToggle}
+                  onRemove={onRemove}
+                  onOpen={onOpenSubtask}
+                  onPromote={onPromote}
+                  animationClass={state?.enterAnimationClass ?? state?.sectionAnimationClass}
+                  reorderable={reorderable}
+                  getReorderHandlers={reorderable ? getReorderHandlers : undefined}
+                  itemRef={
+                    reorderable
+                      ? (el) => {
+                          // itemRefs is typed for HTMLDivElement (matching
+                          // useDragToReorder's interface), but subtask rows
+                          // are <li>; the hook only calls
+                          // getBoundingClientRect() on it, which every
+                          // HTMLElement supports, so this cast is safe (same
+                          // pattern as scope-tasks.tsx's task rows).
+                          reorderItemRefs.current[s.id] = el as unknown as HTMLDivElement | null;
+                        }
+                      : undefined
+                  }
+                  showDropIndicatorAbove={
+                    reorderable &&
+                    !!reorderDragState?.insideList &&
+                    reorderDragState.insertBeforeId === s.id
+                  }
+                />
+              );
+            })}
+          </ul>
+        </div>
       )}
       <div className="group flex h-10 items-center gap-2.5 rounded-md px-1.5 text-foreground/70 transition-colors duration-200 hover:bg-muted/40 focus-within:bg-muted/40">
         <Plus
@@ -214,6 +285,7 @@ export function SubtaskList({
   onRemove,
   onOpenSubtask,
   onPromote,
+  onReorder,
   drawer = false,
 }: {
   subtasks: Subtask[];
@@ -222,6 +294,7 @@ export function SubtaskList({
   onRemove: (subtaskId: string) => void;
   onOpenSubtask?: (subtaskId: string) => void;
   onPromote?: (subtaskId: string) => void;
+  onReorder?: (subtaskId: string, insertBeforeId: string | null) => void;
   drawer?: boolean;
 }) {
   // Called once here (not separately in DrawerSubtaskList) so drawer mode
@@ -239,6 +312,7 @@ export function SubtaskList({
         onRemove={onRemove}
         onOpenSubtask={onOpenSubtask}
         onPromote={onPromote}
+        onReorder={onReorder}
       />
     );
   }

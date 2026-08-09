@@ -31,6 +31,7 @@ interface TaskItemActions {
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
+  reorderSubtask: (id: string, subtaskId: string, insertBeforeId: string | null) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
   editSubtaskMemo: (id: string, subtaskId: string, memo: string) => void;
   promoteSubtaskToTask: (id: string, subtaskId: string) => Task | undefined;
@@ -83,6 +84,8 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onAddSubtask: (title: string) => actions.addSubtask(id, title),
     onToggleSubtask: (subtaskId: string) => actions.toggleSubtask(id, subtaskId),
     onRemoveSubtask: (subtaskId: string) => actions.removeSubtask(id, subtaskId),
+    onReorderSubtask: (subtaskId: string, insertBeforeId: string | null) =>
+      actions.reorderSubtask(id, subtaskId, insertBeforeId),
     onEditSubtaskTitle: (subtaskId: string, title: string) =>
       actions.editSubtaskTitle(id, subtaskId, title),
     onEditSubtaskMemo: (subtaskId: string, memo: string) => actions.editSubtaskMemo(id, subtaskId, memo),

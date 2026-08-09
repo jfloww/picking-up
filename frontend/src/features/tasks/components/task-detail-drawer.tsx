@@ -66,6 +66,7 @@ export function TaskDetailDrawer({
   onAddSubtask,
   onToggleSubtask,
   onRemoveSubtask,
+  onReorderSubtask,
   onEditSubtaskTitle,
   onEditSubtaskMemo,
   onPromoteSubtask,
@@ -89,6 +90,7 @@ export function TaskDetailDrawer({
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onRemoveSubtask: (subtaskId: string) => void;
+  onReorderSubtask: (subtaskId: string, insertBeforeId: string | null) => void;
   onEditSubtaskTitle: (subtaskId: string, title: string) => void;
   onEditSubtaskMemo: (subtaskId: string, memo: string) => void;
   onPromoteSubtask: (subtaskId: string) => Task | undefined;
@@ -282,6 +284,7 @@ export function TaskDetailDrawer({
           onAddSubtask={onAddSubtask}
           onToggleSubtask={onToggleSubtask}
           onRemoveSubtask={onRemoveSubtask}
+          onReorderSubtask={onReorderSubtask}
           onOpenSubtask={(subtaskId) =>
             setOpenSubtaskId((current) => (current === subtaskId ? null : subtaskId))
           }
