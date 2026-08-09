@@ -717,6 +717,16 @@ describe("TaskDetailDrawer", () => {
       await waitFor(() => expect(onRemoveSubtask).toHaveBeenCalledWith("s2"));
     });
 
+    it("threads onReorderSubtask through TaskDetailFields to SubtaskList's drag handle", () => {
+      // onReorderSubtask/onReorder are both optional props (correctly, since
+      // the plain non-drawer SubtaskList variant never provides one), so
+      // deleting either forwarding line in task-detail-fields.tsx compiles
+      // cleanly. This proves the prop actually reaches the rendered drag
+      // handle through both hops (final-review finding).
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      expect(screen.getByLabelText("Reorder buy wood")).toBeTruthy();
+    });
+
     it("adds several subtasks in a row with Enter, without losing focus or requiring a re-click", () => {
       const onAddSubtask = vi.fn();
       render(<TaskDetailDrawer task={task} {...noopHandlers} onAddSubtask={onAddSubtask} />);
