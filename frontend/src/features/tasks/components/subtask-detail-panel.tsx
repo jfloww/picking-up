@@ -91,7 +91,7 @@ export function SubtaskDetailPanel({
         visible ? "translate-y-0" : "translate-y-full",
       )}
     >
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-5">
+      <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-border px-4 sm:h-12 sm:min-h-0 sm:px-5">
         <span className="text-[11px] font-semibold tracking-[0.14em] text-subtle uppercase">
           Subtask Detail
         </span>
@@ -99,7 +99,7 @@ export function SubtaskDetailPanel({
           type="button"
           onClick={onClose}
           aria-label="Close subtask detail"
-          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-muted hover:text-foreground"
+          className="flex size-11 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-muted hover:text-foreground sm:size-7"
         >
           <X className="size-4" />
         </button>

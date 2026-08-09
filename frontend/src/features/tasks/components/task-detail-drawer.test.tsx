@@ -28,6 +28,15 @@ const noopHandlers = {
 };
 
 describe("TaskDetailDrawer", () => {
+  it("renders as a full-screen mobile layer and keeps the desktop side-sheet breakpoint", () => {
+    render(<TaskDetailDrawer task={makeTask({ title: "mobile task" })} {...noopHandlers} />);
+    const drawer = screen.getByTestId("task-detail-drawer");
+
+    expect(drawer.className).toContain("inset-0");
+    expect(drawer.className).toContain("w-full");
+    expect(drawer.className).toContain("sm:w-[420px]");
+  });
+
   const task = makeTask({ id: "a", title: "write tests", memo: "with care" });
 
   it("shows the task's checkbox, title, and memo", () => {
@@ -336,6 +345,37 @@ describe("TaskDetailDrawer", () => {
       fireEvent.change(screen.getByLabelText("Due date"), { target: { value: "2026-07-31" } });
       fireEvent.click(screen.getByText("Cancel"));
       expect(onDueDateChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("scheduled date editing (non-drag fallback)", () => {
+    it("buffers a move and commits it only when Done is pressed", () => {
+      const onScheduledDateChange = vi.fn();
+      render(
+        <TaskDetailDrawer
+          task={makeTask({ scope: { kind: "day", date: "2026-07-16" } })}
+          {...noopHandlers}
+          onScheduledDateChange={onScheduledDateChange}
+        />,
+      );
+
+      fireEvent.change(screen.getByLabelText("Move to date"), {
+        target: { value: "2026-07-18" },
+      });
+      expect(onScheduledDateChange).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByText("Done"));
+      expect(onScheduledDateChange).toHaveBeenCalledWith("2026-07-18");
+    });
+
+    it("does not show the move control for non-day scopes that cannot be rescheduled", () => {
+      render(
+        <TaskDetailDrawer
+          task={makeTask({ scope: { kind: "month", month: "2026-07" } })}
+          {...noopHandlers}
+        />,
+      );
+      expect(screen.queryByLabelText("Move to date")).toBeNull();
     });
   });
 

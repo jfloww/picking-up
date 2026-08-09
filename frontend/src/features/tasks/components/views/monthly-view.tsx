@@ -8,6 +8,7 @@ import { monthKeyOf, shortDateLabel, todayKey, upcomingRepeatDates } from "../..
 import { monthStats, resolveRepeatWeekdays } from "../../lib/times";
 import { useTasks } from "../../store";
 import { DayAgendaDrawer } from "../day-agenda-drawer";
+import { QuickAdd } from "../quick-add";
 import { TaskDetailDrawer } from "../task-detail-drawer";
 import { taskItemHandlers } from "../task-item";
 import { MonthGrid } from "./month-grid";
@@ -24,6 +25,7 @@ export function MonthlyView({ anchor, onDrillDown }: CalendarViewProps) {
   const today = todayKey();
   const { done, total } = monthStats(tasks, monthKey);
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const mobileQuickAddDate = monthKeyOf(today) === monthKey ? today : `${monthKey}-01`;
 
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const selectedDate =
@@ -49,11 +51,11 @@ export function MonthlyView({ anchor, onDrillDown }: CalendarViewProps) {
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 flex-col gap-2 overflow-y-auto transition-[padding-right] duration-200 ease-out",
-        overlay && "pr-[400px]",
+        "flex h-full min-h-0 flex-col gap-2 overflow-hidden transition-[padding-right] duration-200 ease-out",
+        overlay && "sm:pr-[400px]",
       )}
     >
-      <div className="shrink-0 rounded-md bg-muted/40 p-3">
+      <div className="mx-4 shrink-0 rounded-xl bg-muted/50 p-3 sm:mx-0 sm:rounded-md sm:bg-muted/40">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">
           This Month
         </div>
@@ -68,12 +70,27 @@ export function MonthlyView({ anchor, onDrillDown }: CalendarViewProps) {
         </div>
       </div>
 
-      <div className="flex-1">
+      <div className="min-h-0 flex-1">
         <MonthGrid
           monthKey={monthKey}
           selectedDate={selectedDate}
           onSelectDate={(date) => setOverlay({ type: "day", date })}
           onDrillDown={onDrillDown}
+        />
+      </div>
+
+      <div className="shrink-0 border-t border-border bg-card px-4 py-2 sm:hidden">
+        <QuickAdd
+          onAdd={(title) => actions.addTask(title, { kind: "day", date: mobileQuickAddDate })}
+          onAddAndOpen={(title) => {
+            const created = actions.addTask(title, { kind: "day", date: mobileQuickAddDate });
+            if (created) {
+              setOverlay({ type: "task", taskId: created.id, fromDate: mobileQuickAddDate });
+            }
+          }}
+          placeholder={`New task for ${shortDateLabel(mobileQuickAddDate, today)}`}
+          ariaLabel={`Add task for ${shortDateLabel(mobileQuickAddDate, today)}`}
+          variant="panel-footer"
         />
       </div>
 

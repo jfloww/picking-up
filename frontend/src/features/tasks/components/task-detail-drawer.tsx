@@ -24,6 +24,7 @@ interface Draft {
   repeatWeekdays: number[];
   detached: boolean;
   dueDate?: string;
+  scheduledDate?: string;
   category?: string;
 }
 
@@ -36,6 +37,12 @@ function categoryNameFor(categoryId: string, categories: Category[]): string | u
 }
 
 function draftFromTask(task: Task, categories: Category[]): Draft {
+  const scheduledDate =
+    task.scope.kind === "day"
+      ? task.scope.date
+      : task.scope.kind === "week" && task.rolledFrom?.kind === "day"
+        ? task.rolledFrom.date
+        : undefined;
   return {
     done: task.done,
     memo: task.memo ?? "",
@@ -46,6 +53,7 @@ function draftFromTask(task: Task, categories: Category[]): Draft {
     repeatWeekdays: task.repeatWeekdays ?? [],
     detached: false,
     dueDate: task.dueDate,
+    scheduledDate,
     category: task.scope.kind === "bucket" ? categoryNameFor(task.scope.categoryId, categories) : undefined,
   };
 }
@@ -62,6 +70,7 @@ export function TaskDetailDrawer({
   onDurationChange,
   onBackgroundChange,
   onDueDateChange,
+  onScheduledDateChange,
   onDelete,
   onAddSubtask,
   onToggleSubtask,
@@ -86,6 +95,7 @@ export function TaskDetailDrawer({
   onDurationChange: (durationMinutes?: number) => void;
   onBackgroundChange: (background: boolean) => void;
   onDueDateChange: (dueDate?: string) => void;
+  onScheduledDateChange?: (date: string) => void;
   onDelete: () => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
@@ -176,6 +186,18 @@ export function TaskDetailDrawer({
     if (draft.priority !== !!task.priority) onPriorityChange(draft.priority);
     if (draft.background !== !!task.background) onBackgroundChange(draft.background);
     if (draft.dueDate !== task.dueDate) onDueDateChange(draft.dueDate);
+    const originalScheduledDate =
+      task.scope.kind === "day"
+        ? task.scope.date
+        : task.scope.kind === "week" && task.rolledFrom?.kind === "day"
+          ? task.rolledFrom.date
+          : undefined;
+    if (
+      draft.scheduledDate &&
+      draft.scheduledDate !== originalScheduledDate
+    ) {
+      onScheduledDateChange?.(draft.scheduledDate);
+    }
     if (
       task.scope.kind === "bucket" &&
       draft.category !== undefined &&
@@ -200,7 +222,7 @@ export function TaskDetailDrawer({
     if (created) setPromoteToast({ title: created.title, taskId: created.id, subtaskId });
   }
 
-  const { detached, category: draftCategory, ...draftFields } = draft;
+  const { detached, category: draftCategory, scheduledDate, ...draftFields } = draft;
   // The task's scope (and its categoryId) never changes here — a category
   // edit is applied via onCategoryChange on Done, like every other field,
   // not by mutating scope in this preview object. draftCategory carries the
@@ -228,11 +250,11 @@ export function TaskDetailDrawer({
       aria-label="Task details"
       tabIndex={-1}
       className={cn(
-        "fixed inset-y-0 right-0 z-50 flex w-[420px] max-w-full flex-col border-l border-border bg-card shadow-2xl transition-transform duration-200 ease-out",
+        "fixed inset-0 z-50 flex w-full flex-col bg-card shadow-2xl transition-transform duration-200 ease-out sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[420px] sm:max-w-full sm:border-l sm:border-border",
         visible ? "translate-x-0" : "translate-x-full",
       )}
     >
-      <header className="flex h-[72px] shrink-0 items-center justify-between border-b border-border px-7">
+      <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-border px-4 pt-[env(safe-area-inset-top)] sm:h-[72px] sm:px-7 sm:pt-0">
         <span className="text-[11px] font-semibold tracking-[0.16em] text-subtle uppercase">
           Task Details
         </span>
@@ -240,24 +262,24 @@ export function TaskDetailDrawer({
           type="button"
           onClick={onClose}
           aria-label="Close details"
-          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-muted hover:text-foreground"
+          className="flex size-11 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-muted hover:text-foreground sm:size-8"
         >
           <X className="size-5" />
         </button>
       </header>
 
-      <div className="thin-scrollbar min-h-0 flex-1 space-y-7 overflow-y-auto p-8">
+      <div className="thin-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto p-4 max-sm:[&_input]:text-base max-sm:[&_textarea]:text-base sm:space-y-7 sm:p-8">
         <div className="flex items-start gap-3" data-testid="task-detail-header">
           <Checkbox
             checked={draft.done}
             onCheckedChange={() => setDraft((d) => ({ ...d, done: !d.done }))}
             aria-label={`Toggle ${task.title}`}
-            className={cn("mt-1 size-[18px] border-subtle", DONE_CHECKBOX_CLASS)}
+            className={cn("mt-1 size-6 border-subtle sm:size-[18px]", DONE_CHECKBOX_CLASS)}
           />
           <div className="min-w-0 flex-1 space-y-1">
             <h2
               className={cn(
-                "text-[22px] leading-tight font-bold tracking-tight",
+                "text-xl leading-tight font-bold tracking-tight sm:text-[22px]",
                 draft.done && "text-muted-foreground line-through",
               )}
             >
@@ -268,6 +290,21 @@ export function TaskDetailDrawer({
             )}
           </div>
         </div>
+
+        {scheduledDate && (
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium text-subtle">Move to date</span>
+            <input
+              type="date"
+              value={scheduledDate}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, scheduledDate: event.target.value }))
+              }
+              aria-label="Move to date"
+              className="min-h-11 w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-base outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring/50 sm:min-h-0 sm:text-sm"
+            />
+          </label>
+        )}
 
         <TaskDetailFields
           task={draftTask}
@@ -298,20 +335,20 @@ export function TaskDetailDrawer({
         />
       </div>
 
-      <footer className="flex shrink-0 items-center gap-3 border-t border-border bg-background/20 px-8 py-6">
+      <footer className="flex shrink-0 items-center gap-3 border-t border-border bg-card px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:bg-background/20 sm:px-8 sm:py-6">
         {confirmingDelete ? (
           <>
             <button
               type="button"
               onClick={() => setConfirmingDelete(false)}
-              className="h-10 flex-1 rounded-lg border border-border bg-transparent px-4 text-sm font-medium text-subtle transition-colors duration-200 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="h-11 flex-1 rounded-lg border border-border bg-transparent px-4 text-sm font-medium text-subtle transition-colors duration-200 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:h-10"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={onDelete}
-              className="h-10 flex-1 rounded-lg border border-destructive/40 bg-destructive/10 px-4 text-sm font-medium text-destructive transition-colors duration-200 hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/50"
+              className="h-11 flex-1 rounded-lg border border-destructive/40 bg-destructive/10 px-4 text-sm font-medium text-destructive transition-colors duration-200 hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/50 sm:h-10"
             >
               Confirm delete
             </button>
@@ -321,14 +358,14 @@ export function TaskDetailDrawer({
             <button
               type="button"
               onClick={onClose}
-              className="h-10 flex-1 rounded-lg border border-border bg-transparent px-4 text-sm font-medium text-subtle transition-colors duration-200 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="h-11 flex-1 rounded-lg border border-border bg-transparent px-4 text-sm font-medium text-subtle transition-colors duration-200 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:h-10"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleDone}
-              className="h-10 flex-1 rounded-lg border border-transparent bg-brand px-4 text-sm font-medium text-primary-foreground transition-colors duration-200 hover:bg-brand/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="h-11 flex-1 rounded-lg border border-transparent bg-brand px-4 text-sm font-medium text-primary-foreground transition-colors duration-200 hover:bg-brand/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:h-10"
             >
               Done
             </button>
@@ -336,7 +373,7 @@ export function TaskDetailDrawer({
               type="button"
               onClick={() => setConfirmingDelete(true)}
               aria-label="Delete task"
-              className="flex size-10 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/50 focus-visible:bg-destructive/10 focus-visible:text-destructive"
+              className="flex size-11 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/50 sm:size-10"
             >
               <Trash2 className="size-4" />
               <span className="sr-only">Delete</span>

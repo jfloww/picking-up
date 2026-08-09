@@ -157,6 +157,36 @@ describe('TaskItem size="week"', () => {
 });
 
 describe("taskItemHandlers", () => {
+  it("wires the detail drawer's scheduled-date fallback to rescheduleTaskToDay", () => {
+    const rescheduleTaskToDay = vi.fn();
+    const handlers = taskItemHandlers("parent-id", {
+      toggleTask: () => {},
+      setMemo: () => {},
+      setTime: () => {},
+      setRepeatWeekdays: () => {},
+      detachFromRoutine: () => {},
+      rescheduleTaskToDay,
+      setPriority: () => {},
+      setDuration: () => {},
+      setBackground: () => {},
+      setDueDate: () => {},
+      removeTask: () => {},
+      addSubtask: () => {},
+      toggleSubtask: () => {},
+      removeSubtask: () => {},
+      reorderSubtask: () => {},
+      editSubtaskTitle: () => {},
+      editSubtaskMemo: () => {},
+      promoteSubtaskToTask: () => undefined,
+      convertTaskToSubtask: () => {},
+      setCategory: () => {},
+      createCategory: async () => undefined,
+    });
+
+    handlers.onScheduledDateChange?.("2026-07-18");
+    expect(rescheduleTaskToDay).toHaveBeenCalledWith("parent-id", "2026-07-18");
+  });
+
   it("undoing a promotion confirms data loss so it never re-shows the nest confirmation dialog", () => {
     // PR#52 review finding: this used to call convertTaskToSubtask with no
     // third argument, defaulting confirmDataLoss to false. That silently

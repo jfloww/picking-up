@@ -29,6 +29,7 @@ type GetDragHandlers = (
 export function ScopeTasks({
   scope,
   quickAdd = false,
+  quickAddClassName,
   compact = false,
   onSelectTask,
   highlightOverdue = false,
@@ -40,6 +41,7 @@ export function ScopeTasks({
 }: {
   scope: Scope;
   quickAdd?: boolean;
+  quickAddClassName?: string;
   compact?: boolean;
   onSelectTask?: (id: string) => void;
   highlightOverdue?: boolean;
@@ -154,7 +156,7 @@ export function ScopeTasks({
                       }
                     : undefined
                 }
-                className="flex items-stretch gap-1.5"
+                className="flex min-h-11 items-stretch gap-1.5 sm:min-h-0"
               >
                 <button
                   type="button"
@@ -163,7 +165,7 @@ export function ScopeTasks({
                   // items-stretch above, so a two-line (metadata + title) card
                   // gets a taller handle spanning both lines, not just the
                   // first one.
-                  className="flex w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-subtle hover:bg-muted/60 hover:text-foreground active:cursor-grabbing"
+                  className="flex w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded text-subtle hover:bg-muted/60 hover:text-foreground active:cursor-grabbing sm:w-5"
                   {...getDragHandlers(t.id, t.title, dayDate!, !!t.time)}
                 >
                   <GripVertical className="size-3.5" />
@@ -175,7 +177,11 @@ export function ScopeTasks({
         })}
         {showIndicator && indicatorBeforeId === null && indicator}
       </ul>
-      {quickAdd && <QuickAdd onAdd={(title) => addTask(title, scope)} />}
+      {quickAdd && (
+        <div className={quickAddClassName}>
+          <QuickAdd onAdd={(title) => addTask(title, scope)} />
+        </div>
+      )}
     </div>
   );
 }

@@ -46,7 +46,7 @@ export function TaskRepeatPicker({
             className={cn(
               "flex items-center justify-center rounded-md font-medium transition-colors",
               drawer
-                ? "size-8 border border-transparent text-xs duration-200 focus-visible:ring-2 focus-visible:ring-ring/50"
+                ? "size-10 border border-transparent text-xs duration-200 focus-visible:ring-2 focus-visible:ring-ring/50 sm:size-8"
                 : "size-6 text-[10px]",
               active
                 ? drawer

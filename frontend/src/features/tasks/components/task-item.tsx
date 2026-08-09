@@ -23,6 +23,7 @@ interface TaskItemActions {
   setTime: (id: string, time: string | undefined) => void;
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
   detachFromRoutine: (id: string, weekdays?: number[]) => void;
+  rescheduleTaskToDay?: (id: string, date: string) => void;
   setPriority: (id: string, priority: boolean) => void;
   setDuration: (id: string, durationMinutes: number | undefined) => void;
   setBackground: (id: string, background: boolean) => void;
@@ -76,6 +77,9 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onTimeChange: (time?: string) => actions.setTime(id, time),
     onRepeatWeekdaysChange: (weekdays: number[]) => actions.setRepeatWeekdays(id, weekdays),
     onDetachFromRoutine: (weekdays?: number[]) => actions.detachFromRoutine(id, weekdays),
+    onScheduledDateChange: actions.rescheduleTaskToDay
+      ? (date: string) => actions.rescheduleTaskToDay?.(id, date)
+      : undefined,
     onPriorityChange: (priority: boolean) => actions.setPriority(id, priority),
     onDurationChange: (durationMinutes?: number) => actions.setDuration(id, durationMinutes),
     onBackgroundChange: (background: boolean) => actions.setBackground(id, background),
@@ -227,7 +231,7 @@ export function TaskItem({
       <Root>
         <div
           className={cn(
-            "rounded-lg bg-muted px-2 py-1.5",
+            "rounded-lg bg-muted px-3 py-2.5 sm:px-2 sm:py-1.5",
             task.done && "opacity-55",
             highlight === "overdue" &&
               "border-l-2 border-destructive bg-destructive/10 pl-1.5 pr-2",
@@ -242,7 +246,7 @@ export function TaskItem({
                   checked={task.done}
                   onCheckedChange={onToggle}
                   aria-label={`Toggle ${task.title}`}
-                  className={cn("size-[13px] border-subtle", DONE_CHECKBOX_CLASS)}
+                  className={cn("size-5 border-subtle sm:size-[13px]", DONE_CHECKBOX_CLASS)}
                 />
               </span>
               {repeatLabel && (
@@ -270,14 +274,14 @@ export function TaskItem({
                   checked={task.done}
                   onCheckedChange={onToggle}
                   aria-label={`Toggle ${task.title}`}
-                  className={cn("size-[13px] border-subtle", DONE_CHECKBOX_CLASS)}
+                  className={cn("size-5 border-subtle sm:size-[13px]", DONE_CHECKBOX_CLASS)}
                 />
               </span>
               <button
                 type="button"
                 onClick={selectOrToggle}
                 className={cn(
-                  "min-w-0 flex-1 truncate text-left text-[12.5px] leading-[1.35]",
+                  "min-w-0 flex-1 truncate text-left text-[15px] leading-5 sm:text-[12.5px] sm:leading-[1.35]",
                   task.done && "text-muted-foreground line-through",
                 )}
               >
@@ -290,7 +294,7 @@ export function TaskItem({
               type="button"
               onClick={selectOrToggle}
               className={cn(
-                "mt-1 block w-full truncate text-left text-[12.5px] leading-[1.35]",
+                "mt-1 block min-h-6 w-full truncate text-left text-[15px] leading-5 sm:min-h-0 sm:text-[12.5px] sm:leading-[1.35]",
                 task.done && "text-muted-foreground line-through",
               )}
             >
@@ -311,7 +315,7 @@ export function TaskItem({
           large &&
             "group min-h-16 cursor-pointer gap-4 rounded-xl bg-muted px-4 py-2.5 ring-1 ring-border transition-colors hover:bg-accent hover:ring-brand/30",
           large && !task.time && !task.done && "min-h-[52px]",
-          large && task.done && "min-h-[52px] bg-transparent opacity-50 ring-border/60",
+          large && task.done && "min-h-[52px] bg-transparent ring-border/60",
           !large && "py-1.5",
           highlight === "overdue" &&
             (large

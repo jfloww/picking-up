@@ -32,6 +32,23 @@ describe("WeeklyView", () => {
     expect(screen.getAllByLabelText(/^Go to 2026-07-1[2-8]$/)).toHaveLength(7);
   });
 
+  it("stacks the mobile week into one column and scopes its persistent quick add to the selected day", async () => {
+    renderView();
+    await waitFor(() => expect(screen.getByLabelText("Go to 2026-07-14")).toBeTruthy());
+
+    expect(screen.getByTestId("day-column-2026-07-14").parentElement?.className).toContain(
+      "grid-cols-1",
+    );
+    expect(screen.getByTestId("day-column-2026-07-14").parentElement?.className).toContain(
+      "auto-rows-max",
+    );
+    expect(screen.getByTestId("day-column-2026-07-14").parentElement?.className).toContain(
+      "sm:auto-rows-auto",
+    );
+    fireEvent.click(screen.getByLabelText("Go to 2026-07-14"));
+    expect(screen.getByLabelText("Add task for Tue Jul 14")).toBeTruthy();
+  });
+
   it("shows the hero's done/total count, 0 when nothing is done", async () => {
     const a = makeTask({ title: "a", scope: { kind: "day", date: "2026-07-14" } });
     renderView(vi.fn(), [a]);

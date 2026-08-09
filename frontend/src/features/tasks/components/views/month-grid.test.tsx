@@ -126,5 +126,12 @@ describe("MonthGrid", () => {
       fireEvent.click(mobileGrid().getByLabelText("Open 2026-07-14"));
       expect(onSelectDate).toHaveBeenCalledWith("2026-07-14");
     });
+
+    it("uses touch-sized date rows with weekday labels", async () => {
+      renderGrid();
+      await waitFor(() => expect(mobileGrid().getByLabelText("Open 2026-07-14")).toBeTruthy());
+      expect(mobileGrid().getByLabelText("Open 2026-07-14").className).toContain("min-h-14");
+      expect(mobileGrid().getAllByText("Tu").length).toBeGreaterThan(0);
+    });
   });
 });

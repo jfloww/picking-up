@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ import {
 import { dayTasksForWeek, resolveRepeatWeekdays, weekStats } from "../../lib/times";
 import { useTasks } from "../../store";
 import type { ViewKind } from "../view-switcher";
+import { QuickAdd } from "../quick-add";
 import { ScopeTasks } from "../scope-tasks";
 import { TaskDetailDrawer } from "../task-detail-drawer";
 import { taskItemHandlers } from "../task-item";
@@ -29,7 +30,7 @@ export interface CalendarViewProps {
 
 const UPCOMING_REPEAT_COUNT = 3;
 
-export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
+export function WeeklyView({ anchor, onAnchorChange, onDrillDown }: CalendarViewProps) {
   const actions = useTasks();
   const { tasks } = actions;
   const weekStart = weekStartOf(anchor);
@@ -37,6 +38,9 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
   const today = todayKey();
   const { done, total } = weekStats(tasks, weekStart);
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const [mobileQuickAddDate, setMobileQuickAddDate] = useState(anchor);
+
+  useEffect(() => setMobileQuickAddDate(anchor), [anchor]);
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
@@ -103,10 +107,10 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
       data-testid="weekly-view"
       className={cn(
         "flex h-full min-h-0 flex-col gap-2 transition-[padding-right] duration-200 ease-out",
-        selectedTask && "pr-[400px]",
+        selectedTask && "sm:pr-[400px]",
       )}
     >
-      <div className="shrink-0 rounded-md bg-muted/40 p-3">
+      <div className="mx-4 shrink-0 rounded-xl bg-muted/50 p-3 sm:mx-0 sm:rounded-md sm:bg-muted/40">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">
           This Week
         </div>
@@ -130,7 +134,7 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
         />
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-7 gap-1.5 px-px">
+      <div className="grid min-h-0 flex-1 auto-rows-max grid-cols-1 gap-2 overflow-y-auto px-4 pb-2 sm:auto-rows-auto sm:grid-cols-7 sm:gap-1.5 sm:overflow-hidden sm:px-px sm:pb-0">
         {dates.map((date, i) => {
           const dayTasks = dayTasksForWeek(tasks, date, weekStart);
           const dayDone = dayTasks.filter((t) => t.done).length;
@@ -144,13 +148,18 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
                 columnRefs.current[date] = el;
               }}
               className={cn(
-                "flex min-h-0 flex-col rounded-md bg-card p-1.5 ring-1 ring-ring/40 transition-colors",
+                "flex min-h-fit flex-col rounded-xl bg-card p-3 ring-1 ring-ring/40 transition-colors sm:min-h-0 sm:rounded-md sm:p-1.5",
                 isDropTarget && "bg-brand/5 ring-2 ring-brand",
+                mobileQuickAddDate === date && "bg-brand/5 sm:bg-card",
               )}
             >
-              <div className="mb-1 flex shrink-0 items-center justify-between">
+              <div className="mb-2 flex shrink-0 items-center justify-between sm:mb-1">
                 <button
                   type="button"
+                  onClick={() => {
+                    setMobileQuickAddDate(date);
+                    onAnchorChange(date);
+                  }}
                   onDoubleClick={() => onDrillDown?.("daily", date)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
@@ -160,7 +169,7 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
                   }}
                   aria-label={`Go to ${date}`}
                   className={cn(
-                    "text-left text-xs font-semibold",
+                    "min-h-11 text-left text-sm font-semibold sm:min-h-0 sm:text-xs",
                     date === today ? "text-brand" : "text-subtle",
                   )}
                 >
@@ -174,6 +183,7 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
                 <ScopeTasks
                   scope={{ kind: "day", date }}
                   quickAdd
+                  quickAddClassName="hidden sm:block"
                   onSelectTask={handleSelectTask}
                   highlightOverdue
                   showRepeatLabel
@@ -186,6 +196,19 @@ export function WeeklyView({ anchor, onDrillDown }: CalendarViewProps) {
             </div>
           );
         })}
+      </div>
+
+      <div className="shrink-0 border-t border-border bg-card px-4 py-2 sm:hidden">
+        <QuickAdd
+          onAdd={(title) => actions.addTask(title, { kind: "day", date: mobileQuickAddDate })}
+          onAddAndOpen={(title) => {
+            const created = actions.addTask(title, { kind: "day", date: mobileQuickAddDate });
+            if (created) handleSelectTask(created.id);
+          }}
+          placeholder={`New task for ${shortDateLabel(mobileQuickAddDate, today)}`}
+          ariaLabel={`Add task for ${shortDateLabel(mobileQuickAddDate, today)}`}
+          variant="panel-footer"
+        />
       </div>
 
       {dragState && (

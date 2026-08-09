@@ -188,7 +188,7 @@ export function TaskDetailFields({
   );
 
   const schedulingCluster = (
-    <div className={cn(drawer ? "space-y-[22px]" : "space-y-1.5")}>
+    <div className={cn(drawer ? "space-y-5 sm:space-y-[22px]" : "space-y-1.5")}>
       {showTime && task.scope.kind !== "bucket" && (
         <TaskTimeEditor
           time={task.time}
@@ -252,14 +252,14 @@ export function TaskDetailFields({
         </section>
       )}
 
-      <div className={cn("flex w-fit items-center gap-2", drawer && "gap-2.5")}>
+      <div className={cn("flex w-fit flex-wrap items-center gap-2", drawer && "gap-2.5")}>
         <button
           type="button"
           onClick={() => onPriorityChange(!task.priority)}
           aria-pressed={!!task.priority}
           className={cn(
             "flex w-fit items-center gap-1 rounded-full border font-medium transition-colors",
-            drawer ? "gap-1.5 px-3.5 py-2 text-sm duration-200" : "px-2 py-1 text-xs",
+            drawer ? "min-h-11 gap-1.5 px-3.5 py-2 text-sm duration-200 sm:min-h-0" : "px-2 py-1 text-xs",
             task.priority
               ? drawer
                 ? "border-brand bg-brand/15 text-brand"
@@ -281,7 +281,7 @@ export function TaskDetailFields({
           aria-pressed={!!task.background}
           className={cn(
             "flex w-fit items-center gap-1 rounded-full border font-medium transition-colors",
-            drawer ? "gap-1.5 px-3.5 py-2 text-sm duration-200" : "px-2 py-1 text-xs",
+            drawer ? "min-h-11 gap-1.5 px-3.5 py-2 text-sm duration-200 sm:min-h-0" : "px-2 py-1 text-xs",
             task.background
               ? drawer
                 ? "border-brand bg-brand/15 text-brand"
@@ -302,7 +302,7 @@ export function TaskDetailFields({
   );
 
   return (
-    <div className={cn(drawer ? "space-y-7" : "space-y-1.5")}>
+    <div className={cn(drawer ? "space-y-6 sm:space-y-7" : "space-y-1.5")}>
       {schedulingCluster}
 
       {subtasksSection}

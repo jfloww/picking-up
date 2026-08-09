@@ -84,6 +84,16 @@ describe("DayAgendaDrawer", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("is modal and wraps backward focus from its first control to its last", () => {
+    renderDrawer();
+    const drawer = screen.getByRole("dialog", { name: /Tasks for/ });
+    const first = screen.getByText("Open Daily");
+    expect(document.activeElement).toBe(first);
+
+    fireEvent.keyDown(drawer, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(screen.getByLabelText("Add and open task details"));
+  });
+
   it("selecting a task inside the list calls onSelectTask with its id", async () => {
     const day = todayKey();
     const t = makeTask({ id: "a", title: "write plan", scope: { kind: "day", date: day } });
@@ -99,5 +109,12 @@ describe("DayAgendaDrawer", () => {
     expect(drawer.className).toContain("inset-0");
     expect(drawer.className).toContain("sm:right-0");
     expect(drawer.className).toContain("sm:w-[400px]");
+  });
+
+  it("keeps a touch-sized quick add dock outside the scrolling task list", () => {
+    renderDrawer();
+    const input = screen.getByLabelText(/Add task for/);
+    expect(input.closest("footer")).toBeTruthy();
+    expect(input.closest("form")?.className).toContain("min-h-11");
   });
 });

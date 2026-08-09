@@ -130,7 +130,7 @@ export function DayAgenda({
             <button
               type="button"
               aria-label={`Reorder ${t.title}`}
-              className="flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-subtle hover:bg-muted/60 hover:text-foreground active:cursor-grabbing"
+              className="flex size-11 shrink-0 cursor-grab touch-none items-center justify-center rounded text-subtle hover:bg-muted/60 hover:text-foreground active:cursor-grabbing sm:size-6"
               {...getReorderHandlers(t.id, t.title)}
             >
               <GripVertical className="size-4" />
@@ -158,7 +158,7 @@ export function DayAgenda({
     >
       <div
         data-testid="day-agenda-scroll"
-        className="min-h-0 flex-1 space-y-10 overflow-y-auto p-10"
+        className="min-h-0 flex-1 space-y-8 overflow-y-auto p-4 sm:space-y-10 sm:p-10"
       >
         {allDayToDo.length > 0 && (
           <section>
@@ -203,7 +203,7 @@ export function DayAgenda({
           </section>
         )}
         {doneToday.length > 0 && (
-          <section className="opacity-60">
+          <section>
             <div className="mb-4 flex shrink-0 items-center gap-3">
               <h3 className="text-[13px] font-semibold tracking-wider text-subtle uppercase">
                 Done Today
@@ -215,7 +215,7 @@ export function DayAgenda({
       </div>
       <div
         data-testid="day-agenda-footer"
-        className="shrink-0 border-t border-border bg-card p-6"
+        className="shrink-0 border-t border-border bg-card px-4 py-2 sm:p-6"
       >
         <QuickAdd
           onAdd={(title) => addTask(title, scope)}
