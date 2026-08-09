@@ -56,6 +56,7 @@ other way around.
 
 - Use the existing shadcn/Base UI primitives under `frontend/src/components/ui`.
 - Use Lucide React icons already present in the app; do not add icon CDNs or inline scripts.
+- The brand wordmark is text-only: `PICKING UP`, with `UP` in the brand color. Never invent a leading symbol, monogram, logo icon, blue mark, or gradient treatment.
 - Calendar navigation is owned by `TaskCalendar` and `ViewSwitcher`; mobile may reorganize those controls while preserving their states and actions.
 - Daily content is owned by `DailyView`, with `DayTimeline` on the left, `DayAgenda` on the right, and `TaskDetailDrawer` as an overlay.
 - `DayAgenda` groups tasks into All Day To-Do, Next Up, and Done Today and owns the single quick-add entry for the Daily view.
@@ -64,10 +65,12 @@ other way around.
 ## Mobile web structure
 
 - Target a 390px-wide mobile viewport first, with safe-area-aware fixed or sticky controls and 16px page gutters.
+- Superdesign mobile-flow drafts must use an explicit 390 × 844 custom artboard. Do not inherit a desktop canvas device, stretch the app to desktop width, or place the UI inside a decorative phone/browser mockup.
 - Remove the marketing-style site footer from the active planner viewport on mobile; keep account, theme, and secondary links available from a compact overflow/profile menu.
 - Keep Daily, Weekly, and Monthly as the primary app-level destinations. On mobile, use a persistent bottom navigation for them rather than squeezing desktop tabs into the header.
 - Daily is agenda-first. Replace the desktop 60/40 simultaneous panes with a local `Tasks / Timeline` segmented switch; preserve the selected date across the switch.
 - Put date navigation in a compact sticky header: previous day, date/title, Today, and next day. Support horizontal date swiping as an enhancement, never as the only control.
+- The preferred first structure adds a compact seven-day date strip beneath the week controls, with the active date clearly selected; it must not make explicit previous/Today/next navigation disappear.
 - Keep `+ New task` persistently reachable above the app navigation. The keyboard may turn it into an inline composer; it must not be hidden at the end of a long list.
 - Open task details as a full-height mobile sheet/page with a sticky top close action and sticky bottom Cancel/Done actions. Do not use a 420px side drawer at narrow widths.
 - Preserve explicit time/date controls so scheduling never depends on cross-pane drag. Timeline drag may remain as a progressive enhancement for touch devices.
@@ -83,4 +86,5 @@ other way around.
 - Do not introduce a header-level New Task action.
 - Keep the Daily `+ New task` entry persistently visible at the lower-left of the right panel while its task sections scroll.
 - Keep task selection, drawer, completion, edit, repeat, subtask, priority, deletion, and drag-to-schedule interactions intact.
-- Weekly implementation is deferred. Monthly and Yearly behavior and presentation are out of scope.
+- Desktop Weekly, Monthly, and Yearly redesign remains out of scope for the Daily reference.
+- The approved mobile-only Weekly stacked agenda and Monthly date-list/day-agenda flow are implemented as responsive branches; they must not alter their established desktop layouts.

@@ -33,7 +33,7 @@ export function QuickAdd({
       data-testid={panelFooter ? "quick-add-panel-footer" : undefined}
       className={cn(
         panelFooter &&
-          "group flex min-h-8 items-center gap-2 text-muted-foreground transition-colors focus-within:text-brand hover:text-brand",
+          "group flex min-h-11 items-center gap-2 text-muted-foreground transition-colors focus-within:text-brand hover:text-brand sm:min-h-8",
       )}
       onSubmit={(e) => {
         e.preventDefault();
@@ -57,7 +57,7 @@ export function QuickAdd({
         className={cn(
           "w-full rounded-md border border-transparent bg-transparent px-1.5 py-1 text-sm outline-none placeholder:text-subtle focus-visible:border-input",
           panelFooter &&
-            "min-w-0 flex-1 px-0 font-medium text-foreground placeholder:text-muted-foreground focus-visible:border-transparent",
+            "min-w-0 flex-1 px-0 text-base font-medium text-foreground placeholder:text-muted-foreground focus-visible:border-transparent sm:text-sm",
         )}
       />
       {panelFooter && <Plus className="order-first size-4 shrink-0" aria-hidden />}
@@ -66,7 +66,7 @@ export function QuickAdd({
           type="button"
           onClick={addAndOpen}
           aria-label="Add and open task details"
-          className="shrink-0 text-subtle opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:text-brand"
+          className="flex size-11 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-muted hover:text-brand sm:size-auto sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
         >
           <PanelRightOpen className="size-4" />
         </button>

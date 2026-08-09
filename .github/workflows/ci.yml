@@ -27,8 +27,8 @@ jobs:
       ORACLE_DB_PASSWORD: ""
       ORACLE_DB_DSN: ""
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -49,8 +49,8 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
       DJANGO_API_BASE_URL: http://127.0.0.1:8000
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm

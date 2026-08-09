@@ -78,6 +78,21 @@ describe("TaskCalendar", () => {
       fireEvent.click(screen.getByRole("tab", { name: "Monthly" }));
       await waitFor(() => expect(screen.getByText("July 2026")).toBeTruthy());
     });
+
+    it("provides the mobile date strip and one-tap bottom navigation without replacing desktop tabs", async () => {
+      render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} />);
+      await waitFor(() => expect(screen.getByTestId("mobile-calendar-navigation")).toBeTruthy());
+
+      expect(screen.getAllByRole("button", { name: /^Select / })).toHaveLength(7);
+      expect(screen.getByLabelText("Switch to Daily view").getAttribute("aria-current")).toBe("page");
+
+      fireEvent.click(screen.getByLabelText("Select Tuesday, July 14"));
+      expect(screen.getByText("Tuesday, July 14")).toBeTruthy();
+
+      fireEvent.click(screen.getByLabelText("Switch to Weekly view"));
+      expect(screen.getByLabelText("Switch to Weekly view").getAttribute("aria-current")).toBe("page");
+      expect(screen.getByRole("tab", { name: "Weekly", selected: true })).toBeTruthy();
+    });
   });
 
   // Bucket List's tab is temporarily disabled (view-switcher.tsx's VIEWS no

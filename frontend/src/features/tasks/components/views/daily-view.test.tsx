@@ -76,6 +76,40 @@ describe("DailyView v4 (60/40 layout, drawer overlay)", () => {
     expect(onAnchorChange).not.toHaveBeenCalled();
   });
 
+  it("defaults mobile to Tasks and switches to a single Timeline pane without changing the date", async () => {
+    const onAnchorChange = renderView();
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Tasks" })).toBeTruthy());
+
+    expect(screen.getByTestId("agenda-panel").className).toContain("block");
+    expect(screen.getByTestId("timeline-panel").className).toContain("hidden");
+    const rail = screen.getByTestId("hour-rail");
+    rail.scrollTop = 0; // hidden mobile rail clamps the browser's initial scroll to zero
+
+    fireEvent.click(screen.getByRole("tab", { name: "Timeline" }));
+
+    expect(screen.getByTestId("timeline-panel").className).toContain("block");
+    expect(screen.getByTestId("agenda-panel").className).toContain("hidden");
+    expect(screen.getByTestId("mobile-timeline-quick-add")).toBeTruthy();
+    expect(screen.getAllByLabelText("Add task")).toHaveLength(2); // hidden agenda + mobile timeline
+    expect(rail.scrollTop).toBeGreaterThan(0);
+    expect(onAnchorChange).not.toHaveBeenCalled();
+  });
+
+  it("adds and opens a task from the mobile Timeline quick-add", async () => {
+    renderView();
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Timeline" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("tab", { name: "Timeline" }));
+
+    const mobileQuickAdd = within(screen.getByTestId("mobile-timeline-quick-add"));
+    fireEvent.change(mobileQuickAdd.getByLabelText("Add task"), {
+      target: { value: "timeline follow-up" },
+    });
+    fireEvent.click(mobileQuickAdd.getByLabelText("Add and open task details"));
+
+    await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeTruthy());
+    expect(screen.getByTestId("task-detail-drawer").textContent).toContain("timeline follow-up");
+  });
+
   it("shows a timed task both as a rail chip and as an agenda card", async () => {
     const timed = makeTask({ id: "t", title: "dentist", time: "16:00", scope: { kind: "day", date: ANCHOR } });
     renderView(vi.fn(), [timed]);

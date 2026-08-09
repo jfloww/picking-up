@@ -73,19 +73,19 @@ export function TaskTimeEditor({
             value={time ?? ""}
             onChange={(e) => handleStartChange(e.target.value || undefined)}
             aria-label="Task time"
-            className="w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="min-h-11 w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-base outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring/50 sm:min-h-0 sm:text-sm"
           />
         </label>
         {time && (
           <label className="flex flex-col gap-1.5">
             <span className={fieldLabelClass}>End</span>
-            <div className="flex items-center gap-1.5 rounded-md border border-input px-2.5 py-1.5 transition-colors duration-200 focus-within:ring-2 focus-within:ring-ring/50">
+            <div className="flex min-h-11 items-center gap-1.5 rounded-md border border-input px-2.5 py-1.5 transition-colors duration-200 focus-within:ring-2 focus-within:ring-ring/50 sm:min-h-0">
               {endInput}
               <button
                 type="button"
                 onClick={() => onTimeChange(undefined)}
                 aria-label="Clear duration"
-                className="flex size-5 shrink-0 items-center justify-center rounded text-subtle transition-colors duration-200 hover:bg-muted hover:text-foreground"
+                className="flex size-9 shrink-0 items-center justify-center rounded text-subtle transition-colors duration-200 hover:bg-muted hover:text-foreground sm:size-5"
               >
                 <X className="size-3.5" />
               </button>

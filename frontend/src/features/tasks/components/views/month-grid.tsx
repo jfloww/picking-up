@@ -10,6 +10,7 @@ import {
   monthGrid,
   monthKeyOf,
   todayKey,
+  weekdayOf,
   weekOfYear,
   weekStartOf,
 } from "../../lib/dates";
@@ -179,11 +180,11 @@ export function MonthGrid({
 
       <div
         data-testid="month-grid-mobile"
-        className="flex h-full flex-col gap-1 overflow-y-auto sm:hidden"
+        className="flex h-full flex-col overflow-y-auto sm:hidden"
       >
         {rows.map((row) => (
           <div key={row[0]} className="flex flex-col">
-            <div className="sticky top-0 bg-background px-2 py-1 text-[10px] font-semibold text-subtle">
+            <div className="sticky top-0 z-10 border-y border-border bg-background px-4 py-2 text-[11px] font-semibold tracking-wide text-subtle uppercase">
               Week {weekOfYear(row[0])}
             </div>
             {row.map((date) => {
@@ -205,24 +206,29 @@ export function MonthGrid({
                   }}
                   aria-label={`Open ${date}`}
                   className={cn(
-                    "flex cursor-pointer items-center gap-2 border-b border-border px-2 py-1.5 text-left",
+                    "flex min-h-14 cursor-pointer items-center gap-3 border-b border-border bg-card/40 px-4 py-2.5 text-left",
                     !inMonth && "opacity-50",
                     isSelected && "bg-brand/5 ring-1 ring-inset ring-brand",
                   )}
                 >
-                  <span
-                    className={cn(
-                      "flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums",
-                      isToday ? "bg-brand text-primary-foreground" : "text-foreground",
-                    )}
-                  >
-                    {dayOfMonth(date)}
+                  <span className="flex w-12 shrink-0 items-center gap-1.5">
+                    <span className="w-5 text-[10px] font-semibold text-subtle uppercase">
+                      {DAY_LABELS[weekdayOf(date)]}
+                    </span>
+                    <span
+                      className={cn(
+                        "flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
+                        isToday ? "bg-brand text-primary-foreground" : "text-foreground",
+                      )}
+                    >
+                      {dayOfMonth(date)}
+                    </span>
                   </span>
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     {shown.map(({ task: t, dot }) => (
                       <div
                         key={t.id}
-                        className="flex items-center gap-1 truncate text-[11px] text-foreground"
+                        className="flex items-center gap-1.5 truncate text-[13px] text-foreground"
                       >
                         <StatusDotIcon dot={dot} />
                         <span className="truncate">{t.title}</span>

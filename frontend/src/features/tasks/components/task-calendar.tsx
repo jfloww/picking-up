@@ -1,19 +1,24 @@
 "use client";
 
+import { CalendarDays, ChevronLeft, ChevronRight, Columns3, ListTodo } from "lucide-react";
 import { useState } from "react";
 
 import { Alert, AlertAction, AlertTitle } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
 import type { CategoryRepository } from "../data/category-repository";
 import type { TaskRepository } from "../data/repository";
 import {
+  DAY_LABELS,
   addDays,
   dayLabel,
+  dayOfMonth,
   monthKeyOf,
   monthLabel,
   nextMonthKey,
   prevMonthKey,
   todayKey,
   weekRangeLabel,
+  weekDates,
   weekStartOf,
 } from "../lib/dates";
 import { TasksProvider, useTasks } from "../store";
@@ -60,6 +65,158 @@ function dateLabelFor(view: ViewKind, anchor: string): string {
   }
 }
 
+const MOBILE_VIEWS = ["daily", "weekly", "monthly"] as const;
+const MOBILE_VIEW_LABELS = {
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
+} as const;
+const MOBILE_VIEW_ICONS = {
+  daily: ListTodo,
+  weekly: Columns3,
+  monthly: CalendarDays,
+} as const;
+
+function MobileDateNavigation({
+  view,
+  anchor,
+  onAnchorChange,
+  onToday,
+  onPrev,
+  onNext,
+}: {
+  view: ViewKind;
+  anchor: string;
+  onAnchorChange: (date: string) => void;
+  onToday: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  if (view === "bucket") return null;
+
+  const weekStart = weekStartOf(anchor);
+  const dates = weekDates(weekStart);
+  const mobileLabel = view === "monthly" ? monthLabel(monthKeyOf(anchor)) : weekRangeLabel(weekStart);
+  const [month, year] = view === "monthly" ? mobileLabel.split(" ") : [null, null];
+  const [weekLabelStart, weekLabelEnd] = mobileLabel.split(" – ");
+
+  return (
+    <section
+      data-testid="mobile-calendar-navigation"
+      className="shrink-0 border-b border-border bg-background px-4 pt-2 pb-3 sm:hidden"
+    >
+      <div className="flex min-h-11 items-center gap-2">
+        <button
+          type="button"
+          onClick={onPrev}
+          aria-label={`Previous ${view === "daily" ? "day" : view === "weekly" ? "week" : "month"}`}
+          className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <ChevronLeft className="size-5" />
+        </button>
+        <button
+          type="button"
+          onClick={onToday}
+          className="min-h-11 min-w-0 flex-1 rounded-lg px-2 text-center focus-visible:ring-2 focus-visible:ring-ring/50"
+          aria-label="Go to today"
+        >
+          <span className="block text-[11px] font-semibold tracking-[0.12em] text-subtle uppercase">
+            <span>To</span><span>day</span>
+          </span>
+          <span className="block truncate text-[15px] font-bold tracking-tight">
+            {view === "monthly" ? (
+              <>
+                <span>{month}</span> <span>{year}</span>
+              </>
+            ) : view === "weekly" ? (
+              <>
+                Week <span>{weekLabelStart}</span>
+                <span aria-hidden> – </span>
+                <span>{weekLabelEnd}</span>
+              </>
+            ) : (
+              mobileLabel
+            )}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={onNext}
+          aria-label={`Next ${view === "daily" ? "day" : view === "weekly" ? "week" : "month"}`}
+          className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <ChevronRight className="size-5" />
+        </button>
+      </div>
+
+      {view !== "monthly" && (
+        <div className="mt-2 grid grid-cols-7 gap-1" aria-label="Select date">
+          {dates.map((date, index) => {
+            const selected = date === anchor;
+            const today = date === todayKey();
+            return (
+              <button
+                key={date}
+                type="button"
+                onClick={() => onAnchorChange(date)}
+                aria-label={`Select ${dayLabel(date)}`}
+                aria-current={selected ? "date" : undefined}
+                className={cn(
+                  "flex min-h-[52px] min-w-0 flex-col items-center justify-center rounded-xl text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring/50",
+                  selected
+                    ? "bg-brand text-primary-foreground shadow-sm"
+                    : today
+                      ? "bg-brand/10 text-brand"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <span className="text-[10px] font-semibold uppercase">{DAY_LABELS[index]}</span>
+                <span className="mt-0.5 text-sm font-bold tabular-nums">{dayOfMonth(date)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MobileBottomNavigation({
+  view,
+  onViewChange,
+}: {
+  view: ViewKind;
+  onViewChange: (view: ViewKind) => void;
+}) {
+  return (
+    <nav
+      aria-label="Planner views"
+      className="grid shrink-0 grid-cols-3 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] sm:hidden"
+    >
+      {MOBILE_VIEWS.map((nextView) => {
+        const Icon = MOBILE_VIEW_ICONS[nextView];
+        const selected = view === nextView;
+        return (
+          <button
+            key={nextView}
+            type="button"
+            onClick={() => onViewChange(nextView)}
+            aria-label={`Switch to ${MOBILE_VIEW_LABELS[nextView]} view`}
+            aria-current={selected ? "page" : undefined}
+            className={cn(
+              "flex min-h-[60px] flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50",
+              selected ? "text-brand" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Icon className="size-5" />
+            {MOBILE_VIEW_LABELS[nextView]}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 function CalendarInner() {
   const { loaded, syncError, dismissSyncError } = useTasks();
   const [view, setView] = useState<ViewKind>("daily");
@@ -75,7 +232,7 @@ function CalendarInner() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="h-[72px] shrink-0 border-b border-border px-10">
+      <header className="hidden h-[72px] shrink-0 border-b border-border px-10 sm:block">
         <ViewSwitcher
           view={view}
           leading={
@@ -94,8 +251,16 @@ function CalendarInner() {
           onNext={() => setAnchor((a) => shiftAnchor(view, a, 1))}
         />
       </header>
+      <MobileDateNavigation
+        view={view}
+        anchor={anchor}
+        onAnchorChange={setAnchor}
+        onToday={() => setAnchor(todayKey())}
+        onPrev={() => setAnchor((current) => shiftAnchor(view, current, -1))}
+        onNext={() => setAnchor((current) => shiftAnchor(view, current, 1))}
+      />
       {syncError && (
-        <div className="shrink-0 px-10 pt-3">
+        <div className="shrink-0 px-4 pt-3 sm:px-10">
           <Alert variant="destructive">
             <AlertTitle>{syncError}</AlertTitle>
             <AlertAction>
@@ -120,6 +285,7 @@ function CalendarInner() {
           }}
         />
       </div>
+      <MobileBottomNavigation view={view} onViewChange={setView} />
     </div>
   );
 }

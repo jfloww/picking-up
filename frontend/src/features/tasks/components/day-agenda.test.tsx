@@ -100,6 +100,9 @@ describe("DayAgenda sections", () => {
     });
     renderAgenda(ANCHOR, [doneTimed, doneUntimed]);
     await waitFor(() => expect(screen.getByText("Done Today")).toBeTruthy());
+    expect(screen.getByText("Done Today").closest("section")?.className).not.toContain(
+      "opacity",
+    );
     expect(screen.queryByText("All Day To-Do")).toBeNull();
     expect(screen.queryByText("Next Up")).toBeNull();
     expect(screen.getByText("done timed")).toBeTruthy();

@@ -40,12 +40,15 @@ export function DayTimeline({
   railRef,
   getDragHandlers,
   dragState,
+  scrollActivationKey,
 }: {
   date: string;
   onSelectTask?: (id: string) => void;
   railRef: React.RefObject<HTMLDivElement | null>;
   getDragHandlers: GetDragHandlers;
   dragState: DragState | null;
+  /** Re-center after a responsive layout makes a previously hidden rail visible. */
+  scrollActivationKey?: string;
 }) {
   const actions = useTasks();
   const { tasks } = actions;
@@ -70,13 +73,13 @@ export function DayTimeline({
     } else {
       railEl.scrollTop = DEFAULT_SCROLL_HOUR * HOUR_HEIGHT;
     }
-  }, [date, isToday, railRef, currentTime]);
+  }, [date, isToday, railRef, currentTime, scrollActivationKey]);
 
   return (
     <div data-testid="day-timeline" className="flex h-full min-h-0 flex-col bg-background">
       <header
         data-testid="timeline-header"
-        className="flex shrink-0 items-end justify-between border-b border-border/60 px-10 pt-10 pb-6"
+        className="hidden shrink-0 items-end justify-between border-b border-border/60 px-10 pt-10 pb-6 sm:flex"
       >
         <div>
           <h3 className="text-[13px] font-semibold tracking-wider text-subtle uppercase">
@@ -107,7 +110,7 @@ export function DayTimeline({
               className="absolute inset-x-0"
               style={{ top: hour * HOUR_HEIGHT }}
             >
-              <span className="absolute top-2 left-10 text-[12px] leading-4 tabular-nums text-subtle select-none">
+              <span className="absolute top-2 left-4 text-[11px] leading-4 tabular-nums text-subtle select-none sm:left-10 sm:text-[12px]">
                 {String(hour).padStart(2, "0")}:00
               </span>
             </div>
@@ -116,12 +119,12 @@ export function DayTimeline({
           {isToday && (
             <div
               data-testid="now-line"
-              className="absolute right-10 left-[104px] z-10 border-t-2 border-brand"
+              className="absolute right-4 left-[72px] z-10 border-t-2 border-brand sm:right-10 sm:left-[104px]"
               style={{ top: toOffset(currentTime) }}
             />
           )}
 
-          <div className="absolute inset-y-0 right-10 left-[104px]">
+          <div className="absolute inset-y-0 right-4 left-[72px] sm:right-10 sm:left-[104px]">
             {hasBackgroundLane && (
               <div
                 data-testid="background-lane"
@@ -220,7 +223,7 @@ export function DayTimeline({
           {dragState?.previewTime && (
             <div
               data-testid="drag-preview-line"
-              className="pointer-events-none absolute right-10 left-[104px] z-40 border-t-2 border-dashed border-brand"
+              className="pointer-events-none absolute right-4 left-[72px] z-40 border-t-2 border-dashed border-brand sm:right-10 sm:left-[104px]"
               style={{ top: toOffset(dragState.previewTime) }}
             >
               <span className="bg-brand px-1 text-[10px] text-primary-foreground">

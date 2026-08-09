@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Alert, AlertAction, AlertTitle } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
 
 import { todayKey, shortDateLabel, upcomingRepeatDates } from "../../lib/dates";
 import { lostFieldsFor, nestBlockMessage, type NestBlockReason } from "../../lib/nesting";
@@ -11,6 +12,7 @@ import { useTasks } from "../../store";
 import { ConvertToSubtaskDialog } from "../convert-to-subtask-dialog";
 import { DayAgenda } from "../day-agenda";
 import { DayTimeline, HOUR_HEIGHT } from "../day-timeline";
+import { QuickAdd } from "../quick-add";
 import { TaskDetailDrawer } from "../task-detail-drawer";
 import { taskItemHandlers } from "../task-item";
 import { useDragToSchedule } from "../use-drag-to-schedule";
@@ -22,6 +24,7 @@ export function DailyView({ anchor }: CalendarViewProps) {
   const actions = useTasks();
   const { tasks, setTime } = actions;
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [mobileMode, setMobileMode] = useState<"tasks" | "timeline">("tasks");
   const [pendingConversion, setPendingConversion] = useState<{
     sourceId: string;
     targetId: string;
@@ -89,7 +92,7 @@ export function DailyView({ anchor }: CalendarViewProps) {
     <>
       <div className="flex h-full min-h-0 flex-col">
         {blockedMessage && (
-          <div className="shrink-0 px-10 pt-3">
+          <div className="shrink-0 px-4 pt-3 sm:px-10">
             <Alert variant="destructive">
               <AlertTitle>{blockedMessage.text}</AlertTitle>
               <AlertAction>
@@ -105,13 +108,39 @@ export function DailyView({ anchor }: CalendarViewProps) {
           </div>
         )}
         <div
+          role="tablist"
+          aria-label="Daily presentation"
+          className="grid shrink-0 grid-cols-2 gap-1 border-b border-border bg-background px-4 py-2 sm:hidden"
+        >
+          {(["tasks", "timeline"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              role="tab"
+              aria-selected={mobileMode === mode}
+              onClick={() => setMobileMode(mode)}
+              className={cn(
+                "min-h-10 rounded-lg text-sm font-semibold capitalize transition-colors focus-visible:ring-2 focus-visible:ring-ring/50",
+                mobileMode === mode
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              {mode === "tasks" ? "Tasks" : "Timeline"}
+            </button>
+          ))}
+        </div>
+        <div
           data-testid="daily-layout"
-          className="grid min-h-0 flex-1 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] overflow-hidden bg-background"
+          className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
         >
           <section
             data-testid="timeline-panel"
             aria-label="Daily timeline"
-            className="min-h-0 min-w-0 border-r border-border bg-background"
+            className={cn(
+              "min-h-0 min-w-0 bg-background sm:block sm:border-r sm:border-border",
+              mobileMode === "timeline" ? "block" : "hidden",
+            )}
           >
             <DayTimeline
               date={anchor}
@@ -119,12 +148,16 @@ export function DailyView({ anchor }: CalendarViewProps) {
               railRef={railRef}
               getDragHandlers={getDragHandlers}
               dragState={dragState}
+              scrollActivationKey={mobileMode}
             />
           </section>
           <aside
             data-testid="agenda-panel"
             aria-label="Daily task list"
-            className="min-h-0 min-w-0 bg-card/50"
+            className={cn(
+              "min-h-0 min-w-0 bg-card/50 sm:block",
+              mobileMode === "tasks" ? "block" : "hidden",
+            )}
           >
             <DayAgenda
               date={anchor}
@@ -136,6 +169,23 @@ export function DailyView({ anchor }: CalendarViewProps) {
             />
           </aside>
         </div>
+        {mobileMode === "timeline" && (
+          <div
+            data-testid="mobile-timeline-quick-add"
+            className="shrink-0 border-t border-border bg-card px-4 py-2 sm:hidden"
+          >
+            <QuickAdd
+              onAdd={(title) => actions.addTask(title, { kind: "day", date: anchor })}
+              onAddAndOpen={(title) => {
+                const created = actions.addTask(title, { kind: "day", date: anchor });
+                if (created) setSelectedTaskId(created.id);
+              }}
+              placeholder="New task"
+              ariaLabel="Add task"
+              variant="panel-footer"
+            />
+          </div>
+        )}
       </div>
 
       {selectedTask && (

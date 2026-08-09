@@ -23,7 +23,7 @@ export function TaskDueDateEditor({
           aria-label="Due date"
           className={cn(
             "rounded-md border border-input bg-transparent px-1.5 py-0.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-            drawer && "px-2.5 py-1.5 text-sm",
+            drawer && "min-h-11 px-2.5 py-1.5 text-base sm:min-h-0 sm:text-sm",
           )}
         />
       </label>
@@ -33,7 +33,7 @@ export function TaskDueDateEditor({
           onClick={() => onDueDateChange(undefined)}
           className={cn(
             "text-xs text-subtle hover:text-foreground",
-            drawer && "pb-1.5 text-sm hover:underline",
+            drawer && "min-h-11 px-2 text-sm hover:underline sm:min-h-0 sm:px-0 sm:pb-1.5",
           )}
         >
           Clear
