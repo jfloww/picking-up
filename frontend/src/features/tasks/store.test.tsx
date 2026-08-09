@@ -773,6 +773,76 @@ describe("TasksProvider", () => {
       await waitFor(() => expect(repo.tasks[0].subtasks).toHaveLength(1));
     });
 
+    it("reorderSubtask moves a subtask to a new position among siblings", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+          { id: "s3", title: "three", done: false },
+        ],
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.reorderSubtask("a", "s1", "s3"));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual([
+        "s2",
+        "s1",
+        "s3",
+      ]);
+      await waitFor(() =>
+        expect(repo.tasks[0].subtasks?.map((s) => s.id)).toEqual(["s2", "s1", "s3"]),
+      );
+    });
+
+    it("reorderSubtask with a null insertBeforeId moves it to the end", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+          { id: "s3", title: "three", done: false },
+        ],
+      });
+      const { result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.reorderSubtask("a", "s1", null));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual([
+        "s2",
+        "s3",
+        "s1",
+      ]);
+    });
+
+    it("reorderSubtask is a no-op (and does not persist) when dropped in its current position", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+          { id: "s3", title: "three", done: false },
+        ],
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const updateSpy = vi.spyOn(repo, "update");
+
+      // s1 is already immediately before s2 — inserting it before s2 again
+      // is a no-op.
+      act(() => result.current.reorderSubtask("a", "s1", "s2"));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual([
+        "s1",
+        "s2",
+        "s3",
+      ]);
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
     it("editSubtaskMemo trims and clears a blank memo to undefined", async () => {
       const task = makeTask({
         id: "a",

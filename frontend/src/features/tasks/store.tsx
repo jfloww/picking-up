@@ -99,18 +99,36 @@ function buildTaskPatch(before: Task, after: Task): TaskPatch {
   const beforeById = new Map(beforeSubtasks.map((subtask) => [subtask.id, subtask]));
   const afterIds = new Set(afterSubtasks.map((subtask) => subtask.id));
 
-  patch.subtasks = {
-    upserts: afterSubtasks
-      .filter((subtask) => !Object.is(beforeById.get(subtask.id), subtask))
-      .map((subtask) => ({
+  const upserts = afterSubtasks
+    .filter((subtask) => !Object.is(beforeById.get(subtask.id), subtask))
+    .map((subtask) => ({
+      value: subtask,
+      requiresExisting: beforeById.has(subtask.id),
+    }));
+
+  const removedIds = beforeSubtasks
+    .filter((subtask) => !afterIds.has(subtask.id))
+    .map((subtask) => subtask.id);
+
+  // If subtasks array changed but no properties changed and nothing was removed,
+  // it means only the order changed. Include all subtasks in upserts to force
+  // the patch system to rebuild the array in the new order.
+  if (upserts.length === 0 && removedIds.length === 0 && beforeSubtasks.length > 0) {
+    patch.subtasks = {
+      upserts: afterSubtasks.map((subtask) => ({
         value: subtask,
-        requiresExisting: beforeById.has(subtask.id),
+        requiresExisting: true,
       })),
-    removedIds: beforeSubtasks
-      .filter((subtask) => !afterIds.has(subtask.id))
-      .map((subtask) => subtask.id),
-    keepEmptyArray: after.subtasks !== undefined,
-  };
+      removedIds: [],
+      keepEmptyArray: after.subtasks !== undefined,
+    };
+  } else {
+    patch.subtasks = {
+      upserts,
+      removedIds,
+      keepEmptyArray: after.subtasks !== undefined,
+    };
+  }
   return patch;
 }
 
@@ -160,6 +178,14 @@ function applyTaskPatch(base: Task, patch: TaskPatch): Task | undefined {
         next.push(upsert.value);
         changed = true;
       }
+    }
+
+    // For reordering (upserts provided but no object changes, no removals),
+    // rebuild the array in the order specified by the upserts
+    if (!changed && patch.subtasks.upserts.length > 0 && patch.subtasks.removedIds.length === 0) {
+      next.length = 0;
+      next.push(...patch.subtasks.upserts.map((u) => u.value));
+      changed = true;
     }
 
     if (changed || (patch.subtasks.keepEmptyArray && base.subtasks === undefined)) {
@@ -258,6 +284,7 @@ interface TasksContextValue extends TasksState {
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
+  reorderSubtask: (id: string, subtaskId: string, insertBeforeId: string | null) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
   editSubtaskMemo: (id: string, subtaskId: string, memo: string) => void;
   convertTaskToSubtask: (
@@ -929,6 +956,31 @@ export function TasksProvider({
           ...current,
           subtasks: current.subtasks.filter((s) => s.id !== subtaskId),
         };
+        persistUpdate(task);
+      },
+      reorderSubtask(id, subtaskId, insertBeforeId) {
+        const current = tasksRef.current.find((t) => t.id === id);
+        if (!current?.subtasks) return;
+        const subtasks = current.subtasks;
+        const currentIndex = subtasks.findIndex((s) => s.id === subtaskId);
+        if (currentIndex === -1) return;
+        const moving = subtasks[currentIndex];
+        const remaining = subtasks.filter((s) => s.id !== subtaskId);
+        const targetIndex =
+          insertBeforeId === null
+            ? remaining.length
+            : remaining.findIndex((s) => s.id === insertBeforeId);
+        if (targetIndex === -1) return;
+        // Compare list *positions*, not just the two ids: after removing
+        // the dragged subtask to build `remaining`, the slot it already
+        // occupies is targetIndex === currentIndex in that shifted index
+        // space — same no-op check as day-agenda.tsx's task-level
+        // handleReorder, adapted here since subtasks have no separate
+        // command endpoint of their own to skip calling.
+        if (targetIndex === currentIndex) return;
+        const reordered = [...remaining];
+        reordered.splice(targetIndex, 0, moving);
+        const task: Task = { ...current, subtasks: reordered };
         persistUpdate(task);
       },
       editSubtaskTitle(id, subtaskId, title) {
