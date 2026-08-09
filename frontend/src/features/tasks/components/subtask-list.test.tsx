@@ -123,4 +123,82 @@ describe("SubtaskList (drawer variant) reordering", () => {
 
     expect(onReorder).toHaveBeenCalledWith("s1", "s3");
   });
+
+  it("shows a trailing drop indicator when a drag resolves past the last active subtask", () => {
+    render(
+      <SubtaskList
+        subtasks={subtasks}
+        onAdd={() => {}}
+        onToggle={() => {}}
+        onRemove={() => {}}
+        onReorder={() => {}}
+        drawer
+      />,
+    );
+    mockRect(screen.getByTestId("drawer-subtask-list"), {
+      top: 0,
+      bottom: 120,
+      left: 0,
+      right: 200,
+    });
+    mockRect(screen.getByLabelText("Toggle one").closest("li")!, {
+      top: 0,
+      bottom: 40,
+      left: 0,
+      right: 200,
+    });
+    mockRect(screen.getByLabelText("Toggle two").closest("li")!, {
+      top: 40,
+      bottom: 80,
+      left: 0,
+      right: 200,
+    });
+    mockRect(screen.getByLabelText("Toggle three").closest("li")!, {
+      top: 80,
+      bottom: 120,
+      left: 0,
+      right: 200,
+    });
+
+    expect(screen.queryByTestId("reorder-indicator-end")).toBeNull();
+
+    const handle = screen.getByLabelText("Reorder one");
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 10, clientY: 10 });
+    // Below every row's midpoint (the last row spans 80-120, midpoint 100)
+    // but still inside the container (bottom 120) — useDragToReorder's
+    // resolve() falls through its loop and returns insertBeforeId: null,
+    // meaning "past every active row, at the end of the list."
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 10, clientY: 115 });
+
+    expect(screen.getByTestId("reorder-indicator-end")).toBeTruthy();
+
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 10, clientY: 115 });
+  });
+
+  it("does not show the trailing drop indicator when there is no active drag", () => {
+    render(
+      <SubtaskList
+        subtasks={subtasks}
+        onAdd={() => {}}
+        onToggle={() => {}}
+        onRemove={() => {}}
+        onReorder={() => {}}
+        drawer
+      />,
+    );
+    expect(screen.queryByTestId("reorder-indicator-end")).toBeNull();
+  });
+
+  it("never renders a reorder handle in the plain (non-drawer) variant", () => {
+    render(
+      <SubtaskList
+        subtasks={subtasks}
+        onAdd={() => {}}
+        onToggle={() => {}}
+        onRemove={() => {}}
+        onReorder={() => {}}
+      />,
+    );
+    expect(screen.queryByLabelText("Reorder one")).toBeNull();
+  });
 });

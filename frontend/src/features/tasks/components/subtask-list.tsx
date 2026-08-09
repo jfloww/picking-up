@@ -173,9 +173,8 @@ function DrawerSubtaskList({
       {(active.length > 0 || completed.length > 0) && (
         <div ref={reorderContainerRef} data-testid="drawer-subtask-list">
           <ul>
-            {[...active, ...completed].map(({ subtask: s, state }) => {
-              const isActive = !(state?.done ?? s.done);
-              const reorderable = !!onReorder && isActive;
+            {active.map(({ subtask: s, state }) => {
+              const reorderable = !!onReorder;
               return (
                 <DrawerSubtaskRow
                   key={s.id}
@@ -208,6 +207,34 @@ function DrawerSubtaskList({
                 />
               );
             })}
+            {/* insertBeforeId is a meaningful value from useDragToReorder,
+                not just "nothing" — null specifically means "past every
+                active row, at the end of the list" (see the hook's own
+                doc comment on ReorderDragState.insertBeforeId), which is a
+                fully valid, common drop target that still needs feedback.
+                Mirrors scope-tasks.tsx's handling of the same null case for
+                its own reorder drag, using the same border-t-2 border-brand
+                treatment DrawerSubtaskRow uses for the row-specific case
+                above, just as a standalone trailing row instead of a
+                border on some other row. */}
+            {!!onReorder && !!reorderDragState?.insideList && reorderDragState.insertBeforeId === null && (
+              <li
+                data-testid="reorder-indicator-end"
+                aria-hidden
+                className="border-t-2 border-brand"
+              />
+            )}
+            {completed.map(({ subtask: s, state }) => (
+              <DrawerSubtaskRow
+                key={s.id}
+                subtask={s}
+                onToggle={onToggle}
+                onRemove={onRemove}
+                onOpen={onOpenSubtask}
+                onPromote={onPromote}
+                animationClass={state?.enterAnimationClass ?? state?.sectionAnimationClass}
+              />
+            ))}
           </ul>
         </div>
       )}
