@@ -118,10 +118,20 @@ function buildTaskPatch(before: Task, after: Task): TaskPatch {
     .map((subtask) => subtask.id);
 
   // If subtasks array changed but no properties changed and nothing was removed,
-  // it means only the order changed. Capture the target order sequence so that
-  // during rebase, we can merge it with any concurrent changes rather than
-  // overwriting the base.
-  const isPureReorder = upserts.length === 0 && removedIds.length === 0 && beforeSubtasks.length > 0;
+  // check whether the ID sequence actually changed. Compare the before and after
+  // id sequences: if they're identical, it's a true no-op (e.g., removeSubtask with
+  // unknown id creates a new array but with same ids in same order). Only capture
+  // order if the sequence genuinely changed (true reorder).
+  let isPureReorder = false;
+  if (upserts.length === 0 && removedIds.length === 0 && beforeSubtasks.length > 0) {
+    // Check if the ID sequence actually changed
+    const beforeIds = beforeSubtasks.map((s) => s.id);
+    const afterIds_list = afterSubtasks.map((s) => s.id);
+    if (beforeIds.length === afterIds_list.length &&
+        !beforeIds.every((id, i) => id === afterIds_list[i])) {
+      isPureReorder = true;
+    }
+  }
   patch.subtasks = {
     upserts,
     removedIds,
