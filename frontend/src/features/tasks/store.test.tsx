@@ -881,14 +881,7 @@ describe("TasksProvider", () => {
       expect(updateSpy).not.toHaveBeenCalled();
     });
 
-    it("reorderSubtask preserves concurrent additions when rebasing onto divergent authoritative base", async () => {
-      // This test verifies that when a reorder patch is rebased onto an
-      // authoritative task that has had subtasks added concurrently, the
-      // reorder is applied AND the concurrent addition is NOT lost.
-      // Scenario: 1) addSubtask adds s4 and updates authoritative base
-      //           2) reorderSubtask's patch was built without s4 but rebases onto
-      //              the authoritative base that now includes s4
-      //           3) Result should be [s2, s1, s3, s4] (reorder applied, s4 preserved)
+    it("a reorder rebasing onto a divergent authoritative base preserves both the reorder and a subtask the client's own diff never saw", async () => {
       const task = makeTask({
         id: "a",
         scope: { kind: "day", date: todayKey() },
@@ -898,59 +891,42 @@ describe("TasksProvider", () => {
           { id: "s3", title: "three", done: false },
         ],
       });
-
-      const { repo, result } = setup(fakeRepository([task]));
+      const repo = fakeRepository([task]);
+      const realUpdate = repo.update.bind(repo);
+      let firstCall = true;
+      repo.update = async (toUpdate: Task) => {
+        if (firstCall) {
+          firstCall = false;
+          // Simulate a write this client's own local diff never saw: the
+          // "server" response for the FIRST queued mutation comes back with an
+          // extra subtask appended, as if something else added it concurrently.
+          return realUpdate({
+            ...toUpdate,
+            subtasks: [...(toUpdate.subtasks ?? []), { id: "s4", title: "four", done: false }],
+          });
+        }
+        return realUpdate(toUpdate);
+      };
+      const { result } = setup(repo);
       await waitFor(() => expect(result.current.loaded).toBe(true));
 
-      // Dispatch addSubtask first - this will update the authoritative base
-      act(() => result.current.addSubtask("a", "four"));
-      // Capture the generated s4 ID
-      let s4Id = result.current.tasks[0].subtasks?.[3].id;
-      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual([
-        "s1",
-        "s2",
-        "s3",
-        s4Id,
-      ]);
-      // Wait for addSubtask mutation to complete and update authoritative base
-      await waitFor(() => {
-        expect(repo.tasks[0].subtasks).toHaveLength(4);
+      act(() => {
+        // Both dispatched synchronously, in the same act(): setPriority's
+        // mutation is queued first (and its rigged server response injects
+        // s4), reorderSubtask's patch is computed against local state that
+        // does NOT include s4 yet — s4 only becomes known once setPriority's
+        // response lands and updates authoritativeTasksRef, which happens
+        // BEFORE reorderSubtask's own queued mutation runs and rebases.
+        result.current.setPriority("a", true);
+        result.current.reorderSubtask("a", "s1", null);
       });
 
-      // Now dispatch reorderSubtask. The patch was built against the local state
-      // that now includes s4, so this isn't exactly the scenario the comment
-      // describes (where the patch doesn't know about s4). But we verify that
-      // the result is correct: the reorder is applied and s4 is preserved.
-      act(() => result.current.reorderSubtask("a", "s1", "s3"));
-
-      // Verify local state has the reorder applied
-      const localIds = result.current.tasks[0].subtasks?.map((s) => s.id);
-      expect(localIds?.[0]).toBe("s2");
-      expect(localIds?.[1]).toBe("s1");
-      expect(localIds?.[2]).toBe("s3");
-      expect(localIds?.[3]).toBe(s4Id); // s4 should still be there
-
-      // Wait for reorder mutation to complete
-      await waitFor(() => {
-        const savedIds = repo.tasks[0].subtasks?.map((s) => s.id);
-        expect(savedIds).toEqual([
-          "s2",
-          "s1",
-          "s3",
-          s4Id,
-        ]);
-      });
+      await waitFor(() =>
+        expect(repo.tasks[0].subtasks?.map((s) => s.id)).toEqual(["s2", "s3", "s1", "s4"]),
+      );
     });
 
-    it("toggleSubtask/removeSubtask with unknown ID doesn't revert a concurrent reorder", async () => {
-      // This test verifies that the no-op detection for unknown-id
-      // toggle/remove doesn't stamp a stale order that could revert a
-      // concurrent reorder. Scenario: 1) Server has reordered to [s3, s2, s1]
-      //                               2) Local removeSubtask("s99") is called
-      //                               3) Without the fix, isPureReorder would
-      //                                  match (no upserts, no removals) and stamp
-      //                                  a stale [s1, s2, s3] order, reverting
-      //                                  the server's [s3, s2, s1]
+    it("a no-op removeSubtask (unknown id) does not revert a reorder already reflected in the authoritative base", async () => {
       const task = makeTask({
         id: "a",
         scope: { kind: "day", date: todayKey() },
@@ -960,48 +936,34 @@ describe("TasksProvider", () => {
           { id: "s3", title: "three", done: false },
         ],
       });
-
-      // Create a custom repository where the authoritative base has already
-      // been reordered server-side to [s3, s2, s1]
-      const reorderedTask: Task = {
-        ...task,
-        version: 2,
-        subtasks: [
-          { id: "s3", title: "three", done: false },
-          { id: "s2", title: "two", done: false },
-          { id: "s1", title: "one", done: false },
-        ],
+      const repo = fakeRepository([task]);
+      const realUpdate = repo.update.bind(repo);
+      let firstCall = true;
+      repo.update = async (toUpdate: Task) => {
+        if (firstCall) {
+          firstCall = false;
+          return realUpdate({
+            ...toUpdate,
+            subtasks: [
+              { id: "s3", title: "three", done: false },
+              { id: "s2", title: "two", done: false },
+              { id: "s1", title: "one", done: false },
+            ],
+          });
+        }
+        return realUpdate(toUpdate);
       };
-      const { repo, result } = setup(fakeRepository([reorderedTask]));
+      const { result } = setup(repo);
       await waitFor(() => expect(result.current.loaded).toBe(true));
-      const updateSpy = vi.spyOn(repo, "update");
 
-      // Local state is [s3, s2, s1] (loaded from repo)
-      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual([
-        "s3",
-        "s2",
-        "s1",
-      ]);
+      act(() => {
+        result.current.setPriority("a", true); // lands the rigged [s3,s2,s1] as authoritative
+        result.current.removeSubtask("a", "does-not-exist"); // true no-op
+      });
 
-      // Attempt to remove an unknown subtask
-      act(() => result.current.removeSubtask("a", "s99"));
-
-      // Local state should be unchanged
-      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual([
-        "s3",
-        "s2",
-        "s1",
-      ]);
-
-      // No repo.update should be called (true no-op)
-      expect(updateSpy).not.toHaveBeenCalled();
-
-      // Verify the concurrent reorder [s3, s2, s1] is not reverted
-      expect(repo.tasks[0].subtasks?.map((s) => s.id)).toEqual([
-        "s3",
-        "s2",
-        "s1",
-      ]);
+      await waitFor(() =>
+        expect(repo.tasks[0].subtasks?.map((s) => s.id)).toEqual(["s3", "s2", "s1"]),
+      );
     });
 
     it("editSubtaskMemo trims and clears a blank memo to undefined", async () => {
