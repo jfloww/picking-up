@@ -71,7 +71,7 @@ function DrawerSubtaskRow({
         // when active) so toggling the drop indicator never changes the
         // row's box height — box-sizing: border-box (Tailwind's preflight)
         // means this border eats into the existing h-10 box, not adds to it.
-        "group flex h-10 items-center gap-2.5 rounded-md border-t-2 border-transparent px-1.5 transition-colors duration-200 hover:bg-muted/40 focus-within:bg-muted/40",
+        "group flex h-10 items-center gap-2.5 rounded-md border-t-2 border-transparent px-1.5 transition-[color,background-color] duration-200 hover:bg-muted/40 focus-within:bg-muted/40",
         showDropIndicatorAbove && "border-brand",
         deleting ? "animate-subtask-exit" : animationClass,
       )}
