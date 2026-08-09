@@ -787,18 +787,29 @@ describe("ScopeTasks day box (Weekly view props)", () => {
   });
 
   it("with highlightOverdue, marks a past unfinished task overdue via its rolled-over week scope", async () => {
-    const past = addDays(todayKey(), -2);
-    const t = makeTask({ title: "old task", scope: { kind: "day", date: past } });
-    render(
-      <TasksProvider repository={fakeRepository([t])} categoryRepository={fakeCategoryRepository()}>
-        <ScopeTasks scope={{ kind: "day", date: past }} highlightOverdue />
-      </TasksProvider>,
-    );
-    // rolloverTasks (run on load) has already converted this to week scope by
-    // the time it renders, so this also proves the rolled-over item is found.
-    await waitFor(() => expect(screen.getByText("old task")).toBeTruthy());
-    const row = screen.getByText("old task").closest("div");
-    expect(row?.className).toContain("border-destructive");
+    // Keep the fixture inside the current Sunday-start week. Without a
+    // frozen Thursday, `today - 2` crosses into the previous week when CI
+    // runs on Sunday/Monday; rollover correctly advances the task to the
+    // new week while preserving its old rolledFrom date, so querying the
+    // previous week's day should then return nothing.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 6, 16)); // Thursday
+    try {
+      const past = addDays(todayKey(), -2);
+      const t = makeTask({ title: "old task", scope: { kind: "day", date: past } });
+      render(
+        <TasksProvider repository={fakeRepository([t])} categoryRepository={fakeCategoryRepository()}>
+          <ScopeTasks scope={{ kind: "day", date: past }} highlightOverdue />
+        </TasksProvider>,
+      );
+      // rolloverTasks (run on load) has already converted this to week scope by
+      // the time it renders, so this also proves the rolled-over item is found.
+      await waitFor(() => expect(screen.getByText("old task")).toBeTruthy());
+      const row = screen.getByText("old task").closest("div");
+      expect(row?.className).toContain("border-destructive");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("with highlightOverdue, marks today's unfinished task pending, not overdue", async () => {
