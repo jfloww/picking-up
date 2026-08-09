@@ -73,6 +73,13 @@ interface TaskPatch {
     upserts: SubtaskUpsert[];
     removedIds: string[];
     keepEmptyArray: boolean;
+    // When a pure reorder occurs (subtasks array changed but no property
+    // changes, no removals), capture the target id sequence. During rebase,
+    // this order is applied by reordering the base array while merging in
+    // any concurrent additions the patch doesn't know about (append them at
+    // the end), rather than overwriting the base. This preserves concurrent
+    // edits to other fields and concurrent additions.
+    order?: string[];
   };
 }
 
@@ -111,24 +118,16 @@ function buildTaskPatch(before: Task, after: Task): TaskPatch {
     .map((subtask) => subtask.id);
 
   // If subtasks array changed but no properties changed and nothing was removed,
-  // it means only the order changed. Include all subtasks in upserts to force
-  // the patch system to rebuild the array in the new order.
-  if (upserts.length === 0 && removedIds.length === 0 && beforeSubtasks.length > 0) {
-    patch.subtasks = {
-      upserts: afterSubtasks.map((subtask) => ({
-        value: subtask,
-        requiresExisting: true,
-      })),
-      removedIds: [],
-      keepEmptyArray: after.subtasks !== undefined,
-    };
-  } else {
-    patch.subtasks = {
-      upserts,
-      removedIds,
-      keepEmptyArray: after.subtasks !== undefined,
-    };
-  }
+  // it means only the order changed. Capture the target order sequence so that
+  // during rebase, we can merge it with any concurrent changes rather than
+  // overwriting the base.
+  const isPureReorder = upserts.length === 0 && removedIds.length === 0 && beforeSubtasks.length > 0;
+  patch.subtasks = {
+    upserts,
+    removedIds,
+    keepEmptyArray: after.subtasks !== undefined,
+    order: isPureReorder ? afterSubtasks.map((s) => s.id) : undefined,
+  };
   return patch;
 }
 
@@ -180,12 +179,36 @@ function applyTaskPatch(base: Task, patch: TaskPatch): Task | undefined {
       }
     }
 
-    // For reordering (upserts provided but no object changes, no removals),
-    // rebuild the array in the order specified by the upserts
-    if (!changed && patch.subtasks.upserts.length > 0 && patch.subtasks.removedIds.length === 0) {
-      next.length = 0;
-      next.push(...patch.subtasks.upserts.map((u) => u.value));
-      changed = true;
+    // For a pure reorder patch (no removals, no property changes), apply the
+    // order intent: reorder the base array according to the target sequence,
+    // but merge in any concurrent additions (subtasks in next that aren't in
+    // the order sequence) by appending them at the end. This preserves both
+    // the reorder and any concurrent additions, rather than overwriting.
+    if (patch.subtasks.order && patch.subtasks.removedIds.length === 0 && patch.subtasks.upserts.length === 0) {
+      const orderSet = new Set(patch.subtasks.order);
+      const byId = new Map(next.map((s) => [s.id, s]));
+      const reordered: Subtask[] = [];
+      const unknown: Subtask[] = [];
+
+      // Add subtasks in the order sequence
+      for (const id of patch.subtasks.order) {
+        const subtask = byId.get(id);
+        if (subtask) reordered.push(subtask);
+      }
+
+      // Append any concurrent additions (subtasks not in the order sequence)
+      for (const subtask of next) {
+        if (!orderSet.has(subtask.id)) {
+          unknown.push(subtask);
+        }
+      }
+
+      // If the order changed, update next
+      if (reordered.length + unknown.length !== next.length ||
+          !reordered.concat(unknown).every((s, i) => s.id === next[i].id)) {
+        next.splice(0, next.length, ...reordered, ...unknown);
+        changed = true;
+      }
     }
 
     if (changed || (patch.subtasks.keepEmptyArray && base.subtasks === undefined)) {

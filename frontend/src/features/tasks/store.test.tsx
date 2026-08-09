@@ -773,6 +773,44 @@ describe("TasksProvider", () => {
       await waitFor(() => expect(repo.tasks[0].subtasks).toHaveLength(1));
     });
 
+    it("toggleSubtask with unknown subtaskId is a no-op (does not persist)", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+        ],
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const updateSpy = vi.spyOn(repo, "update");
+
+      // Attempt to toggle a subtask that doesn't exist
+      act(() => result.current.toggleSubtask("a", "s99"));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual(["s1", "s2"]);
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it("removeSubtask with unknown subtaskId is a no-op (does not persist)", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+        ],
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const updateSpy = vi.spyOn(repo, "update");
+
+      // Attempt to remove a subtask that doesn't exist
+      act(() => result.current.removeSubtask("a", "s99"));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual(["s1", "s2"]);
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
     it("reorderSubtask moves a subtask to a new position among siblings", async () => {
       const task = makeTask({
         id: "a",
@@ -841,6 +879,66 @@ describe("TasksProvider", () => {
         "s3",
       ]);
       expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it("reorderSubtask preserves concurrent additions when rebasing onto divergent authoritative base", async () => {
+      // This test verifies that when a reorder patch is rebased onto an
+      // authoritative task that has had subtasks added concurrently, the
+      // reorder is applied AND the concurrent addition is NOT lost.
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+          { id: "s3", title: "three", done: false },
+        ],
+      });
+
+      // Create a custom repository that simulates concurrent adds by
+      // returning a different task when update() is called.
+      const concurrentState = { tasks: [task] };
+      const concurrentRepo = {
+        ...fakeRepository([task]),
+        async update(toUpdate) {
+          // When the reorder patch is applied, the repository simulates
+          // that a concurrent subtask s4 was added server-side
+          const concurrent = concurrentState.tasks.find((t) => t.id === toUpdate.id);
+          if (!concurrent || concurrent.version !== toUpdate.version) {
+            throw new TaskVersionConflictError();
+          }
+          const withConcurrentAdd: Task = {
+            ...toUpdate,
+            version: toUpdate.version + 1,
+            subtasks: [
+              ...(toUpdate.subtasks ?? []),
+              { id: "s4", title: "four", done: false },
+            ],
+          };
+          concurrentState.tasks = concurrentState.tasks.map((t) =>
+            t.id === toUpdate.id ? withConcurrentAdd : t,
+          );
+          return withConcurrentAdd;
+        },
+      };
+
+      const { result } = setup(concurrentRepo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      // Reorder locally: move s1 before s3
+      act(() => result.current.reorderSubtask("a", "s1", "s3"));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual([
+        "s2",
+        "s1",
+        "s3",
+      ]);
+
+      // Wait for the patch to be applied to the repository.
+      // The concurrent s4 addition should be preserved, resulting in [s2, s1, s3, s4].
+      await waitFor(() => {
+        const saved = concurrentState.tasks[0];
+        expect(saved.subtasks?.map((s) => s.id)).toEqual(["s2", "s1", "s3", "s4"]);
+      });
     });
 
     it("editSubtaskMemo trims and clears a blank memo to undefined", async () => {
