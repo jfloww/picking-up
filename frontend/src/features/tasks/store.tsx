@@ -1004,15 +1004,22 @@ export function TasksProvider({
             ? remaining.length
             : remaining.findIndex((s) => s.id === insertBeforeId);
         if (targetIndex === -1) return;
-        // Compare list *positions*, not just the two ids: after removing
-        // the dragged subtask to build `remaining`, the slot it already
-        // occupies is targetIndex === currentIndex in that shifted index
-        // space — same no-op check as day-agenda.tsx's task-level
-        // handleReorder, adapted here since subtasks have no separate
-        // command endpoint of their own to skip calling.
-        if (targetIndex === currentIndex) return;
         const reordered = [...remaining];
         reordered.splice(targetIndex, 0, moving);
+        // Compare *active-only* id sequences, not raw array positions:
+        // DrawerSubtaskList only ever names active subtasks as drop
+        // targets (its orderedIds passed to useDragToReorder is
+        // active.map(...)), so a completed subtask sitting between the
+        // drag source and target — toggleSubtask maps a subtask in place
+        // rather than moving it, so done and active subtasks can be
+        // interleaved in the stored array — can shift raw indices even
+        // though nothing visibly moved. Comparing full-array indices
+        // (targetIndex vs currentIndex) missed that case and fired an
+        // unnecessary PATCH that silently reordered done-vs-active
+        // storage order (final-review finding).
+        const activeIds = (list: typeof subtasks) =>
+          list.filter((s) => !s.done).map((s) => s.id);
+        if (activeIds(subtasks).join(" ") === activeIds(reordered).join(" ")) return;
         const task: Task = { ...current, subtasks: reordered };
         persistUpdate(task);
       },

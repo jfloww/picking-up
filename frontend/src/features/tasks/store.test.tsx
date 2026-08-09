@@ -881,6 +881,38 @@ describe("TasksProvider", () => {
       expect(updateSpy).not.toHaveBeenCalled();
     });
 
+    it("reorderSubtask is a no-op (and does not persist) when a completed subtask sits between the drag source and target in storage order", async () => {
+      // Stored array interleaves active and completed subtasks (toggleSubtask
+      // maps a subtask in place rather than moving it): a(active), d(done),
+      // b(active). The UI only ever shows/names active subtasks as drop
+      // targets, so dragging "a" and dropping it "above b" is a visual
+      // no-op — a is already immediately before b among active subtasks.
+      // Comparing raw full-array indices instead of active-only id
+      // sequences used to miss this: d sitting between a and b shifted the
+      // raw index math even though nothing visibly moved (final-review
+      // finding).
+      const task = makeTask({
+        id: "task1",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "a", title: "a", done: false },
+          { id: "d", title: "d", done: true },
+          { id: "b", title: "b", done: false },
+        ],
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const updateSpy = vi.spyOn(repo, "update");
+
+      act(() => result.current.reorderSubtask("task1", "a", "b"));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual([
+        "a",
+        "d",
+        "b",
+      ]);
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
     it("a reorder rebasing onto a divergent authoritative base preserves both the reorder and a subtask the client's own diff never saw", async () => {
       const task = makeTask({
         id: "a",
