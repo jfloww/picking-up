@@ -19,6 +19,7 @@ const noopHandlers = {
   onAddSubtask: (_title: string) => {},
   onToggleSubtask: (_id: string) => {},
   onRemoveSubtask: (_id: string) => {},
+  onReorderSubtask: (_id: string, _insertBeforeId: string | null) => {},
   onEditSubtaskTitle: (_id: string, _title: string) => {},
   onEditSubtaskMemo: (_id: string, _memo: string) => {},
   onPromoteSubtask: (_subtaskId: string) => undefined,
@@ -714,6 +715,16 @@ describe("TaskDetailDrawer", () => {
       // Deferred until the row's exit animation finishes (see
       // use-subtask-transition-classes.ts), not called synchronously on click.
       await waitFor(() => expect(onRemoveSubtask).toHaveBeenCalledWith("s2"));
+    });
+
+    it("threads onReorderSubtask through TaskDetailFields to SubtaskList's drag handle", () => {
+      // onReorderSubtask/onReorder are both optional props (correctly, since
+      // the plain non-drawer SubtaskList variant never provides one), so
+      // deleting either forwarding line in task-detail-fields.tsx compiles
+      // cleanly. This proves the prop actually reaches the rendered drag
+      // handle through both hops (final-review finding).
+      render(<TaskDetailDrawer task={subtasksTask} {...noopHandlers} />);
+      expect(screen.getByLabelText("Reorder buy wood")).toBeTruthy();
     });
 
     it("adds several subtasks in a row with Enter, without losing focus or requiring a re-click", () => {

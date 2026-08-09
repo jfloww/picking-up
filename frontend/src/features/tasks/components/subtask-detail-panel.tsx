@@ -114,9 +114,13 @@ export function SubtaskDetailPanel({
             if (e.key === "Enter") {
               // A title is a single logical line even once it wraps onto
               // several visual ones — Enter commits it, same as the old
-              // single-line <input>, instead of inserting a newline.
+              // single-line <input>, instead of inserting a newline. It
+              // also closes the panel — pressing Enter here reads as "I'm
+              // done with this subtask," distinct from Escape's "cancel,
+              // stay open."
               e.preventDefault();
               commitTitle();
+              onClose();
             }
             if (e.key === "Escape") {
               e.preventDefault();

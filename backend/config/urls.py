@@ -15,10 +15,12 @@ from apps.tasks.views import (
     TaskDetailView,
     TaskListCreateView,
 )
+from config.views import health
 
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("api/health/", health, name="health"),
     path("api/auth/register/", RegisterView.as_view(), name="register"),
     path("api/auth/token/", EmailTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/auth/google/", GoogleTokenObtainView.as_view(), name="google_token_obtain"),

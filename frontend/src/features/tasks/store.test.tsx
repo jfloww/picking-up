@@ -773,6 +773,231 @@ describe("TasksProvider", () => {
       await waitFor(() => expect(repo.tasks[0].subtasks).toHaveLength(1));
     });
 
+    it("toggleSubtask with unknown subtaskId is a no-op (does not persist)", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+        ],
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const updateSpy = vi.spyOn(repo, "update");
+
+      // Attempt to toggle a subtask that doesn't exist
+      act(() => result.current.toggleSubtask("a", "s99"));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual(["s1", "s2"]);
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it("removeSubtask with unknown subtaskId is a no-op (does not persist)", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+        ],
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const updateSpy = vi.spyOn(repo, "update");
+
+      // Attempt to remove a subtask that doesn't exist
+      act(() => result.current.removeSubtask("a", "s99"));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual(["s1", "s2"]);
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it("reorderSubtask moves a subtask to a new position among siblings", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+          { id: "s3", title: "three", done: false },
+        ],
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.reorderSubtask("a", "s1", "s3"));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual([
+        "s2",
+        "s1",
+        "s3",
+      ]);
+      await waitFor(() =>
+        expect(repo.tasks[0].subtasks?.map((s) => s.id)).toEqual(["s2", "s1", "s3"]),
+      );
+    });
+
+    it("reorderSubtask with a null insertBeforeId moves it to the end", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+          { id: "s3", title: "three", done: false },
+        ],
+      });
+      const { result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.reorderSubtask("a", "s1", null));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual([
+        "s2",
+        "s3",
+        "s1",
+      ]);
+    });
+
+    it("reorderSubtask is a no-op (and does not persist) when dropped in its current position", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+          { id: "s3", title: "three", done: false },
+        ],
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const updateSpy = vi.spyOn(repo, "update");
+
+      // s1 is already immediately before s2 — inserting it before s2 again
+      // is a no-op.
+      act(() => result.current.reorderSubtask("a", "s1", "s2"));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual([
+        "s1",
+        "s2",
+        "s3",
+      ]);
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it("reorderSubtask is a no-op (and does not persist) when a completed subtask sits between the drag source and target in storage order", async () => {
+      // Stored array interleaves active and completed subtasks (toggleSubtask
+      // maps a subtask in place rather than moving it): a(active), d(done),
+      // b(active). The UI only ever shows/names active subtasks as drop
+      // targets, so dragging "a" and dropping it "above b" is a visual
+      // no-op — a is already immediately before b among active subtasks.
+      // Comparing raw full-array indices instead of active-only id
+      // sequences used to miss this: d sitting between a and b shifted the
+      // raw index math even though nothing visibly moved (final-review
+      // finding).
+      const task = makeTask({
+        id: "task1",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "a", title: "a", done: false },
+          { id: "d", title: "d", done: true },
+          { id: "b", title: "b", done: false },
+        ],
+      });
+      const { repo, result } = setup(fakeRepository([task]));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      const updateSpy = vi.spyOn(repo, "update");
+
+      act(() => result.current.reorderSubtask("task1", "a", "b"));
+      expect(result.current.tasks[0].subtasks?.map((s) => s.id)).toEqual([
+        "a",
+        "d",
+        "b",
+      ]);
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it("a reorder rebasing onto a divergent authoritative base preserves both the reorder and a subtask the client's own diff never saw", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+          { id: "s3", title: "three", done: false },
+        ],
+      });
+      const repo = fakeRepository([task]);
+      const realUpdate = repo.update.bind(repo);
+      let firstCall = true;
+      repo.update = async (toUpdate: Task) => {
+        if (firstCall) {
+          firstCall = false;
+          // Simulate a write this client's own local diff never saw: the
+          // "server" response for the FIRST queued mutation comes back with an
+          // extra subtask appended, as if something else added it concurrently.
+          return realUpdate({
+            ...toUpdate,
+            subtasks: [...(toUpdate.subtasks ?? []), { id: "s4", title: "four", done: false }],
+          });
+        }
+        return realUpdate(toUpdate);
+      };
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => {
+        // Both dispatched synchronously, in the same act(): setPriority's
+        // mutation is queued first (and its rigged server response injects
+        // s4), reorderSubtask's patch is computed against local state that
+        // does NOT include s4 yet — s4 only becomes known once setPriority's
+        // response lands and updates authoritativeTasksRef, which happens
+        // BEFORE reorderSubtask's own queued mutation runs and rebases.
+        result.current.setPriority("a", true);
+        result.current.reorderSubtask("a", "s1", null);
+      });
+
+      await waitFor(() =>
+        expect(repo.tasks[0].subtasks?.map((s) => s.id)).toEqual(["s2", "s3", "s1", "s4"]),
+      );
+    });
+
+    it("a no-op removeSubtask (unknown id) does not revert a reorder already reflected in the authoritative base", async () => {
+      const task = makeTask({
+        id: "a",
+        scope: { kind: "day", date: todayKey() },
+        subtasks: [
+          { id: "s1", title: "one", done: false },
+          { id: "s2", title: "two", done: false },
+          { id: "s3", title: "three", done: false },
+        ],
+      });
+      const repo = fakeRepository([task]);
+      const realUpdate = repo.update.bind(repo);
+      let firstCall = true;
+      repo.update = async (toUpdate: Task) => {
+        if (firstCall) {
+          firstCall = false;
+          return realUpdate({
+            ...toUpdate,
+            subtasks: [
+              { id: "s3", title: "three", done: false },
+              { id: "s2", title: "two", done: false },
+              { id: "s1", title: "one", done: false },
+            ],
+          });
+        }
+        return realUpdate(toUpdate);
+      };
+      const { result } = setup(repo);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => {
+        result.current.setPriority("a", true); // lands the rigged [s3,s2,s1] as authoritative
+        result.current.removeSubtask("a", "does-not-exist"); // true no-op
+      });
+
+      await waitFor(() =>
+        expect(repo.tasks[0].subtasks?.map((s) => s.id)).toEqual(["s3", "s2", "s1"]),
+      );
+    });
+
     it("editSubtaskMemo trims and clears a blank memo to undefined", async () => {
       const task = makeTask({
         id: "a",

@@ -73,6 +73,13 @@ interface TaskPatch {
     upserts: SubtaskUpsert[];
     removedIds: string[];
     keepEmptyArray: boolean;
+    // When a pure reorder occurs (subtasks array changed but no property
+    // changes, no removals), capture the target id sequence. During rebase,
+    // this order is applied by reordering the base array while merging in
+    // any concurrent additions the patch doesn't know about (append them at
+    // the end), rather than overwriting the base. This preserves concurrent
+    // edits to other fields and concurrent additions.
+    order?: string[];
   };
 }
 
@@ -99,17 +106,37 @@ function buildTaskPatch(before: Task, after: Task): TaskPatch {
   const beforeById = new Map(beforeSubtasks.map((subtask) => [subtask.id, subtask]));
   const afterIds = new Set(afterSubtasks.map((subtask) => subtask.id));
 
+  const upserts = afterSubtasks
+    .filter((subtask) => !Object.is(beforeById.get(subtask.id), subtask))
+    .map((subtask) => ({
+      value: subtask,
+      requiresExisting: beforeById.has(subtask.id),
+    }));
+
+  const removedIds = beforeSubtasks
+    .filter((subtask) => !afterIds.has(subtask.id))
+    .map((subtask) => subtask.id);
+
+  // If subtasks array changed but no properties changed and nothing was removed,
+  // check whether the ID sequence actually changed. Compare the before and after
+  // id sequences: if they're identical, it's a true no-op (e.g., removeSubtask with
+  // unknown id creates a new array but with same ids in same order). Only capture
+  // order if the sequence genuinely changed (true reorder).
+  let isPureReorder = false;
+  if (upserts.length === 0 && removedIds.length === 0 && beforeSubtasks.length > 0) {
+    // Check if the ID sequence actually changed
+    const beforeIds = beforeSubtasks.map((s) => s.id);
+    const afterIds_list = afterSubtasks.map((s) => s.id);
+    if (beforeIds.length === afterIds_list.length &&
+        !beforeIds.every((id, i) => id === afterIds_list[i])) {
+      isPureReorder = true;
+    }
+  }
   patch.subtasks = {
-    upserts: afterSubtasks
-      .filter((subtask) => !Object.is(beforeById.get(subtask.id), subtask))
-      .map((subtask) => ({
-        value: subtask,
-        requiresExisting: beforeById.has(subtask.id),
-      })),
-    removedIds: beforeSubtasks
-      .filter((subtask) => !afterIds.has(subtask.id))
-      .map((subtask) => subtask.id),
+    upserts,
+    removedIds,
     keepEmptyArray: after.subtasks !== undefined,
+    order: isPureReorder ? afterSubtasks.map((s) => s.id) : undefined,
   };
   return patch;
 }
@@ -158,6 +185,38 @@ function applyTaskPatch(base: Task, patch: TaskPatch): Task | undefined {
         }
       } else if (!upsert.requiresExisting) {
         next.push(upsert.value);
+        changed = true;
+      }
+    }
+
+    // For a pure reorder patch (no removals, no property changes), apply the
+    // order intent: reorder the base array according to the target sequence,
+    // but merge in any concurrent additions (subtasks in next that aren't in
+    // the order sequence) by appending them at the end. This preserves both
+    // the reorder and any concurrent additions, rather than overwriting.
+    if (patch.subtasks.order && patch.subtasks.removedIds.length === 0 && patch.subtasks.upserts.length === 0) {
+      const orderSet = new Set(patch.subtasks.order);
+      const byId = new Map(next.map((s) => [s.id, s]));
+      const reordered: Subtask[] = [];
+      const unknown: Subtask[] = [];
+
+      // Add subtasks in the order sequence
+      for (const id of patch.subtasks.order) {
+        const subtask = byId.get(id);
+        if (subtask) reordered.push(subtask);
+      }
+
+      // Append any concurrent additions (subtasks not in the order sequence)
+      for (const subtask of next) {
+        if (!orderSet.has(subtask.id)) {
+          unknown.push(subtask);
+        }
+      }
+
+      // If the order changed, update next
+      if (reordered.length + unknown.length !== next.length ||
+          !reordered.concat(unknown).every((s, i) => s.id === next[i].id)) {
+        next.splice(0, next.length, ...reordered, ...unknown);
         changed = true;
       }
     }
@@ -258,6 +317,7 @@ interface TasksContextValue extends TasksState {
   addSubtask: (id: string, title: string) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
   removeSubtask: (id: string, subtaskId: string) => void;
+  reorderSubtask: (id: string, subtaskId: string, insertBeforeId: string | null) => void;
   editSubtaskTitle: (id: string, subtaskId: string, title: string) => void;
   editSubtaskMemo: (id: string, subtaskId: string, memo: string) => void;
   convertTaskToSubtask: (
@@ -929,6 +989,40 @@ export function TasksProvider({
           ...current,
           subtasks: current.subtasks.filter((s) => s.id !== subtaskId),
         };
+        persistUpdate(task);
+      },
+      reorderSubtask(id, subtaskId, insertBeforeId) {
+        const current = tasksRef.current.find((t) => t.id === id);
+        if (!current?.subtasks) return;
+        const subtasks = current.subtasks;
+        const currentIndex = subtasks.findIndex((s) => s.id === subtaskId);
+        if (currentIndex === -1) return;
+        const moving = subtasks[currentIndex];
+        const remaining = subtasks.filter((s) => s.id !== subtaskId);
+        const targetIndex =
+          insertBeforeId === null
+            ? remaining.length
+            : remaining.findIndex((s) => s.id === insertBeforeId);
+        if (targetIndex === -1) return;
+        const reordered = [...remaining];
+        reordered.splice(targetIndex, 0, moving);
+        // Compare *active-only* id sequences, not raw array positions:
+        // DrawerSubtaskList only ever names active subtasks as drop
+        // targets (its orderedIds passed to useDragToReorder is
+        // active.map(...)), so a completed subtask sitting between the
+        // drag source and target — toggleSubtask maps a subtask in place
+        // rather than moving it, so done and active subtasks can be
+        // interleaved in the stored array — can shift raw indices even
+        // though nothing visibly moved. Comparing full-array indices
+        // (targetIndex vs currentIndex) missed that case and fired an
+        // unnecessary PATCH that silently reordered done-vs-active
+        // storage order (final-review finding).
+        const activeIds = (list: typeof subtasks) =>
+          list.filter((s) => !s.done).map((s) => s.id);
+        const before = activeIds(subtasks);
+        const after = activeIds(reordered);
+        if (before.length === after.length && before.every((sid, i) => sid === after[i])) return;
+        const task: Task = { ...current, subtasks: reordered };
         persistUpdate(task);
       },
       editSubtaskTitle(id, subtaskId, title) {

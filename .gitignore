@@ -30,3 +30,6 @@ wallet/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Other git worktrees checked out under the project
+.claude/worktrees/

@@ -2,12 +2,12 @@
 
 ## Product context
 
-Picking Up is a calm, desktop-first task planner built around Daily, Weekly, Monthly, and Yearly calendar scales. The main `/app` workspace preserves one task data model and supports task completion, time scheduling, priority, repeat rules, subtasks, drag-to-schedule, and task details. Daily is the current redesign target; the other views must keep their behavior and established component patterns.
+Picking Up is a calm task planner whose current production workspace is `/planner`. It is built around Daily, Weekly, and Monthly calendar scales; Bucket List exists in the codebase but is temporarily hidden from navigation. One task data model supports completion, time scheduling, priority, repeat rules, subtasks, drag-to-schedule, and task details. The desktop experience is established; mobile web is a new responsive target that must preserve those capabilities without compressing the desktop layout.
 
 ## Visual direction
 
 - Quiet, high-density productivity UI with restrained hierarchy.
-- Default dark theme uses near-black canvas and charcoal surfaces with steel-blue as the focus/brand accent (matching light theme's blue, not the earlier gold exploration — see Color below).
+- Default dark theme uses near-black canvas and charcoal surfaces with warm gold as the focus/brand accent. Light mode uses muted blue.
 - Light theme remains neutral white and cool gray with muted blue brand/focus.
 - Use borders and 1px rings for separation. Reserve large shadows for overlays such as the task drawer.
 - Avoid decorative gradients, new font families, saturated novelty colors, glass effects, or marketing-style ornament inside the planner.
@@ -31,9 +31,7 @@ other way around.
 - Dark raised surface: `#121518` (`card`, `sidebar`, `popover`).
 - Dark secondary surface: `#181c20` (`muted`, `secondary`, `accent`, `input`).
 - Dark foreground: `#f4f5f6`; muted foreground `#a3adb7`; subtle `#697681`.
-- Dark brand/focus: `#6f9cc4` (steel-blue — matches light theme's blue; an
-  earlier "Neural Noir" exploration used a warm gold, `#d4a85f`, but that
-  was reverted and is no longer current anywhere in the app).
+- Dark brand/focus: `#d4a85f` (warm gold), matching the current CSS tokens and approved desktop reference.
 - Dark border: `rgb(255 255 255 / 9%)`.
 - Dark destructive: `#ff8a7a`; warning: `#fbbf24` (pending/overdue
   highlighting only — not the brand accent); success: `#4ade80`.
@@ -58,10 +56,23 @@ other way around.
 
 - Use the existing shadcn/Base UI primitives under `frontend/src/components/ui`.
 - Use Lucide React icons already present in the app; do not add icon CDNs or inline scripts.
-- Calendar navigation is owned by `TaskCalendar` and `ViewSwitcher`.
+- Calendar navigation is owned by `TaskCalendar` and `ViewSwitcher`; mobile may reorganize those controls while preserving their states and actions.
 - Daily content is owned by `DailyView`, with `DayTimeline` on the left, `DayAgenda` on the right, and `TaskDetailDrawer` as an overlay.
 - `DayAgenda` groups tasks into All Day To-Do, Next Up, and Done Today and owns the single quick-add entry for the Daily view.
 - Preserve the task store, repository, types, reducer/actions, and drag scheduling hooks; redesign only rendering and layout around those contracts.
+
+## Mobile web structure
+
+- Target a 390px-wide mobile viewport first, with safe-area-aware fixed or sticky controls and 16px page gutters.
+- Remove the marketing-style site footer from the active planner viewport on mobile; keep account, theme, and secondary links available from a compact overflow/profile menu.
+- Keep Daily, Weekly, and Monthly as the primary app-level destinations. On mobile, use a persistent bottom navigation for them rather than squeezing desktop tabs into the header.
+- Daily is agenda-first. Replace the desktop 60/40 simultaneous panes with a local `Tasks / Timeline` segmented switch; preserve the selected date across the switch.
+- Put date navigation in a compact sticky header: previous day, date/title, Today, and next day. Support horizontal date swiping as an enhancement, never as the only control.
+- Keep `+ New task` persistently reachable above the app navigation. The keyboard may turn it into an inline composer; it must not be hidden at the end of a long list.
+- Open task details as a full-height mobile sheet/page with a sticky top close action and sticky bottom Cancel/Done actions. Do not use a 420px side drawer at narrow widths.
+- Preserve explicit time/date controls so scheduling never depends on cross-pane drag. Timeline drag may remain as a progressive enhancement for touch devices.
+- Weekly becomes a vertically scrollable seven-day list or day carousel, not seven simultaneous narrow columns. Monthly uses the existing mobile list concept with week dividers and opens a full-height day agenda.
+- Touch targets should be at least 44px where possible; do not rely on hover-only actions. Destructive and secondary row actions should move to an overflow menu or swipe action with an accessible alternative.
 
 ## Daily approved-reference constraints
 

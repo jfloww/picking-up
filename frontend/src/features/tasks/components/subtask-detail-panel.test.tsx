@@ -63,6 +63,39 @@ describe("SubtaskDetailPanel", () => {
     expect(onTitleChange).toHaveBeenCalledWith("buy pine wood");
   });
 
+  it("also calls onClose after committing via Enter", () => {
+    const onTitleChange = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <SubtaskDetailPanel
+        subtask={subtask}
+        onClose={onClose}
+        onTitleChange={onTitleChange}
+        onMemoChange={() => {}}
+      />,
+    );
+    const input = screen.getByLabelText("Subtask title");
+    fireEvent.change(input, { target: { value: "buy pine wood" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onTitleChange).toHaveBeenCalledWith("buy pine wood");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("does not call onClose on Escape", () => {
+    const onClose = vi.fn();
+    render(
+      <SubtaskDetailPanel
+        subtask={subtask}
+        onClose={onClose}
+        onTitleChange={() => {}}
+        onMemoChange={() => {}}
+      />,
+    );
+    const input = screen.getByLabelText("Subtask title");
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("Escape restores the original title without calling onTitleChange", () => {
     const onTitleChange = vi.fn();
     render(

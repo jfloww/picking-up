@@ -178,6 +178,7 @@ describe("taskItemHandlers", () => {
       addSubtask: () => {},
       toggleSubtask: () => {},
       removeSubtask: () => {},
+      reorderSubtask: () => {},
       editSubtaskTitle: () => {},
       editSubtaskMemo: () => {},
       promoteSubtaskToTask: () => undefined,
