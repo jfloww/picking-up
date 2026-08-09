@@ -1019,7 +1019,9 @@ export function TasksProvider({
         // storage order (final-review finding).
         const activeIds = (list: typeof subtasks) =>
           list.filter((s) => !s.done).map((s) => s.id);
-        if (activeIds(subtasks).join(" ") === activeIds(reordered).join(" ")) return;
+        const before = activeIds(subtasks);
+        const after = activeIds(reordered);
+        if (before.length === after.length && before.every((sid, i) => sid === after[i])) return;
         const task: Task = { ...current, subtasks: reordered };
         persistUpdate(task);
       },
