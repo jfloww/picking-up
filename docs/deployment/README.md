@@ -55,6 +55,19 @@ handlers (the BFF layer) do. `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is
 intentionally public; Google enforces the real security boundary via
 Authorized JavaScript origins, not secrecy of the client ID.
 
+**Unverified: `VERCEL_GIT_COMMIT_SHA` on manual CLI deploys.** The footer
+and `/diagnostics` read this Vercel-provided system env var to show the
+deployed commit. Vercel documents it as automatically populated, but that
+guarantee is normally described for Git-integrated deploys (push-to-deploy);
+this project deploys via `vercel --prod` from the CLI with no Git
+auto-deploy configured, and that combination has not actually been
+verified. It fails gracefully today — the footer just omits the SHA and
+`/diagnostics` shows "unknown" — so this is not worth a speculative code
+fix. Verify on the next real Vercel deploy by checking `/diagnostics`
+afterward; if the SHA is missing, add a manually-set build-time env var
+(e.g. `NEXT_PUBLIC_COMMIT_SHA` populated from `git rev-parse --short HEAD`
+at deploy time) as a fallback then, not before.
+
 **Deploy:**
 ```
 cd frontend
@@ -93,7 +106,7 @@ cd backend
 docker build -t picking-up-api .
 docker run --rm -d --name picking-up-api-test -p 8080:8080 \
   --env-file .env.development -e PORT=8080 picking-up-api
-curl http://localhost:8080/api/health/      # expect 200 {"status": "ok"}
+curl http://localhost:8080/api/health/      # expect 200 {"status": "ok", "service": "picking-up-api", "version": ..., "commit": ..., "environment": ...}
 docker stop picking-up-api-test
 ```
 
@@ -130,7 +143,12 @@ DJANGO_CSRF_TRUSTED_ORIGINS = https://picking-up-api-723438086234.us-east4.run.a
 DJANGO_NUM_PROXIES        = 1
 GOOGLE_OAUTH_CLIENT_ID    = 723438086234-jn40gdcdj5a8cva3b34k401hc26hd8s0.apps.googleusercontent.com
 DJANGO_CORS_ALLOWED_ORIGINS = https://frontend-liard-seven-91.vercel.app
+DJANGO_GIT_SHA            = <short commit SHA of the deployed image, e.g. $(git rev-parse --short HEAD)>
+DJANGO_ENVIRONMENT        = production
 ```
+`DJANGO_GIT_SHA` and `DJANGO_ENVIRONMENT` feed `/api/health`'s `commit` and
+`environment` fields — both default to `"unknown"` when unset, so a deploy
+that forgets them fails honestly instead of reporting a wrong value.
 
 **`DJANGO_NUM_PROXIES=1` is required, not optional** —
 `backend/config/settings.py:174-181` refuses to start (`ImproperlyConfigured`)
@@ -205,11 +223,15 @@ versioning beyond what Vercel tracks itself.
 ```
 cd backend
 gcloud builds submit --tag us-east4-docker.pkg.dev/jfloww-picking-up/picking-up/backend:latest
-gcloud run deploy picking-up-api --image us-east4-docker.pkg.dev/jfloww-picking-up/picking-up/backend:latest --region us-east4
+gcloud run deploy picking-up-api --image us-east4-docker.pkg.dev/jfloww-picking-up/picking-up/backend:latest --region us-east4 \
+  --update-env-vars=DJANGO_GIT_SHA=$(git rev-parse --short HEAD),DJANGO_ENVIRONMENT=production
 ```
 Always run the local Docker verification (`docker build && docker run` +
 `curl /api/health/`) before the Cloud Build submit, same as a first
 deploy — catches breakage before it reaches Cloud Run at all.
+Passing `DJANGO_GIT_SHA` on every deploy keeps `/api/health`'s `commit`
+field honest — otherwise it silently reports whatever SHA was set on the
+last deploy that remembered to pass it.
 
 **Backend code change (with a schema change):**
 ```
@@ -219,7 +241,8 @@ python manage.py migrate
 
 # 2. Then build and deploy the new code as above
 gcloud builds submit --tag us-east4-docker.pkg.dev/jfloww-picking-up/picking-up/backend:latest
-gcloud run deploy picking-up-api --image us-east4-docker.pkg.dev/jfloww-picking-up/picking-up/backend:latest --region us-east4
+gcloud run deploy picking-up-api --image us-east4-docker.pkg.dev/jfloww-picking-up/picking-up/backend:latest --region us-east4 \
+  --update-env-vars=DJANGO_GIT_SHA=$(git rev-parse --short HEAD),DJANGO_ENVIRONMENT=production
 ```
 If the migration isn't backward-compatible with the *currently running*
 revision, use an expand/contract split instead of one migration + one

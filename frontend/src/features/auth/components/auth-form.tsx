@@ -135,7 +135,7 @@ export function AuthForm({ mode }: AuthFormProps) {
       >
         {isSubmitting ? (
           <span className="flex items-center justify-center gap-2">
-            <Loader2 className="size-4 animate-spin" />
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             {isLogin ? "Signing in…" : "Creating account…"}
           </span>
         ) : isLogin ? (

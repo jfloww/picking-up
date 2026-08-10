@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { buttonVariants } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { cn } from "@/lib/utils";
@@ -16,9 +18,9 @@ export function SiteFooter() {
       <div className="flex items-center gap-3">
         <p className="text-xs text-muted-foreground">
           © 2026 JFLOWW ·{" "}
-          <a href="/diagnostics" className="hover:text-foreground hover:underline">
+          <Link href="/diagnostics" className="hover:text-foreground hover:underline">
             {versionLabel}
-          </a>
+          </Link>
         </p>
         <a
           href="https://github.com/jfloww"

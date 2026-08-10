@@ -113,8 +113,11 @@ export function GoogleSignInButton() {
         />
         <div ref={containerRef} />
         {isSubmitting ? (
-          <span className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
+          <span
+            role="status"
+            className="flex items-center gap-2 text-sm text-muted-foreground"
+          >
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             Signing in…
           </span>
         ) : error ? (

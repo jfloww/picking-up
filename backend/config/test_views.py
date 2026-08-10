@@ -24,6 +24,13 @@ class HealthViewTests(TestCase):
         self.assertEqual(data["commit"], "deadbee")
         self.assertEqual(data["environment"], "staging")
 
+    def test_falls_back_to_the_documented_defaults_when_unset(self):
+        response = self.client.get("/api/health/")
+
+        data = response.json()
+        self.assertEqual(data["commit"], "unknown")
+        self.assertEqual(data["environment"], "unknown")
+
     def test_does_not_require_authentication(self):
         # DRF's DEFAULT_PERMISSION_CLASSES is IsAuthenticated project-wide;
         # this is a plain Django view specifically to stay outside that,
