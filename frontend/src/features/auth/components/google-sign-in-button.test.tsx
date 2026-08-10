@@ -98,6 +98,52 @@ describe("GoogleSignInButton", () => {
     expect(refreshMock).toHaveBeenCalled();
   });
 
+  it("shows a loading indicator while the credential callback is in flight", async () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_CLIENT_ID", "test-client-id");
+    let resolveFetch!: (value: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(pending));
+    const initialize = vi.fn();
+    window.google = { accounts: { id: { initialize, renderButton: vi.fn() } } };
+
+    render(<GoogleSignInButton />);
+    await waitFor(() => expect(initialize).toHaveBeenCalledTimes(1));
+
+    const { callback } = initialize.mock.calls[0][0];
+    const callbackPromise = callback({ credential: "id-token" });
+
+    expect(await screen.findByText("Signing in…")).toBeTruthy();
+
+    resolveFetch(jsonResponse({ ok: true }));
+    await callbackPromise;
+  });
+
+  it("ignores a second callback invocation while the first is still in flight", async () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_CLIENT_ID", "test-client-id");
+    let resolveFetch!: (value: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const fetchMock = vi.fn().mockReturnValue(pending);
+    vi.stubGlobal("fetch", fetchMock);
+    const initialize = vi.fn();
+    window.google = { accounts: { id: { initialize, renderButton: vi.fn() } } };
+
+    render(<GoogleSignInButton />);
+    await waitFor(() => expect(initialize).toHaveBeenCalledTimes(1));
+
+    const { callback } = initialize.mock.calls[0][0];
+    const firstCall = callback({ credential: "id-token" });
+    callback({ credential: "id-token" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolveFetch(jsonResponse({ ok: true }));
+    await firstCall;
+  });
+
   it("shows an error and does not redirect when the callback fails", async () => {
     vi.stubEnv("NEXT_PUBLIC_GOOGLE_CLIENT_ID", "test-client-id");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ error: "Invalid Google credential." }, 400)));

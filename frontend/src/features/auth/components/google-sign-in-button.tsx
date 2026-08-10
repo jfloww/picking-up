@@ -3,6 +3,7 @@
 import Script from "next/script";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
@@ -53,6 +54,8 @@ export function GoogleSignInButton() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [error, setError] = useState<string>();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   useEffect(() => {
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
@@ -61,11 +64,16 @@ export function GoogleSignInButton() {
     window.google.accounts.id.initialize({
       client_id: clientId,
       callback: async (response) => {
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
+        setIsSubmitting(true);
         setError(undefined);
         const result = await submitGoogleCredential(response.credential);
 
         if (!result.ok) {
           setError(result.error);
+          isSubmittingRef.current = false;
+          setIsSubmitting(false);
           return;
         }
 
@@ -104,7 +112,12 @@ export function GoogleSignInButton() {
           onReady={() => setScriptLoaded(true)}
         />
         <div ref={containerRef} />
-        {error ? (
+        {isSubmitting ? (
+          <span className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Signing in…
+          </span>
+        ) : error ? (
           <Alert variant="destructive">
             <AlertTitle>{error}</AlertTitle>
           </Alert>
