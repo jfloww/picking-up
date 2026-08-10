@@ -304,6 +304,7 @@ interface TasksContextValue extends TasksState {
   addTask: (title: string, scope: Scope) => Task | undefined;
   toggleTask: (id: string) => void;
   setMemo: (id: string, memo: string) => void;
+  setTitle: (id: string, title: string) => void;
   setTime: (id: string, time: string | undefined) => void;
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
   detachFromRoutine: (id: string, weekdays?: number[]) => void;
@@ -631,6 +632,14 @@ export function TasksProvider({
         const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
         const task: Task = { ...current, memo: memo.trim() || undefined };
+        persistUpdate(task);
+      },
+      setTitle(id, title) {
+        const current = tasksRef.current.find((t) => t.id === id);
+        if (!current) return;
+        const trimmed = title.trim();
+        if (!trimmed) return;
+        const task: Task = { ...current, title: trimmed };
         persistUpdate(task);
       },
       setTime(id, time) {

@@ -109,6 +109,26 @@ describe("TasksProvider", () => {
     await waitFor(() => expect(repo.tasks).toHaveLength(0));
   });
 
+  it("setTitle trims and commits a changed title", async () => {
+    const task = makeTask({ id: "a", title: "old title", scope: { kind: "day", date: todayKey() } });
+    const { repo, result } = setup(fakeRepository([task]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    act(() => result.current.setTitle("a", "  new title  "));
+    expect(result.current.tasks[0].title).toBe("new title");
+    await waitFor(() => expect(repo.tasks[0].title).toBe("new title"));
+  });
+
+  it("setTitle is a no-op when the trimmed title is blank", async () => {
+    const task = makeTask({ id: "a", title: "old title", scope: { kind: "day", date: todayKey() } });
+    const { repo, result } = setup(fakeRepository([task]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    act(() => result.current.setTitle("a", "   "));
+    expect(result.current.tasks[0].title).toBe("old title");
+    expect(repo.tasks[0].title).toBe("old title");
+  });
+
   describe("rollover on date change (not just mount)", () => {
     afterEach(() => {
       vi.useRealTimers();
