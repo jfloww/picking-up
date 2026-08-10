@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { makeCategory, makeTask } from "../test-utils";
@@ -282,7 +282,7 @@ describe("TaskDetailDrawer", () => {
       expect(handlers.onTitleChange).not.toHaveBeenCalled();
     });
 
-    it("Done commits the edited title, trimmed", () => {
+    it("Done commits the edited title verbatim (the store trims)", () => {
       const handlers = { onTitleChange: vi.fn() };
       render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
 
@@ -311,16 +311,26 @@ describe("TaskDetailDrawer", () => {
       expect(handlers.onTitleChange).not.toHaveBeenCalled();
     });
 
-    it("Enter inside the title field does not insert a newline or close the drawer", () => {
+    it("Enter inside the title field prevents the default newline insertion and does not close the drawer", () => {
       const handlers = { onClose: vi.fn(), onTitleChange: vi.fn() };
       render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
 
       const titleField = screen.getByDisplayValue("write tests") as HTMLTextAreaElement;
-      fireEvent.change(titleField, { target: { value: "write tests\n" } });
-      fireEvent.keyDown(titleField, { key: "Enter" });
+      const event = createEvent.keyDown(titleField, { key: "Enter" });
+      fireEvent(titleField, event);
 
+      expect(event.defaultPrevented).toBe(true);
       expect(handlers.onClose).not.toHaveBeenCalled();
       expect(handlers.onTitleChange).not.toHaveBeenCalled();
+    });
+
+    it("strips newlines from pasted or typed title text", () => {
+      render(<TaskDetailDrawer task={task} {...noopHandlers} />);
+
+      const titleField = screen.getByDisplayValue("write tests") as HTMLTextAreaElement;
+      fireEvent.change(titleField, { target: { value: "line one\nline two" } });
+
+      expect(titleField.value).toBe("line one line two");
     });
 
     it("pressing Escape discards an edited title without calling onTitleChange", () => {

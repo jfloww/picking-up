@@ -287,7 +287,7 @@ export function TaskDetailDrawer({
         </button>
       </header>
 
-      <div className="thin-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto p-4 max-sm:[&_input]:text-base max-sm:[&_textarea]:text-base sm:space-y-7 sm:p-8">
+      <div className="thin-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto p-4 max-sm:[&_input]:text-base max-sm:[&_textarea:not([aria-label='Task title'])]:text-base sm:space-y-7 sm:p-8">
         <div className="flex items-start gap-3" data-testid="task-detail-header">
           <Checkbox
             checked={draft.done}
@@ -299,7 +299,9 @@ export function TaskDetailDrawer({
             <textarea
               ref={titleRef}
               value={draft.title}
-              onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, title: e.target.value.replace(/\r?\n/g, " ") }))
+              }
               onKeyDown={(e) => {
                 // A title stays one logical line even once it visually
                 // wraps — Enter must not insert a newline. Unlike the
