@@ -34,7 +34,7 @@ describe("AuthForm loading state", () => {
     fireEvent.submit(form);
 
     expect(await screen.findByText("Signing in…")).toBeTruthy();
-    expect(screen.getByRole("button").disabled).toBe(true);
+    expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(true);
 
     resolveFetch(jsonResponse({ ok: true }));
     await waitFor(() => expect(screen.queryByText("Signing in…")).toBeNull());
