@@ -2,12 +2,24 @@ import { buttonVariants } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { cn } from "@/lib/utils";
 
+import packageJson from "../../package.json";
+
 export function SiteFooter() {
+  const commitSha = process.env.VERCEL_GIT_COMMIT_SHA;
+  const versionLabel = commitSha
+    ? `v${packageJson.version} (${commitSha.slice(0, 7)})`
+    : `v${packageJson.version}`;
+
   return (
     <footer className="flex items-center justify-between border-t border-border px-6 py-6 sm:px-10">
       <Wordmark className="opacity-60" />
       <div className="flex items-center gap-3">
-        <p className="text-xs text-muted-foreground">© 2026 JFLOWW</p>
+        <p className="text-xs text-muted-foreground">
+          © 2026 JFLOWW ·{" "}
+          <a href="/diagnostics" className="hover:text-foreground hover:underline">
+            {versionLabel}
+          </a>
+        </p>
         <a
           href="https://github.com/jfloww"
           target="_blank"
