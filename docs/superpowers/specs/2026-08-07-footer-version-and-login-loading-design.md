@@ -21,33 +21,115 @@ Two small, unrelated-but-small-enough-to-bundle UX gaps:
 
 ## Scope
 
-In scope: `SiteFooter`'s version display; `AuthForm`'s submit-button
-loading state; `GoogleSignInButton`'s loading state; a new `/planner`
-route `loading.tsx`.
+In scope: `SiteFooter`'s version display; a backend `/api/health`
+endpoint; a frontend diagnostics page comparing frontend/backend build
+info; `AuthForm`'s submit-button loading state; `GoogleSignInButton`'s
+loading state; a new `/planner` route `loading.tsx`.
 
-Out of scope, per an explicit choice made during brainstorming: a
-general-purpose, reusable loading-state pattern for other slow operations
-elsewhere in the app (task fetches, mutation queue, etc.). This is scoped
-to the login flow only. Revisit as a separate spec if/when another slow
-operation needs the same treatment.
+Out of scope, per explicit choices made during brainstorming:
 
-## Feature 1: Footer version
+- A general-purpose, reusable loading-state pattern for other slow
+  operations elsewhere in the app (task fetches, mutation queue, etc.).
+  This is scoped to the login flow only. Revisit as a separate spec if/when
+  another slow operation needs the same treatment.
+- API contract versioning (`/api/v1/`-style URL versioning). Worth
+  learning later; not needed while there is a single web client controlled
+  by the same team on both ends.
+- Any form of frontend/backend version-compatibility enforcement (blocking
+  or warning the user when the two differ). Build/version identification
+  is a debugging and ops tool, not a gate — Vercel and Cloud Run deploy
+  independently even from the same push, so brief version skew between
+  them is expected and normal, not an error condition.
 
-`SiteFooter` (`frontend/src/components/site-footer.tsx`) has no
-`"use client"` directive — it's a server component — so it can import
-`frontend/package.json` directly and read its `version` field at
-render/build time. `resolveJsonModule: true` is already set in
-`tsconfig.json`, so this needs no new build configuration, and since the
-import happens server-side, the value never needs a `NEXT_PUBLIC_` env var
-or any client-bundle exposure.
+## Feature 1: Version visibility (frontend footer, backend health endpoint, diagnostics page)
 
-Rendered as `© 2026 JFLOWW · v{version}`, appended to the existing
-copyright `<p>` (not a separate element) — the footer is already a tight,
-single-line layout and this reads as one fact, not two.
+Three pieces, deliberately decoupled — the public-facing footer never
+makes a live cross-service call just to render a version string; only the
+dedicated diagnostics page does that.
 
-`SiteFooter` already renders on both the landing page (`app/page.tsx`) and
-the authenticated workspace (`app/planner/page.tsx`), so both surfaces get
-the version automatically with this one change.
+### Backend: `GET /api/health`
+
+New, unauthenticated DRF view (health/build-info endpoints are
+conventionally public — this also becomes a real target for uptime
+monitoring later, not just version display) returning:
+
+```json
+{
+  "status": "ok",
+  "service": "picking-up-api",
+  "version": "0.1.0",
+  "commit": "a84c20f",
+  "environment": "production"
+}
+```
+
+- `version` is read from a new `backend/VERSION` file — a plain
+  single-line text file (e.g. `0.1.0`), committed to the repo and bumped
+  manually on release. This mirrors how the frontend already tracks its
+  own version in `package.json`, and deliberately does **not** try to
+  force one shared version number across both — they're independently
+  deployed, so they're allowed to carry independent version numbers, the
+  same way the "don't enforce compatibility" decision above implies they
+  can legitimately differ.
+- `commit` is read from a new `DJANGO_GIT_SHA` environment variable via
+  the existing `django-environ` `env()` helper
+  (`env("DJANGO_GIT_SHA", default="unknown")`), following this codebase's
+  established `DJANGO_`-prefixed env var naming
+  (`DJANGO_DEBUG`/`DJANGO_SECRET_KEY`/`DJANGO_ALLOWED_HOSTS`). It must be
+  set at deploy time to the short commit SHA of the code being deployed
+  (e.g. `--set-env-vars DJANGO_GIT_SHA=$(git rev-parse --short HEAD)` on
+  whatever `gcloud run deploy` invocation is the actual current deploy
+  step — this spec doesn't assume a specific CI pipeline file, since none
+  exists in the repo today).
+- `environment` is read from a new `DJANGO_ENVIRONMENT` environment
+  variable (`env("DJANGO_ENVIRONMENT", default="development")`) — a new
+  setting distinct from the existing boolean `DJANGO_DEBUG`, since "which
+  environment is this" and "is debug mode on" are different questions even
+  though they'll usually move together.
+- Registered at `/api/health/` in `config/urls.py`.
+
+### Frontend: `SiteFooter` shows only its own info
+
+Unchanged from the original plan in spirit, extended with a commit SHA:
+`SiteFooter` (`frontend/src/components/site-footer.tsx`, a server
+component, no `"use client"`) imports `frontend/package.json` directly for
+`version` (`resolveJsonModule: true` already set in `tsconfig.json`, no
+new build config, no client-bundle exposure) and reads
+`process.env.VERCEL_GIT_COMMIT_SHA` for the commit — a Vercel-provided
+system environment variable, automatically present in every Vercel
+deployment with no configuration required. When unset (local dev, or any
+non-Vercel host), the SHA is simply omitted rather than shown as a
+placeholder.
+
+Rendered as `© 2026 JFLOWW · v0.1.0 (a84c20f)` when a SHA is available,
+`© 2026 JFLOWW · v0.1.0` otherwise. The version text is a link to the new
+diagnostics page (see below) — discoverable for anyone who cares to click,
+without adding visual noise for anyone who doesn't.
+
+Already renders on both the landing page and `/planner`, so both surfaces
+get this automatically.
+
+### Frontend: a diagnostics page comparing both
+
+New route `frontend/src/app/diagnostics/page.tsx` — unauthenticated (no
+sensitive data is exposed; matches `/api/health`'s own accessibility), a
+server component that reads its own frontend version/commit the same way
+`SiteFooter` does, and additionally fetches the backend's health info
+through a new same-origin BFF route,
+`frontend/src/app/api/health/route.ts`, which proxies to Django's
+`/api/health/`. This keeps the established pattern intact: the browser
+never calls Django directly for anything, including this.
+
+Displays both side by side, purely informationally:
+
+```
+Frontend: 0.1.0 (a84c20f)
+Backend:  0.1.0 (a1b2c3d)
+```
+
+No compatibility check, no warning styling if they differ — this page's
+only job is "let a developer see what's actually running," per the Scope
+section above.
 
 ## Feature 2: Login loading feedback
 
@@ -106,9 +188,25 @@ visibly jump.
 
 ## Testing
 
-- `frontend/src/components/site-footer.test.tsx` (existing file): add an
-  assertion that the rendered footer text includes the version string
-  read from `package.json`.
+- Backend: a new test module (matching wherever `apps/tasks`'s or
+  `apps/accounts`' existing API tests live, for the health endpoint's own
+  app or a small dedicated one) asserting `GET /api/health/` returns 200
+  with the documented shape, that `version` reflects the `backend/VERSION`
+  file's contents, and that `commit`/`environment` fall back to their
+  documented defaults (`"unknown"` / `"development"`) when their env vars
+  are unset.
+- `frontend/src/components/site-footer.test.tsx` (existing file): add
+  assertions that the rendered footer text includes the version string
+  read from `package.json`, that it includes the commit SHA when
+  `VERCEL_GIT_COMMIT_SHA` is set, and that it's omitted (not shown as a
+  placeholder) when that env var is unset.
+- `frontend/src/app/api/health/route.ts`: a route-handler test (matching
+  this codebase's existing BFF route test conventions, e.g. the pattern
+  already used for the tasks/categories BFF routes) asserting it proxies
+  Django's `/api/health/` response through.
+- `frontend/src/app/diagnostics/page.tsx`: a test asserting both the
+  frontend's own version/commit and the (mocked) backend response render
+  side by side.
 - `frontend/src/features/auth/components/auth-form.test.tsx` (new file —
   none exists today; this spec only adds coverage for the change being
   made here, not a retroactive full test suite for the rest of the form):
