@@ -287,7 +287,7 @@ export function TaskDetailDrawer({
         </button>
       </header>
 
-      <div className="thin-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto p-4 max-sm:[&_input]:text-base max-sm:[&_textarea:not([aria-label='Task title'])]:text-base sm:space-y-7 sm:p-8">
+      <div className="thin-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto p-4 max-sm:[&_input]:text-base max-sm:[&_textarea:not([aria-label='Task_title'])]:text-base sm:space-y-7 sm:p-8">
         <div className="flex items-start gap-3" data-testid="task-detail-header">
           <Checkbox
             checked={draft.done}
