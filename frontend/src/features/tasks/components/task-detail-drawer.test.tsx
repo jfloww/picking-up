@@ -8,6 +8,7 @@ const noopHandlers = {
   onToggle: () => {},
   onClose: () => {},
   onMemoChange: (_memo: string) => {},
+  onTitleChange: (_title: string) => {},
   onTimeChange: (_time?: string) => {},
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
   onDetachFromRoutine: (_weekdays?: number[]) => {},
@@ -42,7 +43,7 @@ describe("TaskDetailDrawer", () => {
   it("shows the task's checkbox, title, and memo", () => {
     render(<TaskDetailDrawer task={task} {...noopHandlers} />);
     expect(screen.getByRole("checkbox")).toBeTruthy();
-    expect(screen.getByText("write tests")).toBeTruthy();
+    expect(screen.getByDisplayValue("write tests")).toBeTruthy();
     expect(
       (screen.getByPlaceholderText("Memo") as HTMLTextAreaElement).value,
     ).toBe("with care");
@@ -190,7 +191,7 @@ describe("TaskDetailDrawer", () => {
 
       const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
       fireEvent.click(checkbox);
-      expect(screen.getByText("write tests").className).toContain("line-through");
+      expect(screen.getByDisplayValue("write tests").className).toContain("line-through");
     });
 
     it("Done commits every edited field and then closes", () => {
@@ -270,6 +271,66 @@ describe("TaskDetailDrawer", () => {
       expect(handlers.onPriorityChange).not.toHaveBeenCalled();
       expect(handlers.onMemoChange).not.toHaveBeenCalled();
       expect(handlers.onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not call onTitleChange immediately when the title is edited", () => {
+      const handlers = { onTitleChange: vi.fn() };
+      render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
+
+      fireEvent.change(screen.getByDisplayValue("write tests"), { target: { value: "updated title" } });
+
+      expect(handlers.onTitleChange).not.toHaveBeenCalled();
+    });
+
+    it("Done commits the edited title, trimmed", () => {
+      const handlers = { onTitleChange: vi.fn() };
+      render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
+
+      fireEvent.change(screen.getByDisplayValue("write tests"), { target: { value: "  updated title  " } });
+      fireEvent.click(screen.getByText("Done"));
+
+      expect(handlers.onTitleChange).toHaveBeenCalledWith("  updated title  ");
+    });
+
+    it("Done does not call onTitleChange when the title was never touched", () => {
+      const handlers = { onTitleChange: vi.fn() };
+      render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
+
+      fireEvent.click(screen.getByText("Done"));
+
+      expect(handlers.onTitleChange).not.toHaveBeenCalled();
+    });
+
+    it("Cancel discards an edited title without calling onTitleChange", () => {
+      const handlers = { onTitleChange: vi.fn() };
+      render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
+
+      fireEvent.change(screen.getByDisplayValue("write tests"), { target: { value: "discarded" } });
+      fireEvent.click(screen.getByText("Cancel"));
+
+      expect(handlers.onTitleChange).not.toHaveBeenCalled();
+    });
+
+    it("Enter inside the title field does not insert a newline or close the drawer", () => {
+      const handlers = { onClose: vi.fn(), onTitleChange: vi.fn() };
+      render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
+
+      const titleField = screen.getByDisplayValue("write tests") as HTMLTextAreaElement;
+      fireEvent.change(titleField, { target: { value: "write tests\n" } });
+      fireEvent.keyDown(titleField, { key: "Enter" });
+
+      expect(handlers.onClose).not.toHaveBeenCalled();
+      expect(handlers.onTitleChange).not.toHaveBeenCalled();
+    });
+
+    it("pressing Escape discards an edited title without calling onTitleChange", () => {
+      const handlers = { onTitleChange: vi.fn() };
+      render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
+
+      fireEvent.change(screen.getByDisplayValue("write tests"), { target: { value: "discarded" } });
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(handlers.onTitleChange).not.toHaveBeenCalled();
     });
 
     it("closing via the X button discards edits without calling any commit handler", () => {

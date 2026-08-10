@@ -15,6 +15,7 @@ import { TaskDetailFields } from "./task-detail-fields";
 import { useFocusTrap, useRestoreFocusOnUnmount } from "./use-focus-trap";
 
 interface Draft {
+  title: string;
   done: boolean;
   memo: string;
   time?: string;
@@ -36,6 +37,15 @@ function categoryNameFor(categoryId: string, categories: Category[]): string | u
   return categories.find((c) => c.id === categoryId)?.name;
 }
 
+// A single-line title clips long text instead of showing all of it — same
+// auto-grow technique already used for the subtask title/notes fields and
+// this drawer's own memo textarea.
+function autoGrow(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 function draftFromTask(task: Task, categories: Category[]): Draft {
   const scheduledDate =
     task.scope.kind === "day"
@@ -44,6 +54,7 @@ function draftFromTask(task: Task, categories: Category[]): Draft {
         ? task.rolledFrom.date
         : undefined;
   return {
+    title: task.title,
     done: task.done,
     memo: task.memo ?? "",
     time: task.time,
@@ -63,6 +74,7 @@ export function TaskDetailDrawer({
   onToggle,
   onClose,
   onMemoChange,
+  onTitleChange,
   onTimeChange,
   onRepeatWeekdaysChange,
   onDetachFromRoutine,
@@ -88,6 +100,7 @@ export function TaskDetailDrawer({
   onToggle: () => void;
   onClose: () => void;
   onMemoChange: (memo: string) => void;
+  onTitleChange: (title: string) => void;
   onTimeChange: (time?: string) => void;
   onRepeatWeekdaysChange: (weekdays: number[]) => void;
   onDetachFromRoutine: (weekdays?: number[]) => void;
@@ -136,10 +149,15 @@ export function TaskDetailDrawer({
   } | null>(null);
   const [openSubtaskId, setOpenSubtaskId] = useState<string | null>(null);
   const asideRef = useRef<HTMLElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setVisible(true);
   }, []);
+
+  useEffect(() => {
+    autoGrow(titleRef.current);
+  }, [draft.title]);
 
   // Bounds Tab-cycling to the whole drawer, except while the Subtask Detail
   // panel is open — then it hands that boundary over to the panel's own
@@ -181,6 +199,7 @@ export function TaskDetailDrawer({
   const handleDone = () => {
     if (draft.done !== task.done) onToggle();
     if (draft.memo !== (task.memo ?? "")) onMemoChange(draft.memo);
+    if (draft.title !== task.title) onTitleChange(draft.title);
     if (draft.time !== task.time) onTimeChange(draft.time);
     if (draft.durationMinutes !== task.durationMinutes) onDurationChange(draft.durationMinutes);
     if (draft.priority !== !!task.priority) onPriorityChange(draft.priority);
@@ -277,14 +296,25 @@ export function TaskDetailDrawer({
             className={cn("mt-1 size-6 border-subtle sm:size-[18px]", DONE_CHECKBOX_CLASS)}
           />
           <div className="min-w-0 flex-1 space-y-1">
-            <h2
+            <textarea
+              ref={titleRef}
+              value={draft.title}
+              onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+              onKeyDown={(e) => {
+                // A title stays one logical line even once it visually
+                // wraps — Enter must not insert a newline. Unlike the
+                // Subtask Detail panel's title field, it also must not
+                // submit/close the drawer: no other buffered field here
+                // auto-submits on Enter, and title isn't the exception.
+                if (e.key === "Enter") e.preventDefault();
+              }}
+              rows={1}
+              aria-label="Task title"
               className={cn(
-                "text-xl leading-tight font-bold tracking-tight sm:text-[22px]",
+                "w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent text-xl leading-tight font-bold tracking-tight outline-none transition-colors duration-200 focus-visible:border-input focus-visible:ring-2 focus-visible:ring-ring/50 sm:text-[22px]",
                 draft.done && "text-muted-foreground line-through",
               )}
-            >
-              {task.title}
-            </h2>
+            />
             {task.done && task.completedAt && (
               <p className="text-xs text-subtle">Completed {completedAtLabel(task.completedAt)}</p>
             )}

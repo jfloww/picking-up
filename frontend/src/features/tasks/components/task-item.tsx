@@ -20,6 +20,7 @@ export const DONE_CHECKBOX_CLASS =
 interface TaskItemActions {
   toggleTask: (id: string) => void;
   setMemo: (id: string, memo: string) => void;
+  setTitle: (id: string, title: string) => void;
   setTime: (id: string, time: string | undefined) => void;
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
   detachFromRoutine: (id: string, weekdays?: number[]) => void;
@@ -74,6 +75,7 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
   return {
     onToggle: () => actions.toggleTask(id),
     onMemoChange: (memo: string) => actions.setMemo(id, memo),
+    onTitleChange: (title: string) => actions.setTitle(id, title),
     onTimeChange: (time?: string) => actions.setTime(id, time),
     onRepeatWeekdaysChange: (weekdays: number[]) => actions.setRepeatWeekdays(id, weekdays),
     onDetachFromRoutine: (weekdays?: number[]) => actions.detachFromRoutine(id, weekdays),
