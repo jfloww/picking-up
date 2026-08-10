@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -132,7 +133,16 @@ export function AuthForm({ mode }: AuthFormProps) {
         size="lg"
         className="mt-1 w-full rounded-full"
       >
-        {isSubmitting ? "Working..." : isLogin ? "Sign in" : "Create account"}
+        {isSubmitting ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 className="size-4 animate-spin" />
+            {isLogin ? "Signing in…" : "Creating account…"}
+          </span>
+        ) : isLogin ? (
+          "Sign in"
+        ) : (
+          "Create account"
+        )}
       </Button>
 
       <GoogleSignInButton />
