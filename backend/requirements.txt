@@ -4,7 +4,6 @@ djangorestframework-simplejwt>=5.3,<6.0
 django-cors-headers>=4.4,<5.0
 django-environ>=0.11,<1.0
 psycopg[binary]>=3.2,<4.0
-oracledb>=3.0,<4.0
 google-auth>=2.35,<3.0
 requests>=2.32,<3.0
 gunicorn>=23.0,<24.0

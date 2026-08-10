@@ -91,20 +91,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASE_URL = env("DATABASE_URL", default=None)
 
-ORACLE_DB_USER = env("ORACLE_DB_USER", default=None)
-ORACLE_DB_PASSWORD = env("ORACLE_DB_PASSWORD", default=None)
-ORACLE_DB_DSN = env("ORACLE_DB_DSN", default=None)
-
-if ORACLE_DB_USER and ORACLE_DB_PASSWORD and ORACLE_DB_DSN:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.oracle",
-            "NAME": ORACLE_DB_DSN,
-            "USER": ORACLE_DB_USER,
-            "PASSWORD": ORACLE_DB_PASSWORD,
-        }
-    }
-elif DATABASE_URL:
+if DATABASE_URL:
     DATABASES = {
         "default": env.db("DATABASE_URL"),
     }
