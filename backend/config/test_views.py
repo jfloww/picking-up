@@ -23,3 +23,12 @@ class HealthViewTests(TestCase):
         self.assertEqual(data["version"], "9.9.9")
         self.assertEqual(data["commit"], "deadbee")
         self.assertEqual(data["environment"], "staging")
+
+    def test_does_not_require_authentication(self):
+        # DRF's DEFAULT_PERMISSION_CLASSES is IsAuthenticated project-wide;
+        # this is a plain Django view specifically to stay outside that,
+        # since infra health checks (Cloud Run, load balancers) can't
+        # authenticate.
+        response = self.client.get("/api/health/")
+
+        self.assertNotEqual(response.status_code, 401)
