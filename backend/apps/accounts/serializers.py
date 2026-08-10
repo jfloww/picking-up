@@ -2,7 +2,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.db import IntegrityError, transaction
 from rest_framework import serializers
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 
 
 User = get_user_model()
@@ -103,3 +104,25 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate_email(self, value: str) -> str:
         return value.strip().lower()
+
+
+class SafeTokenRefreshSerializer(TokenRefreshSerializer):
+    """TokenRefreshSerializer, but a deleted-user token fails like an
+    inactive-user one instead of a raw 500.
+
+    SimpleJWT's own validate() already handles a merely *inactive* user
+    cleanly (AuthenticationFailed, code "no_active_account"), but its
+    unguarded get_user_model().objects.get() lets User.DoesNotExist
+    propagate raw when the user has been deleted outright — a gap in the
+    upstream library. Re-raising as the same error SimpleJWT already uses
+    for the sibling case keeps the response shape the frontend already
+    understands.
+    """
+
+    def validate(self, attrs):
+        try:
+            return super().validate(attrs)
+        except get_user_model().DoesNotExist:
+            raise AuthenticationFailed(
+                self.error_messages["no_active_account"], "no_active_account"
+            )

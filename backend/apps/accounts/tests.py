@@ -289,6 +289,37 @@ class AuthApiTests(TestCase):
         )
         self.assertEqual(retry_response.status_code, 401)
 
+    def test_refresh_returns_a_clean_401_when_the_tokens_user_no_longer_exists(self):
+        # SimpleJWT's own TokenRefreshSerializer already handles a merely
+        # *inactive* user cleanly (AuthenticationFailed, code
+        # "no_active_account") but its unguarded get_user_model().objects
+        # .get() lets User.DoesNotExist propagate raw as a 500 when the
+        # user has been deleted outright — a real gap, not something this
+        # test should tolerate.
+        user = User.objects.create_user(
+            username="ghost@example.com",
+            email="ghost@example.com",
+            password="StrongPass123!",
+        )
+
+        token_response = self.client.post(
+            "/api/auth/token/",
+            {"email": "ghost@example.com", "password": "StrongPass123!"},
+            format="json",
+        )
+        refresh_token = token_response.data["refresh"]
+
+        user.delete()
+
+        response = self.client.post(
+            "/api/auth/token/refresh/",
+            {"refresh": refresh_token},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.data["detail"].code, "no_active_account")
+
 
 class AuthenticationThrottleTests(TestCase):
     def setUp(self):
