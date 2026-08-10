@@ -27,6 +27,10 @@ if not DEBUG and SECRET_KEY == _INSECURE_DEFAULT_SECRET_KEY:
         "get_random_secret_key; print(get_random_secret_key())\""
     )
 
+APP_VERSION = (BASE_DIR / "VERSION").read_text().strip()
+DJANGO_GIT_SHA = env("DJANGO_GIT_SHA", default="unknown")
+DJANGO_ENVIRONMENT = env("DJANGO_ENVIRONMENT", default="development")
+
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 # nginx terminates TLS and proxies to gunicorn over plain HTTP, setting
