@@ -5,6 +5,9 @@
 - Priority: P0
 - Status: Open
 
+_Acceptance criteria updated 2026-08-12 for the production database migration
+from Oracle to Neon PostgreSQL._
+
 ## Current risk
 
 Routine materialization and rollover still run in the browser. Two sessions can
@@ -23,7 +26,7 @@ The implementation is not accepted until it defines all of the following:
 1. **Timezone authority.** Persist the user's IANA timezone and derive the local
    occurrence date on the server. Specify behavior across DST gaps/folds and a
    timezone change after a routine is created.
-2. **Occurrence identity.** Enforce an Oracle-portable uniqueness invariant for
+2. **Occurrence identity.** Enforce a database uniqueness invariant for
    one logical `(user, repeat anchor, occurrence local date)` tuple. A random
    Task UUID remains row identity, not occurrence identity.
 3. **Idempotent operation.** A materialize/rollover command must accept an
@@ -48,8 +51,9 @@ The implementation is not accepted until it defines all of the following:
 - excluded dates and deleted/detached occurrences do not resurrect;
 - DST boundary dates and user-timezone changes follow the documented policy;
 - the legacy-duplicate migration is covered with dependent rows;
-- SQLite unit/migration tests pass, and real Oracle contention/uniqueness
-  behavior is executed under RF-012 rather than inferred from SQLite.
+- SQLite unit/migration tests pass, and real PostgreSQL
+  contention/uniqueness behavior is executed under RF-012 rather than inferred
+  from SQLite.
 
 ## Deliberately not implemented in the review-fix PR
 

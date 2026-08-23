@@ -1,6 +1,6 @@
 # Architecture
 
-_Current-state document. Last verified against the codebase: 2026-08-06._
+_Current-state document. Last verified against the codebase: 2026-08-12._
 
 ## System context
 
@@ -13,7 +13,7 @@ one-time legacy import source.
 flowchart LR
     Browser[Browser] -->|same-origin pages and BFF requests| Next[Next.js App Router]
     Next -->|Bearer access token, server to server| Django[Django REST API]
-    Django --> DB[(SQLite local / Oracle target production)]
+    Django --> DB[(SQLite local / Neon PostgreSQL production)]
     Browser -. one-time legacy import .-> Next
 ```
 
@@ -32,7 +32,7 @@ to Django requests on the server.
 | Backend | Django 5, Django REST Framework |
 | Authentication | Simple JWT plus Google ID token exchange |
 | Local database | SQLite |
-| Target production database | Oracle Autonomous Database on OCI |
+| Production database | Neon PostgreSQL |
 | Frontend tests | Vitest, Testing Library, jsdom |
 | Backend tests | Django test runner and DRF `APIClient` |
 
@@ -155,28 +155,18 @@ The backend currently owns:
 - persistent Task and Category records;
 - server-generated creation/completion timestamps;
 - schema and data migrations; and
-- converting a task to a subtask, and promoting a subtask to a task —
-  `POST /api/tasks/{id}/commands/nest/` and `.../commands/promote-subtask/`
-  each run as one atomic, row-locked, version-checked server transaction
-  (see "Optimistic concurrency" below) that re-validates every domain rule
-  server-side (no self-nest, no nesting a task that already has subtasks or
-  is part of a repeat series, no discarding task-only fields without
-  explicit confirmation). The frontend calls these commands instead of
-  composing generic PUT/DELETE requests for these two operations.
+- explicit, versioned commands for converting a task to a subtask, promoting a
+  subtask, detaching a routine occurrence, deleting one occurrence,
+  rescheduling, and reordering. These operations run through server-side
+  transactions and re-validate their domain rules instead of trusting a client
+  sequence of generic CRUD calls; and
+- server-calculated ordering for task creation and reorder placement.
 
-The frontend still owns task business operations that persist through generic
-CRUD calls with no cross-record atomicity:
-
-- detaching from a routine, deleting an occurrence, rescheduling, and
-  reordering — fractional ordering and rescheduling rules for these still
-  live client-side and can be bypassed by a direct API caller; and
-- rollover and routine materialization, where two sessions can independently
-  create different UUID occurrences for the same anchor/date.
-
-Moving detach/delete/reschedule/reorder to explicit transactional server
-commands is RF-005. Moving day-boundary rollover/materialization to one
-idempotent server authority with an occurrence uniqueness invariant is the
-separate RF-017. Both are tracked in
+The frontend still owns rollover and routine materialization. Two sessions can
+therefore independently create different UUID occurrences for the same
+anchor/date. The transactional-command migration is complete under RF-005;
+moving day-boundary rollover/materialization to one idempotent server authority
+with an occurrence uniqueness invariant is the separate RF-017, tracked in
 [`docs/refining/`](refining/README.md). One related gap remains: deleting a
 Category `SET_NULL`s `bucket_category` on its Tasks without bumping their
 `version`, the same class of issue already closed for the repeat-anchor
@@ -217,12 +207,10 @@ Generic Task `PUT`/`PATCH`/`DELETE` require an `If-Match: "<version>"` header:
 missing it is `428`, a malformed value is `400`, and a stale version is `409`
 with the current server version in the body — so two clients can no longer
 silently overwrite each other's changes on these paths. A successful `GET`
-also exposes the current value as an `ETag`. The two transactional commands
-(nest, promote-subtask) carry the same precondition for every Task row they
-touch and roll back completely on any conflict or domain-rule violation — see
-"Domain boundary" above. The remaining multi-record task operations (detach,
-delete-occurrence, reschedule, reorder) are not yet covered by this and can
-still partially succeed; closing that gap is the rest of RF-005.
+also exposes the current value as an `ETag`. The transactional task commands
+(nest, promote-subtask, detach, delete-occurrence, reschedule, and reorder)
+apply the same optimistic-concurrency contract to the affected records and
+roll back on conflict or domain-rule violation. See "Domain boundary" above.
 
 Backend and BFF errors do not yet share one stable envelope. Auth routes now
 preserve upstream status and `Retry-After`, but body shapes and field errors
@@ -230,26 +218,28 @@ remain inconsistent across API families. This is tracked as RF-014.
 
 ## Deployment and operations
 
-The documented target is:
+The current production topology is:
 
 ```text
-Next.js -> Vercel
-Django  -> gunicorn + nginx on an OCI VM
-Database -> Oracle Autonomous Database
+Next.js  -> Vercel
+Django   -> gunicorn container on Google Cloud Run
+Database -> Neon PostgreSQL
 ```
 
-The manual procedure is in
-[`docs/planning/7. deployment-runbook.md`](planning/7.%20deployment-runbook.md).
-That runbook is a target procedure, not proof that the current commit is live.
-Its nginx topology sets `DJANGO_NUM_PROXIES=1`, and its gunicorn workers share
-the private `backend/.cache` throttle directory. DRF's built-in throttle remains
-a deliberately fuzzy abuse control under concurrent requests, not a billing or
-hard-quota mechanism.
-CI runs backend and frontend checks on pushes and pull requests. Oracle
-integration-test permissions, health endpoints, multi-process-safe logging,
-backup/restore verification, and exercised rollback remain open work. The
-manual runbook now stops old gunicorn writers for migration cutovers and warns
-that automatic frontend deployment is not an ordered cross-boundary release.
+The current manual deploy/update/rollback procedure is in
+[`docs/deployment/README.md`](deployment/README.md). The older OCI VM and Oracle
+Autonomous Database stack is retained only as a legacy fallback and is
+documented in the historical planning/migration records.
+
+Production logging is console-based and includes request correlation IDs. An
+unauthenticated `/api/health/` endpoint reports service/build metadata, and the
+deployment guide documents immutable-revision rollback for Cloud Run and
+promotion rollback for Vercel. CI runs backend and frontend checks on pushes
+and pull requests. Repeatable PostgreSQL integration coverage, dependency-aware
+readiness, alerting, production security-setting verification, backup/restore
+evidence, and a rehearsed rollback remain open under RF-012 and RF-013. DRF's
+built-in throttle remains a deliberately fuzzy abuse control under concurrent
+requests, not a billing or hard-quota mechanism.
 
 ## Verification baseline
 
@@ -265,9 +255,8 @@ As of the last 2026-08-06 verification:
 - the Next.js production build completed successfully after the local dev
   server holding `.next/trace` was temporarily stopped and then restored.
 
-These backend results use SQLite. The Oracle test attempt could not create a
-test schema because the configured user lacked the required privilege
-(`ORA-01031`), so Oracle behavior remains explicitly unverified under RF-012.
+These backend results use SQLite. Production uses PostgreSQL, but CI does not
+yet exercise the same database engine; that parity gap remains RF-012.
 
 Current issues and their acceptance criteria live in
 [`docs/refining/README.md`](refining/README.md). Resolution notes must be added
