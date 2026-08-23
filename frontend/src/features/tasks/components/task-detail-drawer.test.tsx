@@ -311,17 +311,18 @@ describe("TaskDetailDrawer", () => {
       expect(handlers.onTitleChange).not.toHaveBeenCalled();
     });
 
-    it("Enter inside the title field prevents the default newline insertion and does not close the drawer", () => {
+    it("Enter inside the title field runs the same commit-and-close action as Done", () => {
       const handlers = { onClose: vi.fn(), onTitleChange: vi.fn() };
       render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
 
       const titleField = screen.getByDisplayValue("write tests") as HTMLTextAreaElement;
+      fireEvent.change(titleField, { target: { value: "updated title" } });
       const event = createEvent.keyDown(titleField, { key: "Enter" });
       fireEvent(titleField, event);
 
       expect(event.defaultPrevented).toBe(true);
-      expect(handlers.onClose).not.toHaveBeenCalled();
-      expect(handlers.onTitleChange).not.toHaveBeenCalled();
+      expect(handlers.onTitleChange).toHaveBeenCalledWith("updated title");
+      expect(handlers.onClose).toHaveBeenCalledTimes(1);
     });
 
     it("strips newlines from pasted or typed title text", () => {
@@ -613,6 +614,18 @@ describe("TaskDetailDrawer", () => {
       fireEvent.submit(input.closest("form")!);
       expect(input.value).toBe("");
       expect(screen.getByLabelText("Add a subtask")).toBeTruthy();
+    });
+
+    it("keeps Enter in the subtask composer as add-subtask instead of Done", () => {
+      const handlers = { onAddSubtask: vi.fn(), onClose: vi.fn() };
+      render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
+      const input = screen.getByLabelText("Add a subtask");
+
+      fireEvent.change(input, { target: { value: "buy wood" } });
+      fireEvent.submit(input.closest("form")!);
+
+      expect(handlers.onAddSubtask).toHaveBeenCalledWith("buy wood");
+      expect(handlers.onClose).not.toHaveBeenCalled();
     });
   });
 

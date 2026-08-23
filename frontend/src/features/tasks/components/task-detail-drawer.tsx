@@ -304,11 +304,14 @@ export function TaskDetailDrawer({
               }
               onKeyDown={(e) => {
                 // A title stays one logical line even once it visually
-                // wraps — Enter must not insert a newline. Unlike the
-                // Subtask Detail panel's title field, it also must not
-                // submit/close the drawer: no other buffered field here
-                // auto-submits on Enter, and title isn't the exception.
-                if (e.key === "Enter") e.preventDefault();
+                // wraps. Enter follows the footer's Done path so every
+                // buffered edit is committed before the drawer closes.
+                // The dedicated subtask composer keeps its own form submit
+                // behavior and is intentionally unaffected.
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  handleDone();
+                }
               }}
               rows={1}
               aria-label="Task title"
