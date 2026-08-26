@@ -202,3 +202,60 @@ describe("SubtaskList (drawer variant) reordering", () => {
     expect(screen.queryByLabelText("Reorder one")).toBeNull();
   });
 });
+
+describe("SubtaskList link control", () => {
+  const url = "https://bestbrilliance.com/products/ring";
+
+  function renderWith(subtask: Subtask, drawer: boolean) {
+    render(
+      <SubtaskList
+        subtasks={[subtask]}
+        onAdd={() => {}}
+        onToggle={() => {}}
+        onRemove={() => {}}
+        drawer={drawer}
+      />,
+    );
+  }
+
+  it("opens a URL title in a new tab, without exposing window.opener", () => {
+    renderWith({ id: "s1", title: url, done: false }, true);
+    const link = screen.getByLabelText(`Open ${url} in a new tab`) as HTMLAnchorElement;
+    expect(link.tagName).toBe("A");
+    expect(link.getAttribute("href")).toBe(url);
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("leaves the title's own click as the detail-panel control", () => {
+    const onOpenSubtask = vi.fn();
+    render(
+      <SubtaskList
+        subtasks={[{ id: "s1", title: url, done: false }]}
+        onAdd={() => {}}
+        onToggle={() => {}}
+        onRemove={() => {}}
+        onOpenSubtask={onOpenSubtask}
+        drawer
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: url }));
+    expect(onOpenSubtask).toHaveBeenCalledWith("s1");
+  });
+
+  it("renders the link control in the plain variant too", () => {
+    renderWith({ id: "s1", title: `compare ${url} tonight`, done: false }, false);
+    const link = screen.getByLabelText(`Open compare ${url} tonight in a new tab`);
+    expect(link.getAttribute("href")).toBe(url);
+  });
+
+  it("renders no link control for a title without a URL", () => {
+    renderWith({ id: "s1", title: "Ring", done: false }, true);
+    expect(screen.queryByLabelText(/in a new tab$/)).toBeNull();
+  });
+
+  it("renders no link control for a javascript: title", () => {
+    renderWith({ id: "s1", title: "javascript:alert(1)", done: false }, true);
+    expect(screen.queryByLabelText(/in a new tab$/)).toBeNull();
+  });
+});
