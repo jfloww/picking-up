@@ -29,6 +29,17 @@ export function materializeRoutines(tasks: Task[], today: string): Task[] {
       memo: anchor.memo,
       time: anchor.time,
       done: false,
+      // The occurrence gets its own copy of the anchor's checklist, not a
+      // shared reference: fresh subtask ids (ids must be unique within a
+      // task, and promote/nest look them up by id) and done reset to false,
+      // so ticking one off today never reaches back into the anchor or into
+      // another day's occurrence. Left undefined — not [] — when the anchor
+      // has no subtasks, matching Task.subtasks' optionality.
+      subtasks: anchor.subtasks?.map((subtask) => ({
+        ...subtask,
+        id: crypto.randomUUID(),
+        done: false,
+      })),
       scope: { kind: "day", date: today },
       order: 0,
       repeatSourceId: anchor.id,

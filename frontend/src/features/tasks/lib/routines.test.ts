@@ -84,6 +84,36 @@ describe("materializeRoutines", () => {
     });
   });
 
+  it("copies the anchor's subtasks into the occurrence, unchecked and with fresh ids", () => {
+    const anchor = makeTask({
+      repeatWeekdays: [4],
+      subtasks: [
+        { id: "s1", title: "https://example.com/one", done: true },
+        { id: "s2", title: "second", done: false, memo: "note" },
+      ],
+    });
+    const [spawned] = materializeRoutines([anchor], TODAY);
+    expect(spawned.subtasks).toEqual([
+      { id: expect.any(String), title: "https://example.com/one", done: false },
+      { id: expect.any(String), title: "second", done: false, memo: "note" },
+    ]);
+    const spawnedIds = spawned.subtasks!.map((s) => s.id);
+    expect(spawnedIds).not.toContain("s1");
+    expect(spawnedIds).not.toContain("s2");
+    expect(new Set(spawnedIds).size).toBe(2);
+    // The anchor's own checklist is untouched by the copy.
+    expect(anchor.subtasks).toEqual([
+      { id: "s1", title: "https://example.com/one", done: true },
+      { id: "s2", title: "second", done: false, memo: "note" },
+    ]);
+  });
+
+  it("leaves subtasks undefined when the anchor has none", () => {
+    const anchor = makeTask({ repeatWeekdays: [4] });
+    const [spawned] = materializeRoutines([anchor], TODAY);
+    expect(spawned.subtasks).toBeUndefined();
+  });
+
   it("does not spawn for a date in the anchor's excludedDates, even if it otherwise matches", () => {
     const anchor = makeTask({
       repeatWeekdays: [4],

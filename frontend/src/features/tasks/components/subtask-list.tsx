@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowUpRight, GripVertical, Plus, X } from "lucide-react";
+import { ArrowUpRight, ExternalLink, GripVertical, Plus, X } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
+import { firstLinkIn } from "../lib/links";
 import type { Subtask } from "../types";
 import { QuickAdd } from "./quick-add";
 import { useDragToReorder } from "./use-drag-to-reorder";
@@ -15,6 +16,35 @@ import {
   useSubtaskTransitionClasses,
   type SubtaskRenderState,
 } from "./use-subtask-transition-classes";
+
+// A URL pasted into a subtask title is otherwise dead text — the title
+// itself stays a button (it opens the subtask's detail panel), so opening
+// the link gets its own control. Unlike the promote/delete icons this one
+// is always visible, not hover-revealed: it only renders for rows that
+// actually hold a link, so its presence is the signal that there is one.
+function SubtaskLinkButton({ title, href, small }: { title: string; href: string; small?: boolean }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      // noreferrer alongside noopener: older browsers ignore the latter,
+      // and both are needed to keep the opened tab from reaching back
+      // through window.opener.
+      rel="noopener noreferrer"
+      // The row's own drag-to-reorder runs off the grip button's pointer
+      // events, but an anchor is natively draggable, which would start a
+      // competing link drag from anywhere on this icon.
+      draggable={false}
+      aria-label={`Open ${title} in a new tab`}
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-md text-subtle outline-none transition-colors duration-200 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
+        small ? "size-5" : "size-6",
+      )}
+    >
+      <ExternalLink className={small ? "size-3" : "size-3.5"} aria-hidden />
+    </a>
+  );
+}
 
 // Handle-bag type derived from the hook itself (not hand-duplicated) so it
 // can't drift if useDragToReorder's return shape ever changes.
@@ -53,6 +83,7 @@ function DrawerSubtaskRow({
   showDropIndicatorAbove?: boolean;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const link = firstLinkIn(subtask.title);
 
   const handleRemove = () => {
     if (prefersReducedMotion()) {
@@ -102,6 +133,7 @@ function DrawerSubtaskRow({
       >
         {subtask.title}
       </button>
+      {link && <SubtaskLinkButton title={subtask.title} href={link} />}
       {onPromote && (
         <button
           type="button"
@@ -266,6 +298,7 @@ function PlainSubtaskRow({
   animationClass?: string;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const link = firstLinkIn(subtask.title);
 
   const handleRemove = () => {
     if (prefersReducedMotion()) {
@@ -293,6 +326,7 @@ function PlainSubtaskRow({
       >
         {subtask.title}
       </span>
+      {link && <SubtaskLinkButton title={subtask.title} href={link} small />}
       <button
         type="button"
         onClick={handleRemove}
