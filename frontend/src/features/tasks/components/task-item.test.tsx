@@ -77,6 +77,59 @@ describe('TaskItem size="week"', () => {
     expect(container.querySelector(".rounded-lg.bg-muted")).toBeTruthy();
   });
 
+  // The week card is small enough that most of its surface isn't the title:
+  // the metadata row, the padding, and the empty space beside a short title
+  // all used to swallow clicks, so opening details meant hitting the one-line
+  // title exactly. The whole card is the click target now — matching the
+  // timeline and large branches, which have always selected from the card.
+  it("calls onSelect when the metadata row is clicked", () => {
+    const task = makeTask({
+      title: "call dentist",
+      time: "09:00",
+      subtasks: [{ id: "s1", title: "find number", done: false }],
+    });
+    const onSelect = vi.fn();
+    render(<TaskItem task={task} size="week" onSelect={onSelect} {...noopHandlers} />);
+
+    fireEvent.click(screen.getByText("9:00 AM"));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByLabelText("Subtasks: 0/1"));
+    expect(onSelect).toHaveBeenCalledTimes(2);
+  });
+
+  it("calls onSelect when the card's empty space is clicked", () => {
+    const task = makeTask({ title: "call dentist" });
+    const onSelect = vi.fn();
+    const { container } = render(
+      <TaskItem task={task} size="week" onSelect={onSelect} {...noopHandlers} />,
+    );
+
+    const card = container.querySelector(".rounded-lg.bg-muted") as HTMLElement;
+    fireEvent.click(card);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(card.className).toContain("cursor-pointer");
+  });
+
+  it("toggles from the card's checkbox without also opening details", () => {
+    const task = makeTask({ title: "gym", time: "09:00" });
+    const onSelect = vi.fn();
+    const onToggle = vi.fn();
+    render(
+      <TaskItem
+        task={task}
+        size="week"
+        onSelect={onSelect}
+        {...noopHandlers}
+        onToggle={onToggle}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Toggle gym"));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
   it("strikes through the title and dims the card for a done task", () => {
     const task = makeTask({ title: "done thing", done: true });
     const { container } = render(<TaskItem task={task} size="week" {...noopHandlers} />);
