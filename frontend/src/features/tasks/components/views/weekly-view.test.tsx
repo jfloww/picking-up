@@ -152,6 +152,22 @@ describe("WeeklyView", () => {
     expect(screen.queryByLabelText("Close details")).toBeNull();
   });
 
+  it("opens the detail drawer from anywhere on the card, not just the title", async () => {
+    const a = makeTask({
+      id: "a",
+      title: "task a",
+      time: "09:00",
+      scope: { kind: "day", date: "2026-07-14" },
+    });
+    renderView(vi.fn(), [a]);
+    await waitFor(() => expect(screen.getByText("9:00 AM")).toBeTruthy());
+
+    // The time badge sits on the card's metadata row, well away from the
+    // title — a click there is the one a user aiming at "the card" makes.
+    fireEvent.click(screen.getByText("9:00 AM"));
+    await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
+  });
+
   it("shrinks the week grid's available width while the drawer is open, so no day column hides behind it", async () => {
     const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: "2026-07-14" } });
     renderView(vi.fn(), [a]);

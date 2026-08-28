@@ -232,8 +232,9 @@ export function TaskItem({
     return (
       <Root>
         <div
+          onClick={selectOrToggle}
           className={cn(
-            "rounded-lg bg-muted px-3 py-2.5 sm:px-2 sm:py-1.5",
+            "cursor-pointer rounded-lg bg-muted px-3 py-2.5 sm:px-2 sm:py-1.5",
             task.done && "opacity-55",
             highlight === "overdue" &&
               "border-l-2 border-destructive bg-destructive/10 pl-1.5 pr-2",
@@ -281,7 +282,6 @@ export function TaskItem({
               </span>
               <button
                 type="button"
-                onClick={selectOrToggle}
                 className={cn(
                   "min-w-0 flex-1 truncate text-left text-[15px] leading-5 sm:text-[12.5px] sm:leading-[1.35]",
                   task.done && "text-muted-foreground line-through",
@@ -294,7 +294,6 @@ export function TaskItem({
           {hasMeta && (
             <button
               type="button"
-              onClick={selectOrToggle}
               className={cn(
                 "mt-1 block min-h-6 w-full truncate text-left text-[15px] leading-5 sm:min-h-0 sm:text-[12.5px] sm:leading-[1.35]",
                 task.done && "text-muted-foreground line-through",
