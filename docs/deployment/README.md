@@ -55,18 +55,12 @@ handlers (the BFF layer) do. `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is
 intentionally public; Google enforces the real security boundary via
 Authorized JavaScript origins, not secrecy of the client ID.
 
-**Unverified: `VERCEL_GIT_COMMIT_SHA` on manual CLI deploys.** The footer
-and `/diagnostics` read this Vercel-provided system env var to show the
-deployed commit. Vercel documents it as automatically populated, but that
-guarantee is normally described for Git-integrated deploys (push-to-deploy);
-this project deploys via `vercel --prod` from the CLI with no Git
-auto-deploy configured, and that combination has not actually been
-verified. It fails gracefully today — the footer just omits the SHA and
-`/diagnostics` shows "unknown" — so this is not worth a speculative code
-fix. Verify on the next real Vercel deploy by checking `/diagnostics`
-afterward; if the SHA is missing, add a manually-set build-time env var
-(e.g. `NEXT_PUBLIC_COMMIT_SHA` populated from `git rev-parse --short HEAD`
-at deploy time) as a fallback then, not before.
+**Confirmed: `VERCEL_GIT_COMMIT_SHA` populates correctly on manual CLI
+deploys**, despite Vercel's docs normally describing that guarantee for
+Git-integrated (push-to-deploy) projects. Checked `/diagnostics` on a live
+deploy made via `vercel --prod` from the CLI with no Git auto-deploy
+configured — the commit SHA showed up correctly, matching the actually
+deployed commit. No fallback env var needed.
 
 **Deploy:**
 ```
