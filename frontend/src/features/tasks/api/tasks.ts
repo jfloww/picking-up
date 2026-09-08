@@ -172,7 +172,6 @@ export async function requestPromoteSubtask(
 
 export interface DetachTaskRequest {
   occurrenceVersion: number;
-  repeatWeekdays?: number[];
 }
 
 export interface DetachTaskResponse {
@@ -189,7 +188,6 @@ export async function requestDetachTask(
     method: "POST",
     body: JSON.stringify({
       occurrence_version: command.occurrenceVersion,
-      repeat_weekdays: command.repeatWeekdays ?? null,
     }),
   });
   const payload = (await response.json()) as { occurrence: ApiTask; anchor?: ApiTask };

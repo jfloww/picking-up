@@ -7,6 +7,7 @@ from .models import (
     CATEGORY_NORMALIZED_NAME_MAX_LENGTH,
     SCOPE_KIND_CHOICES,
     Category,
+    FocusSettings,
     Task,
     normalize_category_name,
 )
@@ -26,6 +27,7 @@ SUBTASK_MEMO_MAX_LENGTH = 2000
 # easy to find and retune later if that judgment call turns out wrong.
 SUBTASKS_MAX_COUNT = 200
 EXCLUDED_DATES_MAX_COUNT = 200
+FOCUS_AREAS_MAX_COUNT = 12
 
 # YYYY-MM-DD, YYYY-MM, and YYYY-MM-YYYY formats used by scope_value/
 # rolled_from_value per scope_kind (see Task/Scope's frontend-authoritative
@@ -110,6 +112,82 @@ class CategorySerializer(serializers.ModelSerializer):
             if conflict:
                 raise serializers.ValidationError("A category with this name already exists.")
         return name
+
+
+class FocusAreaSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    title = serializers.CharField(max_length=120, allow_blank=False, trim_whitespace=True)
+    description = serializers.CharField(
+        max_length=300,
+        required=False,
+        allow_blank=True,
+        default="",
+        trim_whitespace=True,
+    )
+    archived = serializers.BooleanField(required=False, default=False)
+
+
+class FocusSettingsSerializer(serializers.ModelSerializer):
+    focus_areas = FocusAreaSerializer(many=True)
+    active_focus_id = serializers.UUIDField(allow_null=True, required=False, default=None)
+
+    class Meta:
+        model = FocusSettings
+        fields = ("focus_areas", "active_focus_id", "updated_at")
+        read_only_fields = ("updated_at",)
+
+    def validate_focus_areas(self, value):
+        if len(value) > FOCUS_AREAS_MAX_COUNT:
+            raise serializers.ValidationError(
+                f"No more than {FOCUS_AREAS_MAX_COUNT} focus areas are supported."
+            )
+        ids = [item["id"] for item in value]
+        if len(ids) != len(set(ids)):
+            raise serializers.ValidationError("Focus area ids must be unique.")
+        return value
+
+    def validate(self, attrs):
+        areas = attrs.get("focus_areas", [])
+        active_id = attrs.get("active_focus_id")
+        if active_id is not None:
+            active = next((area for area in areas if area["id"] == active_id), None)
+            if active is None:
+                raise serializers.ValidationError(
+                    {"active_focus_id": "The active focus must exist in focus_areas."}
+                )
+            if active["archived"]:
+                raise serializers.ValidationError(
+                    {"active_focus_id": "An archived focus cannot be active."}
+                )
+        return attrs
+
+    @staticmethod
+    def _json_ready(validated_data):
+        areas = [
+            {
+                "id": str(area["id"]),
+                "title": area["title"],
+                "description": area["description"],
+                "archived": area["archived"],
+            }
+            for area in validated_data["focus_areas"]
+        ]
+        active_id = validated_data.get("active_focus_id")
+        return {
+            "focus_areas": areas,
+            "active_focus_id": str(active_id) if active_id is not None else None,
+        }
+
+    def create(self, validated_data):
+        values = self._json_ready(validated_data)
+        return FocusSettings.objects.create(user=validated_data["user"], **values)
+
+    def update(self, instance, validated_data):
+        values = self._json_ready(validated_data)
+        instance.focus_areas = values["focus_areas"]
+        instance.active_focus_id = values["active_focus_id"]
+        instance.save(update_fields=["focus_areas", "active_focus_id", "updated_at"])
+        return instance
 
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -375,10 +453,6 @@ class PromoteSubtaskCommandSerializer(serializers.Serializer):
 
 class DetachTaskCommandSerializer(serializers.Serializer):
     occurrence_version = serializers.IntegerField(min_value=1)
-    repeat_weekdays = serializers.ListField(
-        child=serializers.IntegerField(min_value=0, max_value=6),
-        required=False, allow_null=True, default=None,
-    )
 
 
 class DeleteOccurrenceCommandSerializer(serializers.Serializer):

@@ -79,13 +79,13 @@ export function DayTimeline({
     <div data-testid="day-timeline" className="flex h-full min-h-0 flex-col bg-background">
       <header
         data-testid="timeline-header"
-        className="hidden shrink-0 items-end justify-between border-b border-border/60 px-10 pt-10 pb-6 sm:flex"
+        className="hidden h-14 shrink-0 items-center justify-between gap-3 border-b border-border/60 px-6 lg:flex"
       >
-        <div>
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
           <h3 className="text-[13px] font-semibold tracking-wider text-subtle uppercase">
             Focus Agenda
           </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="truncate text-xs text-muted-foreground">
             {activeTimedCount === 0
               ? "No timed tasks scheduled"
               : `${activeTimedCount} ${activeTimedCount === 1 ? "task" : "tasks"} scheduled today`}
@@ -96,7 +96,7 @@ export function DayTimeline({
       <div
         ref={railRef}
         data-testid="hour-rail"
-        className="relative min-h-0 flex-1 overflow-y-auto bg-background"
+        className="thin-scrollbar relative min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain bg-background [-webkit-overflow-scrolling:touch]"
         style={{
           backgroundImage:
             "linear-gradient(to bottom, var(--border) 1px, transparent 1px)",
@@ -110,7 +110,7 @@ export function DayTimeline({
               className="absolute inset-x-0"
               style={{ top: hour * HOUR_HEIGHT }}
             >
-              <span className="absolute top-2 left-4 text-[11px] leading-4 tabular-nums text-subtle select-none sm:left-10 sm:text-[12px]">
+              <span className="absolute top-2 left-4 text-xs leading-4 tabular-nums text-subtle select-none sm:left-6">
                 {String(hour).padStart(2, "0")}:00
               </span>
             </div>
@@ -143,7 +143,7 @@ export function DayTimeline({
                       key={t.id}
                       data-testid={`chip-${t.id}`}
                       className={cn(
-                        "absolute inset-x-1 z-10 min-h-12 touch-none overflow-hidden rounded-md border border-border/60 bg-muted/40 opacity-80 transition-colors hover:bg-muted/70 focus-within:z-30",
+                        "absolute inset-x-1 z-10 min-h-12 touch-pan-y overflow-hidden rounded-md border border-border/60 bg-muted/40 opacity-80 transition-colors hover:bg-muted/70 focus-within:z-30 sm:touch-none",
                         t.done && "opacity-40",
                       )}
                       style={{
@@ -186,7 +186,7 @@ export function DayTimeline({
                     key={t.id}
                     data-testid={`chip-${t.id}`}
                     className={cn(
-                      "absolute z-20 min-h-12 touch-none overflow-hidden rounded-r-lg border-l-2 bg-card transition-colors hover:bg-muted focus-within:z-30",
+                      "absolute z-20 min-h-12 touch-pan-y overflow-hidden rounded-r-lg border-l-2 bg-card transition-colors hover:bg-muted focus-within:z-30 sm:touch-none",
                       t.done
                         ? "border-l-muted-foreground bg-muted/10 opacity-60"
                         : highlight === "overdue"

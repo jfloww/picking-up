@@ -121,10 +121,7 @@ export function fakeRepository(
         ...occurrence,
         version: occurrence.version + 1,
         repeatSourceId: undefined,
-        repeatWeekdays:
-          command.repeatWeekdays && command.repeatWeekdays.length > 0
-            ? command.repeatWeekdays
-            : undefined,
+        repeatWeekdays: undefined,
       };
       let updatedAnchor: Task | undefined;
       const anchorId = occurrence.repeatSourceId;

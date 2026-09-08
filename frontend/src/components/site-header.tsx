@@ -15,9 +15,9 @@ export function displayName(user: CurrentUser): string {
   return full || user.username || user.email;
 }
 
-export function SiteHeader({ user }: { user: CurrentUser | null }) {
+export function SiteHeader({ user, compact = false }: { user: CurrentUser | null; compact?: boolean }) {
   return (
-    <header className="flex items-center justify-between px-6 py-5 sm:px-10">
+    <header className={cn("flex items-center justify-between px-6 py-5 sm:px-10", compact && "mx-auto h-14 w-full max-w-[1600px] shrink-0 py-2 sm:px-6")}>
       <Wordmark />
       <div className="flex items-center gap-2">
         <ThemeToggle />

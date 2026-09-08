@@ -1,6 +1,6 @@
 # Local Development Setup
 
-Everything needed to run Picking Up (Next.js frontend + Django backend) on your machine. This covers **local development only** — production deployment (OCI, Vercel, Oracle Autonomous DB) is tracked separately in `docs/planning/`.
+Everything needed to run Picking Up (Next.js frontend + Django backend) on your machine. This covers **local development only** — production deployment is tracked separately in `docs/deployment/` and `docs/db-migration/`.
 
 ## Prerequisites
 
@@ -40,13 +40,17 @@ The frontend's `DJANGO_API_BASE_URL` env var and the backend's `DJANGO_CORS_ALLO
 ## Verifying it worked
 
 ```bash
-# backend/ (venv active)
-python manage.py test apps.accounts
+# backend/ (venv active, local SQLite selected)
+python manage.py shell -c "from django.db import connection; print(connection.vendor)"
+python manage.py migrate
+python manage.py check
 
 # frontend/
 npm test
-npm run lint
+npm exec tsc -- --noEmit
 npm run build
 ```
 
-Then `python manage.py runserver` in one terminal, `npm run dev` in another, and visit `http://localhost:10050`.
+The database command should print `sqlite`. Then run `python manage.py runserver` in one terminal, `npm run dev` in another, and visit `http://localhost:10050`.
+
+For backend tests that must never inherit a remote `DATABASE_URL`, use the explicit in-memory SQLite commands in [backend.md](backend.md#6-run-isolated-tests).

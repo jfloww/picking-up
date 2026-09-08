@@ -65,6 +65,17 @@ class Category(models.Model):
         return self.name
 
 
+class FocusSettings(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="focus_settings",
+    )
+    focus_areas = models.JSONField(default=list, blank=True)
+    active_focus_id = models.CharField(max_length=36, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class Task(models.Model):
     id = models.UUIDField(primary_key=True, editable=True)
     user = models.ForeignKey(

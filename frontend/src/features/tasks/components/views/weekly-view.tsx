@@ -107,7 +107,7 @@ export function WeeklyView({ anchor, onAnchorChange, onDrillDown }: CalendarView
       data-testid="weekly-view"
       className={cn(
         "flex h-full min-h-0 flex-col gap-2 transition-[padding-right] duration-200 ease-out",
-        selectedTask && "sm:pr-[400px]",
+        selectedTask && "2xl:pr-[420px]",
       )}
     >
       <div className="mx-4 shrink-0 rounded-xl bg-muted/50 p-3 sm:mx-0 sm:rounded-md sm:bg-muted/40">
@@ -134,7 +134,7 @@ export function WeeklyView({ anchor, onAnchorChange, onDrillDown }: CalendarView
         />
       )}
 
-      <div className="grid min-h-0 flex-1 auto-rows-max grid-cols-1 gap-2 overflow-y-auto px-4 pb-2 sm:auto-rows-auto sm:grid-cols-7 sm:gap-1.5 sm:overflow-hidden sm:px-px sm:pb-0">
+      <div className="thin-scrollbar grid min-h-0 flex-1 auto-rows-max grid-cols-1 gap-2 overflow-y-auto px-4 pb-2 sm:px-6 lg:auto-rows-auto lg:grid-cols-7 lg:gap-1.5 lg:overflow-hidden lg:px-px lg:pb-0">
         {dates.map((date, i) => {
           const dayTasks = dayTasksForWeek(tasks, date, weekStart);
           const dayDone = dayTasks.filter((t) => t.done).length;
@@ -148,12 +148,12 @@ export function WeeklyView({ anchor, onAnchorChange, onDrillDown }: CalendarView
                 columnRefs.current[date] = el;
               }}
               className={cn(
-                "flex min-h-fit flex-col rounded-xl bg-card p-3 ring-1 ring-ring/40 transition-colors sm:min-h-0 sm:rounded-md sm:p-1.5",
+                "flex min-h-fit flex-col rounded-xl bg-card p-3 ring-1 ring-border transition-colors lg:min-h-0 lg:rounded-md lg:p-2",
                 isDropTarget && "bg-brand/5 ring-2 ring-brand",
-                mobileQuickAddDate === date && "bg-brand/5 sm:bg-card",
+                mobileQuickAddDate === date && "bg-brand/5 lg:bg-card",
               )}
             >
-              <div className="mb-2 flex shrink-0 items-center justify-between sm:mb-1">
+              <div className="mb-2 flex shrink-0 items-center justify-between lg:mb-1">
                 <button
                   type="button"
                   onClick={() => {
@@ -169,7 +169,7 @@ export function WeeklyView({ anchor, onAnchorChange, onDrillDown }: CalendarView
                   }}
                   aria-label={`Go to ${date}`}
                   className={cn(
-                    "min-h-11 text-left text-sm font-semibold sm:min-h-0 sm:text-xs",
+                    "min-h-11 text-left text-sm font-semibold lg:min-h-8 lg:text-xs",
                     date === today ? "text-brand" : "text-subtle",
                   )}
                 >
@@ -179,11 +179,11 @@ export function WeeklyView({ anchor, onAnchorChange, onDrillDown }: CalendarView
                   {dayDone}/{dayTasks.length}
                 </span>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="thin-scrollbar min-h-0 flex-1 lg:overflow-y-auto">
                 <ScopeTasks
                   scope={{ kind: "day", date }}
                   quickAdd
-                  quickAddClassName="hidden sm:block"
+                  quickAddClassName="hidden lg:block"
                   onSelectTask={handleSelectTask}
                   highlightOverdue
                   showRepeatLabel
@@ -198,7 +198,7 @@ export function WeeklyView({ anchor, onAnchorChange, onDrillDown }: CalendarView
         })}
       </div>
 
-      <div className="shrink-0 border-t border-border bg-card px-4 py-2 sm:hidden">
+      <div className="shrink-0 border-t border-border bg-card px-4 py-3 sm:px-6 lg:hidden">
         <QuickAdd
           onAdd={(title) => actions.addTask(title, { kind: "day", date: mobileQuickAddDate })}
           onAddAndOpen={(title) => {

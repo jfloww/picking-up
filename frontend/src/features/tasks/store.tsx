@@ -307,7 +307,7 @@ interface TasksContextValue extends TasksState {
   setTitle: (id: string, title: string) => void;
   setTime: (id: string, time: string | undefined) => void;
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
-  detachFromRoutine: (id: string, weekdays?: number[]) => void;
+  detachFromRoutine: (id: string) => void;
   rescheduleTaskToDay: (id: string, date: string) => void;
   setPriority: (id: string, priority: boolean) => void;
   setDuration: (id: string, durationMinutes: number | undefined) => void;
@@ -660,16 +660,15 @@ export function TasksProvider({
         };
         persistUpdate(task);
       },
-      detachFromRoutine(id, weekdays) {
+      detachFromRoutine(id) {
         const current = tasksRef.current.find((t) => t.id === id);
         if (!current) return;
-        const normalized = weekdays && weekdays.length > 0 ? weekdays : undefined;
         const anchorId = current.repeatSourceId;
 
         const updatedOccurrence: Task = {
           ...current,
           repeatSourceId: undefined,
-          repeatWeekdays: normalized,
+          repeatWeekdays: undefined,
         };
         const occurrenceGeneration = nextMutationGeneration(current.id);
         const anchorGeneration = anchorId ? nextMutationGeneration(anchorId) : undefined;
@@ -709,7 +708,6 @@ export function TasksProvider({
           const result = await repo.detachTask({
             occurrenceId: current.id,
             occurrenceVersion: authoritativeVersionsRef.current.get(current.id) ?? current.version,
-            repeatWeekdays: normalized,
           });
           authoritativeVersionsRef.current.set(result.occurrence.id, result.occurrence.version);
           authoritativeTasksRef.current.set(result.occurrence.id, result.occurrence);

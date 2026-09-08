@@ -42,7 +42,7 @@
   --accent-amber-foreground: #10141c;
   --accent-amber-subtle: rgb(244 183 64 / 12%);
   --wordmark: #3b6b96;
-  --subtle: #8b9299;
+  --subtle: #637079;
   --chart-1: #3b6b96;
   --chart-2: #5f6a72;
   --chart-3: #8b9299;
@@ -87,7 +87,7 @@
   --accent-amber-foreground: #10141c;
   --accent-amber-subtle: rgb(244 183 64 / 12%);
   --wordmark: #6f9cc4;
-  --subtle: #697681;
+  --subtle: #8996a2;
   --chart-1: #6f9cc4;
   --chart-2: #a6afb5;
   --chart-3: #7b858c;
@@ -325,4 +325,3 @@
     animation: none;
   }
 }
-

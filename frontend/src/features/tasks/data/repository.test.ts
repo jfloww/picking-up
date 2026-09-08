@@ -194,6 +194,7 @@ describe("createLocalStorageRepository", () => {
     const result = await repo.detachTask({ occurrenceId: "occ", occurrenceVersion: 1 });
 
     expect(result.occurrence.repeatSourceId).toBeUndefined();
+    expect(result.occurrence.repeatWeekdays).toBeUndefined();
     expect(result.anchor?.excludedDates).toEqual(["2026-07-16"]);
     expect(await repo.list()).toEqual([result.anchor, result.occurrence]);
   });

@@ -248,20 +248,6 @@ describe("TasksProvider", () => {
       await waitFor(() => expect(repo.tasks[0].repeatSourceId).toBeUndefined());
     });
 
-    it("detachFromRoutine sets repeatWeekdays when weekdays are provided", async () => {
-      const occurrence = makeTask({
-        id: "occ",
-        scope: { kind: "day", date: todayKey() },
-        repeatSourceId: "anchor",
-      });
-      const { result } = setup(fakeRepository([occurrence]));
-      await waitFor(() => expect(result.current.loaded).toBe(true));
-
-      act(() => result.current.detachFromRoutine("occ", [2, 4]));
-      expect(result.current.tasks[0].repeatSourceId).toBeUndefined();
-      expect(result.current.tasks[0].repeatWeekdays).toEqual([2, 4]);
-    });
-
     it("detachFromRoutine records the occurrence's date in the anchor's excludedDates", async () => {
       const anchor = makeTask({ id: "anchor", scope: { kind: "day", date: "2026-07-01" }, repeatWeekdays: [4] });
       const occurrence = makeTask({
@@ -344,7 +330,6 @@ describe("TasksProvider", () => {
       expect(detachSpy).toHaveBeenCalledWith({
         occurrenceId: "occ",
         occurrenceVersion: 1,
-        repeatWeekdays: undefined,
       });
       await waitFor(() =>
         expect(result.current.tasks.find((t) => t.id === "anchor")?.excludedDates).toEqual(["2026-07-16"]),

@@ -1681,14 +1681,14 @@ class TaskCommandApiTests(TestCase):
         anchor.refresh_from_db()
         self.assertEqual(anchor.excluded_dates, ["2026-07-09", "2026-07-16"])
 
-    def test_detach_can_immediately_establish_a_new_repeat_schedule(self):
-        occurrence = self.create_task(title="solo")
+    def test_detach_never_establishes_a_new_repeat_schedule(self):
+        occurrence = self.create_task(title="solo", repeat_weekdays=[2, 4])
 
         response = self.detach(occurrence, repeat_weekdays=[2, 4])
 
         self.assertEqual(response.status_code, 200, response.data)
         occurrence.refresh_from_db()
-        self.assertEqual(occurrence.repeat_weekdays, [2, 4])
+        self.assertIsNone(occurrence.repeat_weekdays)
 
     def test_detach_on_an_already_standalone_task_touches_no_anchor(self):
         response = self.detach(self.create_task(title="solo"))
@@ -1740,7 +1740,6 @@ class TaskCommandApiTests(TestCase):
                     user=self.user,
                     occurrence_id=occurrence.id,
                     occurrence_version=occurrence.version,
-                    repeat_weekdays=None,
                 )
 
         occurrence.refresh_from_db()

@@ -60,10 +60,11 @@ export default async function HomePage() {
           <div className="mt-24 flex flex-col gap-10 border-t border-border pt-12 sm:flex-row sm:gap-0">
             <div className="flex-1 sm:pr-8">
               <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                Focus your day
+                Keep your focus in view
               </h2>
               <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
-                Turn tasks into a clear timeline and actionable agenda.
+                Pin what matters most above every view, and switch focus areas as your priorities
+                move.
               </p>
             </div>
             <div className="flex-1 sm:border-l sm:border-border sm:px-8">

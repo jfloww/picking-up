@@ -23,7 +23,7 @@ interface TaskItemActions {
   setTitle: (id: string, title: string) => void;
   setTime: (id: string, time: string | undefined) => void;
   setRepeatWeekdays: (id: string, weekdays: number[] | undefined) => void;
-  detachFromRoutine: (id: string, weekdays?: number[]) => void;
+  detachFromRoutine: (id: string) => void;
   rescheduleTaskToDay?: (id: string, date: string) => void;
   setPriority: (id: string, priority: boolean) => void;
   setDuration: (id: string, durationMinutes: number | undefined) => void;
@@ -78,7 +78,7 @@ export function taskItemHandlers(id: string, actions: TaskItemActions) {
     onTitleChange: (title: string) => actions.setTitle(id, title),
     onTimeChange: (time?: string) => actions.setTime(id, time),
     onRepeatWeekdaysChange: (weekdays: number[]) => actions.setRepeatWeekdays(id, weekdays),
-    onDetachFromRoutine: (weekdays?: number[]) => actions.detachFromRoutine(id, weekdays),
+    onDetachFromRoutine: () => actions.detachFromRoutine(id),
     onScheduledDateChange: actions.rescheduleTaskToDay
       ? (date: string) => actions.rescheduleTaskToDay?.(id, date)
       : undefined,
@@ -149,7 +149,7 @@ export function TaskItem({
   onMemoChange: (memo: string) => void;
   onTimeChange: (time?: string) => void;
   onRepeatWeekdaysChange: (weekdays: number[]) => void;
-  onDetachFromRoutine: (weekdays?: number[]) => void;
+  onDetachFromRoutine: () => void;
   onPriorityChange: (priority: boolean) => void;
   onDurationChange: (durationMinutes?: number) => void;
   onBackgroundChange: (background: boolean) => void;

@@ -1,72 +1,108 @@
 # Backend Setup
 
-Django + Django REST Framework + Simple JWT. Platform-specific venv activation commands are in [windows.md](windows.md) / [macos.md](macos.md) — this page covers everything else.
+The backend is Django + Django REST Framework + Simple JWT. PostgreSQL is used when `DATABASE_URL` is configured; otherwise Django uses local SQLite.
 
-## 1. Create and activate a virtual environment
+Run all commands on this page from `backend/`.
 
-See [windows.md](windows.md#backend) or [macos.md](macos.md#backend) for the exact commands, then come back here.
+## 1. Create a virtual environment
 
-## 2. Install dependencies
+Use the platform-specific commands in [windows.md](windows.md#backend) or [macos.md](macos.md#backend), then install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-From `backend/requirements.txt`:
+The requirements include Django, Django REST Framework, JWT authentication, CORS handling, PostgreSQL support, Google authentication helpers, and production serving/static-file packages.
 
-| Package | Purpose |
-|---|---|
-| `Django` | web framework |
-| `djangorestframework` | REST API layer |
-| `djangorestframework-simplejwt` | JWT auth (access + refresh tokens) |
-| `django-cors-headers` | CORS for the separately-hosted frontend |
-| `django-environ` | loads `.env` files |
-| `psycopg[binary]` | PostgreSQL driver (prebuilt wheel, no native Postgres install needed) |
-| `oracledb` | Oracle driver, used in **thin mode** — pure Python, no Oracle Instant Client install needed on any platform |
-
-## 3. Create your env file
+## 2. Create the local environment file
 
 ```bash
-cp .env.example .env
+cp -n .env.example .env
 ```
 
-Then open `.env` and fill in real values — see [environment-variables.md](../setup/environment-variables.md) for what each one does. The defaults are enough to run locally against SQLite with no further changes beyond generating a secret key (optional in debug mode — see below).
+PowerShell equivalent:
 
-## 4. Database
+```powershell
+Copy-Item .env.example .env
+```
 
-Nothing to install. By checking three env vars in order, `config/settings.py` picks:
+The tracked example is ready for local SQLite. Keep its `DATABASE_URL` line commented out. See [environment-variables.md](environment-variables.md) for every setting.
 
-1. **Oracle** — if `ORACLE_DB_USER`, `ORACLE_DB_PASSWORD`, and `ORACLE_DB_DSN` are all set.
-2. **PostgreSQL** — else if `DATABASE_URL` is set.
-3. **SQLite** (`db.sqlite3` in `backend/`) — otherwise. This is the default for local dev and needs zero configuration.
+If `backend/.env` already exists, do not overwrite it blindly. Check whether it points to a remote database first.
 
-Leave the Oracle/Postgres variables commented out in `.env` to use SQLite.
+## 3. Confirm the database target
+
+Before `migrate`, `runserver`, or tests, verify the selected database backend:
+
+```bash
+python manage.py shell -c "from django.db import connection; print(connection.vendor)"
+```
+
+For normal local development this must print:
+
+```text
+sqlite
+```
+
+If it prints `postgresql`, your shell or `.env` defines `DATABASE_URL`. Comment it out for local development, or explicitly set `DATABASE_URL=sqlite:///db.sqlite3` in the current shell. Process environment variables take precedence over `.env`.
+
+## 4. Apply migrations
 
 ```bash
 python manage.py migrate
 ```
 
-## 5. Run it
+Run this after every pull that adds a migration. In particular, `0016_focussettings` is required by the planner's multi-focus headliner.
+
+## 5. Start the API
 
 ```bash
 python manage.py runserver
 ```
 
-Serves on `http://localhost:8000` by default (Django's default, matches the frontend's `DJANGO_API_BASE_URL`).
+The backend listens on `http://localhost:8000`. Leave this terminal running and start the frontend in a second terminal.
 
-## 6. Auth endpoints
+Quick health check:
 
-```
-POST /api/auth/register/
-POST /api/auth/token/
-POST /api/auth/token/refresh/
-GET  /api/auth/me/
+```text
+http://localhost:8000/api/health/
 ```
 
-## 7. Tests
+## 6. Run isolated tests
+
+An empty `DATABASE_URL` is not a reliable override because `.env` may fill it again. Explicitly select in-memory SQLite.
+
+Windows PowerShell:
+
+```powershell
+$env:DATABASE_URL = "sqlite:///:memory:"
+.\.venv\Scripts\python.exe manage.py test apps.tasks.test_focus_settings
+Remove-Item Env:DATABASE_URL
+```
+
+macOS / Linux:
+
+```bash
+DATABASE_URL='sqlite:///:memory:' python manage.py test apps.tasks.test_focus_settings
+```
+
+Useful test scopes:
 
 ```bash
 python manage.py test apps.accounts
+python manage.py test apps.tasks.test_focus_settings
+python manage.py test
 ```
 
-**Known issue (not platform-specific):** creating the Oracle test database currently fails with `ORA-01031` (insufficient privileges) — unrelated to local setup. Tests fall back to SQLite and pass regardless.
+The complete task suite is much slower than a focused module, so use the narrowest relevant label during development.
+
+## 7. Focus settings API
+
+The multi-focus planner header uses one authenticated resource:
+
+```text
+GET /api/focus-settings/  # load focus areas and the active selection
+PUT /api/focus-settings/  # save the ordered collection and active selection
+```
+
+Focus settings are private to each user. Up to 12 active or archived focus areas are stored.

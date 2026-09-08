@@ -119,7 +119,7 @@ export function DayAgenda({
           }}
           data-testid={`agenda-${t.id}`}
           className={cn(
-            "flex touch-none items-center gap-1.5",
+            "group/agenda relative flex touch-pan-y items-center pl-8 lg:touch-none",
             transitions.get(t.id)?.animationClass,
             dragState?.nestTargetId === t.id &&
               (dragState.nestBlockReason ? "ring-2 ring-muted-foreground/40" : "ring-2 ring-brand"),
@@ -130,7 +130,7 @@ export function DayAgenda({
             <button
               type="button"
               aria-label={`Reorder ${t.title}`}
-              className="flex size-11 shrink-0 cursor-grab touch-none items-center justify-center rounded text-subtle hover:bg-muted/60 hover:text-foreground active:cursor-grabbing sm:size-6"
+              className="absolute -left-2 flex size-10 cursor-grab touch-none items-center justify-center rounded text-subtle hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
               {...getReorderHandlers(t.id, t.title)}
             >
               <GripVertical className="size-4" />
@@ -158,11 +158,11 @@ export function DayAgenda({
     >
       <div
         data-testid="day-agenda-scroll"
-        className="min-h-0 flex-1 space-y-8 overflow-y-auto p-4 sm:space-y-10 sm:p-10"
+        className="thin-scrollbar min-h-0 flex-1 touch-pan-y space-y-6 overflow-y-auto overscroll-y-contain p-4 [-webkit-overflow-scrolling:touch] sm:p-6"
       >
         {allDayToDo.length > 0 && (
           <section>
-            <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
+            <div className="mb-4 flex shrink-0 items-center justify-between gap-3 pl-8">
               <h3 className="text-[13px] font-semibold tracking-wider text-subtle uppercase">
                 All Day To-Do
               </h3>
@@ -183,7 +183,7 @@ export function DayAgenda({
         )}
         {nextUp.length > 0 && (
           <section>
-            <div className="mb-4 flex shrink-0 items-center gap-3">
+            <div className="mb-4 flex shrink-0 items-center gap-3 pl-8">
               <h3 className="text-[13px] font-semibold tracking-wider text-subtle uppercase">
                 Next Up
               </h3>
@@ -204,7 +204,7 @@ export function DayAgenda({
         )}
         {doneToday.length > 0 && (
           <section>
-            <div className="mb-4 flex shrink-0 items-center gap-3">
+            <div className="mb-4 flex shrink-0 items-center gap-3 pl-8">
               <h3 className="text-[13px] font-semibold tracking-wider text-subtle uppercase">
                 Done Today
               </h3>
@@ -215,21 +215,23 @@ export function DayAgenda({
       </div>
       <div
         data-testid="day-agenda-footer"
-        className="shrink-0 border-t border-border bg-card px-4 py-2 sm:p-6"
+        className="shrink-0 border-t border-border bg-card px-4 py-3 sm:px-6"
       >
-        <QuickAdd
-          onAdd={(title) => addTask(title, scope)}
-          onAddAndOpen={
-            onSelectTask &&
-            ((title) => {
-              const created = addTask(title, scope);
-              if (created) onSelectTask(created.id);
-            })
-          }
-          placeholder="New task"
-          ariaLabel="Add task"
-          variant="panel-footer"
-        />
+        <div className="pl-8">
+          <QuickAdd
+            onAdd={(title) => addTask(title, scope)}
+            onAddAndOpen={
+              onSelectTask &&
+              ((title) => {
+                const created = addTask(title, scope);
+                if (created) onSelectTask(created.id);
+              })
+            }
+            placeholder="New task"
+            ariaLabel="Add task"
+            variant="panel-footer"
+          />
+        </div>
       </div>
     </div>
   );

@@ -365,7 +365,6 @@ describe("client repository -> real route handlers -> mapping (no mocked seams b
     const result = await createApiTaskRepository().detachTask({
       occurrenceId: "occ-id",
       occurrenceVersion: 2,
-      repeatWeekdays: [1, 3],
     });
 
     expect(result).toEqual({
@@ -377,7 +376,7 @@ describe("client repository -> real route handlers -> mapping (no mocked seams b
       url: `${DJANGO_ORIGIN}/api/tasks/occ-id/commands/detach/`,
       method: "POST",
       authorization: "Bearer test-token",
-      body: { occurrence_version: 2, repeat_weekdays: [1, 3] },
+      body: { occurrence_version: 2 },
     });
   });
 

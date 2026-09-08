@@ -15,18 +15,23 @@ See [backend.md](backend.md) and [frontend.md](frontend.md) for the full step-by
 
 ```bash
 cd backend
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+cp -n .env.example .env
+python manage.py shell -c "from django.db import connection; print(connection.vendor)"
 python manage.py migrate
 python manage.py runserver
 ```
 
-`oracledb` and `psycopg[binary]` both ship prebuilt wheels for macOS (Intel and Apple Silicon) — no Oracle Instant Client, no native Postgres libraries to install. `pip install -r requirements.txt` is genuinely everything.
+The database check must print `sqlite` for local development. `psycopg[binary]` ships a prebuilt PostgreSQL wheel, so no native Postgres libraries are needed.
+
+Run a focused backend test without inheriting a remote `.env` URL:
+
+```bash
+DATABASE_URL='sqlite:///:memory:' python manage.py test apps.tasks.test_focus_settings
+```
 
 ## Frontend
 
 No platform difference — see [frontend.md](frontend.md) directly.
-
-

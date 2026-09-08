@@ -64,6 +64,9 @@ describe("DailyView v4 (60/40 layout, drawer overlay)", () => {
     expect(screen.getByTestId("now-line")).toBeTruthy(); // anchor is today
     expect(screen.getByTestId("day-agenda")).toBeTruthy();
     expect(screen.getByTestId("day-agenda-scroll").className).toContain("overflow-y-auto");
+    expect(screen.getByTestId("day-agenda-scroll").className).toContain("touch-pan-y");
+    expect(screen.getByTestId("day-agenda-scroll").className).toContain("overscroll-y-contain");
+    expect(screen.getByTestId("hour-rail").className).toContain("touch-pan-y");
     expect(screen.getByTestId("day-agenda-footer").className).toContain("shrink-0");
     expect(screen.getAllByLabelText("Add task")).toHaveLength(1);
     expect(screen.getByPlaceholderText("New task")).toBeTruthy();
@@ -115,6 +118,8 @@ describe("DailyView v4 (60/40 layout, drawer overlay)", () => {
     renderView(vi.fn(), [timed]);
     await waitFor(() => expect(screen.getByTestId("chip-t")).toBeTruthy());
     expect(screen.getByTestId("agenda-t")).toBeTruthy();
+    expect(screen.getByTestId("agenda-t").className).toContain("touch-pan-y");
+    expect(screen.getByTestId("chip-t").className).toContain("touch-pan-y");
     expect(screen.getAllByText("dentist")).toHaveLength(2);
   });
 
