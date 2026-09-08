@@ -35,6 +35,7 @@ export function TaskDetailFields({
   onCategoryChange,
   showTime = true,
   showDelete = true,
+  repeatDisabled = false,
   variant = "default",
   upcomingRepeatDates,
 }: {
@@ -62,6 +63,7 @@ export function TaskDetailFields({
   onCategoryChange?: (category: string) => void;
   showTime?: boolean;
   showDelete?: boolean;
+  repeatDisabled?: boolean;
   variant?: "default" | "drawer";
   upcomingRepeatDates?: string[];
 }) {
@@ -216,6 +218,11 @@ export function TaskDetailFields({
               >
                 Detach
               </button>
+            </span>
+          ) : repeatDisabled ? (
+            <span className="flex items-center gap-1.5 text-xs text-subtle">
+              <RotateCw aria-hidden className="size-3" />
+              Detached · This task will not repeat
             </span>
           ) : (
             <TaskRepeatPicker

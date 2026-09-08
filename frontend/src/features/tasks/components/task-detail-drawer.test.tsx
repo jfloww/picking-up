@@ -11,7 +11,7 @@ const noopHandlers = {
   onTitleChange: (_title: string) => {},
   onTimeChange: (_time?: string) => {},
   onRepeatWeekdaysChange: (_weekdays: number[]) => {},
-  onDetachFromRoutine: (_weekdays?: number[]) => {},
+  onDetachFromRoutine: () => {},
   onPriorityChange: (_priority: boolean) => {},
   onDurationChange: (_durationMinutes?: number) => {},
   onBackgroundChange: (_background: boolean) => {},
@@ -61,7 +61,7 @@ describe("TaskDetailDrawer", () => {
     expect(drawer.className).toContain("fixed");
     expect(drawer.className).toContain("w-[420px]");
     expect(screen.getByText("Task Details")).toBeTruthy();
-    expect(screen.getByText("Done")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
     expect(screen.getByText("Cancel")).toBeTruthy();
   });
 
@@ -217,7 +217,7 @@ describe("TaskDetailDrawer", () => {
       fireEvent.blur(screen.getByPlaceholderText("Memo"));
       fireEvent.click(screen.getByLabelText("Repeat on Monday"));
 
-      fireEvent.click(screen.getByText("Done"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
       expect(handlers.onToggle).toHaveBeenCalledTimes(1);
       expect(handlers.onPriorityChange).toHaveBeenCalledWith(true);
@@ -240,7 +240,7 @@ describe("TaskDetailDrawer", () => {
         onRepeatWeekdaysChange: vi.fn(),
       };
       render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
-      fireEvent.click(screen.getByText("Done"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
       expect(handlers.onToggle).not.toHaveBeenCalled();
       expect(handlers.onPriorityChange).not.toHaveBeenCalled();
@@ -287,7 +287,7 @@ describe("TaskDetailDrawer", () => {
       render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
 
       fireEvent.change(screen.getByDisplayValue("write tests"), { target: { value: "  updated title  " } });
-      fireEvent.click(screen.getByText("Done"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
       expect(handlers.onTitleChange).toHaveBeenCalledWith("  updated title  ");
     });
@@ -296,7 +296,7 @@ describe("TaskDetailDrawer", () => {
       const handlers = { onTitleChange: vi.fn() };
       render(<TaskDetailDrawer task={task} {...noopHandlers} {...handlers} />);
 
-      fireEvent.click(screen.getByText("Done"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
       expect(handlers.onTitleChange).not.toHaveBeenCalled();
     });
@@ -399,7 +399,7 @@ describe("TaskDetailDrawer", () => {
         />,
       );
       fireEvent.change(screen.getByLabelText("Due date"), { target: { value: "2026-07-31" } });
-      fireEvent.click(screen.getByText("Done"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
       expect(onDueDateChange).toHaveBeenCalledWith("2026-07-31");
       expect(onClose).toHaveBeenCalledTimes(1);
     });
@@ -407,7 +407,7 @@ describe("TaskDetailDrawer", () => {
     it("Done does not call onDueDateChange when the due date was never touched", () => {
       const onDueDateChange = vi.fn();
       render(<TaskDetailDrawer task={task} {...noopHandlers} onDueDateChange={onDueDateChange} />);
-      fireEvent.click(screen.getByText("Done"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
       expect(onDueDateChange).not.toHaveBeenCalled();
     });
 
@@ -436,7 +436,7 @@ describe("TaskDetailDrawer", () => {
       });
       expect(onScheduledDateChange).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getByText("Done"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
       expect(onScheduledDateChange).toHaveBeenCalledWith("2026-07-18");
     });
 
@@ -459,17 +459,18 @@ describe("TaskDetailDrawer", () => {
       repeatSourceId: "anchor-1",
     });
 
-    it("swaps the routine label for the weekday picker immediately when Detach is clicked, before Done", () => {
+    it("replaces the routine controls with a non-repeating status immediately after Detach", () => {
       render(<TaskDetailDrawer task={routineTask} {...noopHandlers} />);
       expect(screen.getByLabelText("Part of a routine")).toBeTruthy();
 
       fireEvent.click(screen.getByText("Detach"));
 
       expect(screen.queryByLabelText("Part of a routine")).toBeNull();
-      expect(screen.getByLabelText("Repeat on Monday")).toBeTruthy();
+      expect(screen.queryByLabelText("Repeat on Monday")).toBeNull();
+      expect(screen.getByText("Detached · This task will not repeat")).toBeTruthy();
     });
 
-    it("Done calls onDetachFromRoutine with no weekdays when none were chosen after detaching", () => {
+    it("Done commits detach without creating a new repeat schedule", () => {
       const onDetachFromRoutine = vi.fn();
       const onRepeatWeekdaysChange = vi.fn();
       render(
@@ -482,30 +483,9 @@ describe("TaskDetailDrawer", () => {
       );
 
       fireEvent.click(screen.getByText("Detach"));
-      fireEvent.click(screen.getByText("Done"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-      expect(onDetachFromRoutine).toHaveBeenCalledWith(undefined);
-      expect(onRepeatWeekdaysChange).not.toHaveBeenCalled();
-    });
-
-    it("Done calls onDetachFromRoutine with the chosen weekdays when the picker was also used", () => {
-      const onDetachFromRoutine = vi.fn();
-      const onRepeatWeekdaysChange = vi.fn();
-      render(
-        <TaskDetailDrawer
-          task={routineTask}
-          {...noopHandlers}
-          onDetachFromRoutine={onDetachFromRoutine}
-          onRepeatWeekdaysChange={onRepeatWeekdaysChange}
-        />,
-      );
-
-      fireEvent.click(screen.getByText("Detach"));
-      fireEvent.click(screen.getByLabelText("Repeat on Monday"));
-      fireEvent.click(screen.getByLabelText("Repeat on Wednesday"));
-      fireEvent.click(screen.getByText("Done"));
-
-      expect(onDetachFromRoutine).toHaveBeenCalledWith([1, 3]);
+      expect(onDetachFromRoutine).toHaveBeenCalledWith();
       expect(onRepeatWeekdaysChange).not.toHaveBeenCalled();
     });
 
@@ -537,7 +517,7 @@ describe("TaskDetailDrawer", () => {
           onDetachFromRoutine={onDetachFromRoutine}
         />,
       );
-      fireEvent.click(screen.getByText("Done"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
       expect(onDetachFromRoutine).not.toHaveBeenCalled();
     });
   });
@@ -565,7 +545,7 @@ describe("TaskDetailDrawer", () => {
       fireEvent.click(screen.getByLabelText("Delete task"));
       fireEvent.click(screen.getByText("Cancel"));
       expect(onDelete).not.toHaveBeenCalled();
-      expect(screen.getByText("Done")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
       expect(screen.getByLabelText("Delete task")).toBeTruthy();
     });
 
@@ -577,7 +557,7 @@ describe("TaskDetailDrawer", () => {
 
       fireEvent.keyDown(document, { key: "Escape" });
       expect(onClose).not.toHaveBeenCalled();
-      expect(screen.getByText("Done")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
 
       fireEvent.keyDown(document, { key: "Escape" });
       expect(onClose).toHaveBeenCalledTimes(1);
@@ -592,7 +572,7 @@ describe("TaskDetailDrawer", () => {
 
       rerender(<TaskDetailDrawer task={taskB} {...noopHandlers} />);
       expect(screen.queryByText("Confirm delete")).toBeNull();
-      expect(screen.getByText("Done")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
     });
   });
 
@@ -915,7 +895,7 @@ describe("TaskDetailDrawer", () => {
       const textarea = screen.getByPlaceholderText("Memo");
       fireEvent.change(textarea, { target: { value: "remember the receipt" } });
       fireEvent.blur(textarea);
-      fireEvent.click(screen.getByText("Done"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
       expect(onMemoChange).toHaveBeenCalledWith("remember the receipt");
     });
 
@@ -989,7 +969,7 @@ describe("bucket-scoped task", () => {
     fireEvent.blur(input);
     expect(onCategoryChange).not.toHaveBeenCalled(); // buffered, not committed yet
 
-    fireEvent.click(screen.getByText("Done"));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(onCategoryChange).toHaveBeenCalledWith("To Go");
   });
 

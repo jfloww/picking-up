@@ -14,6 +14,7 @@ from apps.tasks.views import (
     CategoryListCreateView,
     DeleteOccurrenceCommandView,
     DetachTaskCommandView,
+    FocusSettingsView,
     NestTaskCommandView,
     PromoteSubtaskCommandView,
     RescheduleTaskCommandView,
@@ -34,6 +35,7 @@ urlpatterns = [
     path("api/auth/logout/", LogoutView.as_view(), name="logout"),
     path("api/auth/me/", MeView.as_view(), name="me"),
     path("api/tasks/", TaskListCreateView.as_view(), name="task-list-create"),
+    path("api/focus-settings/", FocusSettingsView.as_view(), name="focus-settings"),
     path(
         "api/tasks/<uuid:pk>/commands/nest/",
         NestTaskCommandView.as_view(),

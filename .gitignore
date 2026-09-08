@@ -25,6 +25,7 @@ wallet/
 
 # Brainstorming companion sessions
 .superpowers/
+.superdesign/tmp/
 
 # OS / editor
 .DS_Store

@@ -4,6 +4,8 @@ import { CalendarDays, ChevronLeft, ChevronRight, Columns3, ListTodo } from "luc
 import { useState } from "react";
 
 import { Alert, AlertAction, AlertTitle } from "@/components/ui/alert";
+import { FocusHeadliner } from "@/features/focus/components/focus-headliner";
+import type { FocusRepository } from "@/features/focus/data/focus-repository";
 import { cn } from "@/lib/utils";
 import type { CategoryRepository } from "../data/category-repository";
 import type { TaskRepository } from "../data/repository";
@@ -217,7 +219,7 @@ function MobileBottomNavigation({
   );
 }
 
-function CalendarInner() {
+function CalendarInner({ focusRepository }: { focusRepository?: FocusRepository }) {
   const { loaded, syncError, dismissSyncError } = useTasks();
   const [view, setView] = useState<ViewKind>("daily");
   const [anchor, setAnchor] = useState(() => todayKey());
@@ -232,17 +234,19 @@ function CalendarInner() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="hidden h-[72px] shrink-0 border-b border-border px-10 sm:block">
+      <header className="hidden shrink-0 border-b border-border px-6 py-2 sm:block lg:h-16 lg:py-0">
         <ViewSwitcher
           view={view}
           leading={
-            <div className="flex min-w-[320px] flex-col">
-              <h1 className="text-[20px] leading-7 font-bold tracking-tight">
+            <div className="flex min-w-0 flex-col">
+              <h1 className="truncate text-[20px] leading-7 font-bold tracking-tight" title={dateLabel}>
                 {dateLabel}
               </h1>
-              <span className="min-h-4 text-[12px] font-medium tracking-wider text-muted-foreground uppercase">
-                {view === "daily" ? weekLabel : ""}
-              </span>
+              {view === "daily" && (
+                <span className="truncate text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+                  {weekLabel}
+                </span>
+              )}
             </div>
           }
           onViewChange={setView}
@@ -259,6 +263,7 @@ function CalendarInner() {
         onPrev={() => setAnchor((current) => shiftAnchor(view, current, -1))}
         onNext={() => setAnchor((current) => shiftAnchor(view, current, 1))}
       />
+      <FocusHeadliner repository={focusRepository} />
       {syncError && (
         <div className="shrink-0 px-4 pt-3 sm:px-10">
           <Alert variant="destructive">
@@ -275,7 +280,7 @@ function CalendarInner() {
           </Alert>
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="mt-3 min-h-0 flex-1 overflow-hidden sm:rounded-xl sm:border sm:border-border">
         <View
           anchor={anchor}
           onAnchorChange={setAnchor}
@@ -293,13 +298,15 @@ function CalendarInner() {
 export function TaskCalendar({
   repository,
   categoryRepository,
+  focusRepository,
 }: {
   repository?: TaskRepository;
   categoryRepository?: CategoryRepository;
+  focusRepository?: FocusRepository;
 } = {}) {
   return (
     <TasksProvider repository={repository} categoryRepository={categoryRepository}>
-      <CalendarInner />
+      <CalendarInner focusRepository={focusRepository} />
     </TasksProvider>
   );
 }

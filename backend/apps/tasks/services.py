@@ -235,7 +235,6 @@ def detach_task(
     user,
     occurrence_id,
     occurrence_version: int,
-    repeat_weekdays: list[int] | None,
 ) -> DetachTaskResult:
     _lock_user(user)
     occurrence_key = str(occurrence_id)
@@ -251,7 +250,9 @@ def detach_task(
     anchor = _append_anchor_exclusion(user, occurrence)
 
     occurrence.repeat_source = None
-    occurrence.repeat_weekdays = repeat_weekdays
+    # Detach always creates a one-off task. Starting a different routine is
+    # a separate, explicit edit after leaving the original series.
+    occurrence.repeat_weekdays = None
     occurrence.version += 1
     occurrence.save(
         update_fields=["repeat_source", "repeat_weekdays", "version", "updated_at"]

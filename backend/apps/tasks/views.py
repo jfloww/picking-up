@@ -9,11 +9,12 @@ from rest_framework.exceptions import APIException, NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Category, Task, normalize_category_name
+from .models import Category, FocusSettings, Task, normalize_category_name
 from .serializers import (
     CategorySerializer,
     DeleteOccurrenceCommandSerializer,
     DetachTaskCommandSerializer,
+    FocusSettingsSerializer,
     NestTaskCommandSerializer,
     PromoteSubtaskCommandSerializer,
     RescheduleTaskCommandSerializer,
@@ -125,6 +126,28 @@ class TaskListCreateView(generics.ListCreateAPIView):
             serializer.save(user=self.request.user, order=order)
 
 
+class FocusSettingsView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request):
+        instance = FocusSettings.objects.filter(user=request.user).first()
+        if instance is None:
+            return Response(
+                {"focus_areas": [], "active_focus_id": None, "updated_at": None},
+                status=status.HTTP_200_OK,
+            )
+        return Response(FocusSettingsSerializer(instance).data, status=status.HTTP_200_OK)
+
+    def put(self, request):
+        with transaction.atomic():
+            _lock_user(request.user)
+            instance = FocusSettings.objects.select_for_update().filter(user=request.user).first()
+            serializer = FocusSettingsSerializer(instance, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save(user=request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = TaskSerializer
     permission_classes = (permissions.IsAuthenticated,)
@@ -225,7 +248,6 @@ class DetachTaskCommandView(APIView):
                 user=request.user,
                 occurrence_id=pk,
                 occurrence_version=data["occurrence_version"],
-                repeat_weekdays=data["repeat_weekdays"],
             )
         except TaskCommandNotFound as exc:
             raise NotFound from exc

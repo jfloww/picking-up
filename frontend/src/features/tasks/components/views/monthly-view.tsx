@@ -52,7 +52,7 @@ export function MonthlyView({ anchor, onDrillDown }: CalendarViewProps) {
     <div
       className={cn(
         "flex h-full min-h-0 flex-col gap-2 overflow-hidden transition-[padding-right] duration-200 ease-out",
-        overlay && "sm:pr-[400px]",
+        overlay && "2xl:pr-[420px]",
       )}
     >
       <div className="mx-4 shrink-0 rounded-xl bg-muted/50 p-3 sm:mx-0 sm:rounded-md sm:bg-muted/40">
@@ -70,7 +70,7 @@ export function MonthlyView({ anchor, onDrillDown }: CalendarViewProps) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto">
         <MonthGrid
           monthKey={monthKey}
           selectedDate={selectedDate}

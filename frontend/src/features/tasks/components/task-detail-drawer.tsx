@@ -103,7 +103,7 @@ export function TaskDetailDrawer({
   onTitleChange: (title: string) => void;
   onTimeChange: (time?: string) => void;
   onRepeatWeekdaysChange: (weekdays: number[]) => void;
-  onDetachFromRoutine: (weekdays?: number[]) => void;
+  onDetachFromRoutine: () => void;
   onPriorityChange: (priority: boolean) => void;
   onDurationChange: (durationMinutes?: number) => void;
   onBackgroundChange: (background: boolean) => void;
@@ -224,14 +224,14 @@ export function TaskDetailDrawer({
     ) {
       onCategoryChange?.(draft.category);
     }
-    const original = task.repeatWeekdays ?? [];
-    const weekdaysChanged =
-      draft.repeatWeekdays.length !== original.length ||
-      draft.repeatWeekdays.some((d, i) => d !== original[i]);
     if (draft.detached) {
-      onDetachFromRoutine(weekdaysChanged ? draft.repeatWeekdays : undefined);
-    } else if (weekdaysChanged) {
-      onRepeatWeekdaysChange(draft.repeatWeekdays);
+      onDetachFromRoutine();
+    } else {
+      const original = task.repeatWeekdays ?? [];
+      const weekdaysChanged =
+        draft.repeatWeekdays.length !== original.length ||
+        draft.repeatWeekdays.some((d, i) => d !== original[i]);
+      if (weekdaysChanged) onRepeatWeekdaysChange(draft.repeatWeekdays);
     }
     onClose();
   };
@@ -351,7 +351,7 @@ export function TaskDetailDrawer({
           onDurationChange={(durationMinutes) => setDraft((d) => ({ ...d, durationMinutes }))}
           onBackgroundChange={(background) => setDraft((d) => ({ ...d, background }))}
           onDueDateChange={(dueDate) => setDraft((d) => ({ ...d, dueDate }))}
-          upcomingRepeatDates={upcomingRepeatDates}
+          upcomingRepeatDates={detached ? undefined : upcomingRepeatDates}
           onDelete={onDelete}
           onAddSubtask={onAddSubtask}
           onToggleSubtask={onToggleSubtask}
@@ -366,6 +366,7 @@ export function TaskDetailDrawer({
           onCategoryChange={(category) => setDraft((d) => ({ ...d, category }))}
           showTime={task.scope.kind !== "bucket"}
           showDelete={false}
+          repeatDisabled={detached}
           variant="drawer"
         />
       </div>
@@ -402,7 +403,7 @@ export function TaskDetailDrawer({
               onClick={handleDone}
               className="h-11 flex-1 rounded-lg border border-transparent bg-brand px-4 text-sm font-medium text-primary-foreground transition-colors duration-200 hover:bg-brand/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:h-10"
             >
-              Done
+              Save changes
             </button>
             <button
               type="button"

@@ -10,16 +10,16 @@ export default async function PlannerPage() {
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-background">
       <div className="hidden sm:block">
-        <SiteHeader user={user} />
+        <SiteHeader user={user} compact />
       </div>
       <PlannerMobileHeader user={user} />
 
-      <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col sm:px-6 sm:py-6">
+      <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col sm:px-6 sm:py-3">
         <TaskCalendar />
       </main>
 
       <div className="hidden sm:block">
-        <SiteFooter />
+        <SiteFooter compact />
       </div>
     </div>
   );

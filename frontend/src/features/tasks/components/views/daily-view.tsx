@@ -110,7 +110,7 @@ export function DailyView({ anchor }: CalendarViewProps) {
         <div
           role="tablist"
           aria-label="Daily presentation"
-          className="grid shrink-0 grid-cols-2 gap-1 border-b border-border bg-background px-4 py-2 sm:hidden"
+          className="grid shrink-0 grid-cols-2 gap-1 border-b border-border bg-background px-4 py-2 sm:px-6 lg:hidden"
         >
           {(["tasks", "timeline"] as const).map((mode) => (
             <button
@@ -132,13 +132,13 @@ export function DailyView({ anchor }: CalendarViewProps) {
         </div>
         <div
           data-testid="daily-layout"
-          className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
+          className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
         >
           <section
             data-testid="timeline-panel"
             aria-label="Daily timeline"
             className={cn(
-              "min-h-0 min-w-0 bg-background sm:block sm:border-r sm:border-border",
+              "h-full min-h-0 min-w-0 overflow-hidden bg-background lg:block lg:border-r lg:border-border",
               mobileMode === "timeline" ? "block" : "hidden",
             )}
           >
@@ -155,7 +155,7 @@ export function DailyView({ anchor }: CalendarViewProps) {
             data-testid="agenda-panel"
             aria-label="Daily task list"
             className={cn(
-              "min-h-0 min-w-0 bg-card/50 sm:block",
+              "h-full min-h-0 min-w-0 overflow-hidden bg-card/50 lg:block",
               mobileMode === "tasks" ? "block" : "hidden",
             )}
           >
@@ -172,7 +172,7 @@ export function DailyView({ anchor }: CalendarViewProps) {
         {mobileMode === "timeline" && (
           <div
             data-testid="mobile-timeline-quick-add"
-            className="shrink-0 border-t border-border bg-card px-4 py-2 sm:hidden"
+            className="shrink-0 border-t border-border bg-card px-4 py-3 sm:px-6 lg:hidden"
           >
             <QuickAdd
               onAdd={(title) => actions.addTask(title, { kind: "day", date: anchor })}

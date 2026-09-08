@@ -43,7 +43,7 @@ describe("WeeklyView", () => {
       "auto-rows-max",
     );
     expect(screen.getByTestId("day-column-2026-07-14").parentElement?.className).toContain(
-      "sm:auto-rows-auto",
+      "lg:auto-rows-auto",
     );
     fireEvent.click(screen.getByLabelText("Go to 2026-07-14"));
     expect(screen.getByLabelText("Add task for Tue Jul 14")).toBeTruthy();
@@ -168,19 +168,19 @@ describe("WeeklyView", () => {
     await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
   });
 
-  it("shrinks the week grid's available width while the drawer is open, so no day column hides behind it", async () => {
+  it("reserves drawer space on wide screens and restores it when closed", async () => {
     const a = makeTask({ id: "a", title: "task a", scope: { kind: "day", date: "2026-07-14" } });
     renderView(vi.fn(), [a]);
     await waitFor(() => expect(screen.getByRole("button", { name: "task a" })).toBeTruthy());
 
-    expect(screen.getByTestId("weekly-view").className).not.toContain("pr-[400px]");
+    expect(screen.getByTestId("weekly-view").className).not.toContain("2xl:pr-[420px]");
 
     fireEvent.click(screen.getByRole("button", { name: "task a" }));
     await waitFor(() => expect(screen.getByLabelText("Close details")).toBeTruthy());
-    expect(screen.getByTestId("weekly-view").className).toContain("pr-[400px]");
+    expect(screen.getByTestId("weekly-view").className).toContain("2xl:pr-[420px]");
 
     fireEvent.click(screen.getByLabelText("Close details"));
-    expect(screen.getByTestId("weekly-view").className).not.toContain("pr-[400px]");
+    expect(screen.getByTestId("weekly-view").className).not.toContain("2xl:pr-[420px]");
   });
 
   it("calls onDrillDown('daily', date) when a day's date is double-clicked", async () => {

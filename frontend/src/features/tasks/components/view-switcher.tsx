@@ -38,35 +38,33 @@ export function ViewSwitcher({
   onToday: () => void;
 }) {
   return (
-    <div className="flex h-full w-full items-center justify-between gap-6">
-      <div className="flex min-w-0 items-center gap-8">
-        {leading}
-        <div
-          role="tablist"
-          aria-label="Calendar scale"
-          className="flex rounded-lg border border-border bg-card p-1"
-        >
-          {VIEWS.map((v) => (
-            <button
-              key={v}
-              type="button"
-              role="tab"
-              aria-selected={view === v}
-              onClick={() => onViewChange(v)}
-              className={cn(
-                "rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
-                view === v
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {VIEW_LABELS[v]}
-            </button>
-          ))}
-        </div>
+    <div className="grid h-full w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+      {leading}
+      <div
+        role="tablist"
+        aria-label="Calendar scale"
+        className="col-span-2 row-start-2 flex w-fit rounded-lg border border-border bg-card p-1 lg:col-span-1 lg:col-start-2 lg:row-start-1"
+      >
+        {VIEWS.map((v) => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={view === v}
+            onClick={() => onViewChange(v)}
+            className={cn(
+              "rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
+              view === v
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {VIEW_LABELS[v]}
+          </button>
+        ))}
       </div>
       {view !== "bucket" && (
-        <div className="flex shrink-0 items-center rounded-lg border border-border bg-card p-1">
+        <div className="col-start-2 row-start-1 flex shrink-0 items-center justify-self-end rounded-lg border border-border bg-card p-1 lg:col-start-3">
           <Button variant="ghost" size="icon" className="size-8" onClick={onPrev} aria-label="Previous">
             <ChevronLeft />
           </Button>

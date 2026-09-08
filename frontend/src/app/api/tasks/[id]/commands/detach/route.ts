@@ -8,15 +8,8 @@ function parseDetachCommand(body: unknown): DetachTaskRequest | null {
   if (typeof body !== "object" || body === null) return null;
   const candidate = body as Record<string, unknown>;
   if (typeof candidate.occurrenceVersion !== "number") return null;
-  if (
-    candidate.repeatWeekdays !== undefined &&
-    !(Array.isArray(candidate.repeatWeekdays) && candidate.repeatWeekdays.every((d) => typeof d === "number"))
-  ) {
-    return null;
-  }
   return {
     occurrenceVersion: candidate.occurrenceVersion,
-    repeatWeekdays: candidate.repeatWeekdays as number[] | undefined,
   };
 }
 
@@ -29,7 +22,7 @@ export async function POST(
     const command = parseDetachCommand(await request.json());
     if (command === null) {
       return NextResponse.json(
-        { error: "occurrenceVersion (number) is required; repeatWeekdays, if present, must be number[]." },
+        { error: "occurrenceVersion (number) is required." },
         { status: 400 },
       );
     }

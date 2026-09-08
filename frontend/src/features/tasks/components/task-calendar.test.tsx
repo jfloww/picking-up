@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { shiftAnchor, TaskCalendar } from "./task-calendar";
+import { fakeFocusRepository, makeFocusArea } from "@/features/focus/test-utils";
 import { todayKey } from "../lib/dates";
 import { fakeCategoryRepository, fakeRepository, makeTask } from "../test-utils";
 
@@ -30,7 +31,7 @@ describe("shiftAnchor", () => {
 
 describe("TaskCalendar", () => {
   it("defaults to the Daily Focus Planner view and switches scales", async () => {
-    render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} />);
+    render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} focusRepository={fakeFocusRepository()} />);
     await waitFor(() =>
       expect(
         screen.getByRole("tab", { name: "Daily", selected: true }),
@@ -44,6 +45,25 @@ describe("TaskCalendar", () => {
     );
   });
 
+  it("keeps the selected long-term focus visible across planner tabs", async () => {
+    const focus = makeFocusArea({ title: "LangChain, RAG & AI Agents" });
+    render(
+      <TaskCalendar
+        repository={fakeRepository()}
+        categoryRepository={fakeCategoryRepository()}
+        focusRepository={fakeFocusRepository({ focusAreas: [focus], activeFocusId: focus.id })}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "LangChain, RAG & AI Agents" })).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Weekly" }));
+
+    expect(screen.getByRole("heading", { name: "LangChain, RAG & AI Agents" })).toBeTruthy();
+    expect(screen.getByTestId("focus-headliner").className).toContain("shrink-0");
+  });
+
   describe("fixed sub-header", () => {
     beforeAll(() => {
       vi.useFakeTimers({ toFake: ["Date"] });
@@ -54,7 +74,7 @@ describe("TaskCalendar", () => {
     });
 
     it("shows a date label matching the current view, and keeps tabs/nav/label together as one non-shrinking block", async () => {
-      render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} />);
+      render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} focusRepository={fakeFocusRepository()} />);
       await waitFor(() => expect(screen.getByText("Week of Jul 12 – Jul 18")).toBeTruthy());
 
       const header = screen.getByText("Week of Jul 12 – Jul 18").closest("header");
@@ -73,14 +93,14 @@ describe("TaskCalendar", () => {
     });
 
     it("shows the month name and year as the header label when Monthly is the active view", async () => {
-      render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} />);
+      render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} focusRepository={fakeFocusRepository()} />);
       await waitFor(() => expect(screen.getByRole("tab", { name: "Monthly" })).toBeTruthy());
       fireEvent.click(screen.getByRole("tab", { name: "Monthly" }));
       await waitFor(() => expect(screen.getByText("July 2026")).toBeTruthy());
     });
 
     it("provides the mobile date strip and one-tap bottom navigation without replacing desktop tabs", async () => {
-      render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} />);
+      render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} focusRepository={fakeFocusRepository()} />);
       await waitFor(() => expect(screen.getByTestId("mobile-calendar-navigation")).toBeTruthy());
 
       expect(screen.getAllByRole("button", { name: /^Select / })).toHaveLength(7);
@@ -111,7 +131,7 @@ describe("drill-down navigation", () => {
   });
 
   it("double-clicking a Weekly day date switches to Daily anchored on that date", async () => {
-    render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} />);
+    render(<TaskCalendar repository={fakeRepository()} categoryRepository={fakeCategoryRepository()} focusRepository={fakeFocusRepository()} />);
     await waitFor(() => expect(screen.getByRole("tab", { name: "Weekly" })).toBeTruthy());
     fireEvent.click(screen.getByRole("tab", { name: "Weekly" }));
     await waitFor(() => expect(screen.getByLabelText("Go to 2026-07-14")).toBeTruthy());
@@ -130,7 +150,7 @@ describe("sync error banner", () => {
     const repo = fakeRepository([task]);
     vi.spyOn(repo, "update").mockRejectedValueOnce(new Error("down"));
 
-    render(<TaskCalendar repository={repo} categoryRepository={fakeCategoryRepository()} />);
+    render(<TaskCalendar repository={repo} categoryRepository={fakeCategoryRepository()} focusRepository={fakeFocusRepository()} />);
 
     await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
     fireEvent.click(screen.getAllByRole("checkbox")[0]);

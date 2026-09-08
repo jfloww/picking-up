@@ -15,6 +15,26 @@ export function TaskMock() {
       <div className="border-b border-border px-6 py-4 sm:px-8 sm:py-6">
         <p className="text-xl font-bold tracking-tight text-foreground">Tuesday, March 10</p>
       </div>
+      <div className="border-b border-border px-6 py-4 sm:px-8 sm:py-5">
+        <div className="border-l-2 border-brand pl-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold tracking-[0.12em] text-brand uppercase">
+              Current Focus
+            </span>
+            <span className="rounded-full border border-border px-2 text-[11px] font-medium text-subtle">
+              1 of 3
+            </span>
+          </div>
+          <div className="mt-0.5 sm:flex sm:items-baseline sm:gap-3">
+            <span className="text-sm font-semibold tracking-tight text-foreground sm:text-base">
+              Ship the client portal
+            </span>
+            <span className="hidden text-xs text-muted-foreground sm:block">
+              Everything that moves the March launch forward.
+            </span>
+          </div>
+        </div>
+      </div>
       <div className="flex flex-col sm:flex-row">
         <div className="flex-[3] space-y-4 border-b border-border p-4 sm:border-r sm:border-b-0 sm:p-6 lg:p-8">
           {timelineBlocks.map((block) => (

@@ -12,10 +12,11 @@ Actual `.env`/`.env.development` files are gitignored (`.gitignore`: `.env`, `.e
 | `DJANGO_DEBUG` | No | `True` | Django debug mode. Must be `False` in production. |
 | `DJANGO_ALLOWED_HOSTS` | No | `localhost,127.0.0.1` | Comma-separated list, Django's standard `ALLOWED_HOSTS`. |
 | `DJANGO_CORS_ALLOWED_ORIGINS` | No | `http://localhost:10050` | Must exactly match the frontend's origin (scheme + host + port) or browser requests from the frontend will be blocked by CORS. The frontend dev server runs on port **10050**, not Next's default 3000 — see [frontend.md](frontend.md). |
-| `DATABASE_URL` | No | unset (→ SQLite) | PostgreSQL connection string. Only used if the Oracle variables below aren't all set. |
-| `ORACLE_DB_USER`, `ORACLE_DB_PASSWORD`, `ORACLE_DB_DSN` | No | unset (→ SQLite) | Oracle Autonomous Database (OCI) connection. When **all three** are set, Django uses Oracle instead of SQLite/`DATABASE_URL`. Leave unset for local dev. |
+| `DATABASE_URL` | No | unset (→ SQLite) | Database connection URL. Production uses PostgreSQL. Leave it unset locally for `backend/db.sqlite3`; use `sqlite:///:memory:` for an isolated test process. |
 
-Database selection logic lives in `backend/config/settings.py`: Oracle (if all three vars set) → PostgreSQL (if `DATABASE_URL` set) → SQLite (default, zero config).
+Database selection logic lives in `backend/config/settings.py`: `DATABASE_URL` when set → SQLite (`backend/db.sqlite3`) when unset.
+
+`config/settings.py` loads `backend/.env` before `.env.development`, while process environment variables win over both files. An empty process value is not a safe way to neutralize a remote URL because the env loader can fill it again. For isolated tests, explicitly use `DATABASE_URL=sqlite:///:memory:`.
 
 ## Frontend (`frontend/.env.development`)
 
@@ -28,7 +29,15 @@ Database selection logic lives in `backend/config/settings.py`: Oracle (if all t
 
 For a fresh machine, the two `.env`/`.env.development` files with just their defaults filled in are enough to run the whole stack:
 
-- SQLite database (no `DATABASE_URL` or `ORACLE_*` needed)
+- SQLite database (no `DATABASE_URL` needed)
 - `DJANGO_CORS_ALLOWED_ORIGINS=http://localhost:10050` matching the frontend's actual port
 - `DJANGO_API_BASE_URL=http://localhost:8000` matching Django's default port
 - `DJANGO_SECRET_KEY` can stay at its insecure placeholder since `DJANGO_DEBUG=True` locally
+
+Before migrations or local server startup, verify the target with:
+
+```bash
+python manage.py shell -c "from django.db import connection; print(connection.vendor)"
+```
+
+The expected local output is `sqlite`.

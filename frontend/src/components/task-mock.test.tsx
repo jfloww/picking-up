@@ -16,6 +16,13 @@ describe("TaskMock", () => {
     expect(screen.getByText("9:30 – 10:15")).toBeTruthy();
   });
 
+  it("shows the current focus strip that sits above every real planner view", () => {
+    render(<TaskMock />);
+    expect(screen.getByText("Current Focus")).toBeTruthy();
+    expect(screen.getByText("Ship the client portal")).toBeTruthy();
+    expect(screen.getByText("1 of 3")).toBeTruthy();
+  });
+
   it("no longer shows the old fabricated nav", () => {
     render(<TaskMock />);
     expect(screen.queryByText("Inbox")).toBeNull();
