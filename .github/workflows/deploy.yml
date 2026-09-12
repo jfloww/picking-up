@@ -1,24 +1,133 @@
 name: Deploy
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build, gate and health-check, but do not shift traffic"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT_ID: jfloww-picking-up
+  GCP_REGION: us-east4
+  SERVICE: picking-up-api
+  MIGRATE_JOB: picking-up-api-migrate
+  IMAGE_REPO: us-east4-docker.pkg.dev/jfloww-picking-up/picking-up/backend
+
 jobs:
-  auth-smoke-test:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+
+  tests:
+    name: Tests
+    needs: changes
+    uses: ./.github/workflows/tests.yml
+
+  backend:
+    name: Backend
+    needs: [changes, tests]
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      - name: Compute image tag and short SHA
+        id: vars
+        run: |
+          echo "image=${IMAGE_REPO}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
       - uses: google-github-actions/auth@v2
         with:
-          project_id: jfloww-picking-up
+          project_id: ${{ env.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
       - uses: google-github-actions/setup-gcloud@v2
-      - name: Prove the deployer can read the service
+
+      - name: Build the image
+        working-directory: backend
+        run: gcloud builds submit --tag "${{ steps.vars.outputs.image }}"
+
+      - name: Migration gate
         run: |
-          gcloud run services describe picking-up-api \
-            --region us-east4 --format='value(status.url)'
+          set +e
+          gcloud run jobs deploy "$MIGRATE_JOB" \
+            --image "${{ steps.vars.outputs.image }}" \
+            --region "$GCP_REGION" \
+            --command=python \
+            --args="manage.py,migrate,--check" \
+            --set-secrets "DATABASE_URL=picking-up-database-url:latest,DJANGO_SECRET_KEY=picking-up-django-secret-key:latest" \
+            --set-env-vars "DJANGO_DEBUG=False,DJANGO_NUM_PROXIES=1,DJANGO_ALLOWED_HOSTS=localhost,DJANGO_ENVIRONMENT=production" \
+            --max-retries 0 \
+            --execute-now --wait
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Unapplied migrations detected. Run them before deploying: cd backend && python manage.py migrate  (see docs/deployment/README.md section 3)"
+            exit 1
+          fi
+
+      - name: Deploy the candidate revision with no traffic
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "${{ steps.vars.outputs.image }}" \
+            --region "$GCP_REGION" \
+            --no-traffic --tag candidate \
+            --update-env-vars "DJANGO_GIT_SHA=${{ steps.vars.outputs.short_sha }},DJANGO_ENVIRONMENT=production"
+
+      - name: Health-check the candidate
+        run: |
+          base=$(gcloud run services describe "$SERVICE" --region "$GCP_REGION" --format='value(status.url)')
+          url="${base/https:\/\//https://candidate---}/api/health/"
+          echo "Checking $url"
+          body=""
+          for attempt in 1 2 3 4 5; do
+            if body=$(curl -fsS --max-time 15 "$url"); then break; fi
+            echo "attempt ${attempt} failed, retrying in 5s"
+            sleep 5
+          done
+          echo "$body"
+          if ! echo "$body" | grep -q '"status": "ok"'; then
+            echo "::error::Candidate revision is not healthy. Traffic was not moved."
+            exit 1
+          fi
+          if ! echo "$body" | grep -q "\"commit\": \"${{ steps.vars.outputs.short_sha }}\""; then
+            echo "::error::Candidate reports a different commit than the one being deployed. Traffic was not moved."
+            exit 1
+          fi
+
+      - name: Promote the candidate to 100% traffic
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --region "$GCP_REGION" --to-tags candidate=100
+
+      - name: Dry run — traffic deliberately not moved
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: echo "dry_run=true: candidate is healthy but traffic was left on the previous revision."
