@@ -832,7 +832,7 @@ jobs:
 
       - name: Dry run — traffic deliberately not moved
         if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: echo "dry_run=true: candidate is healthy but traffic was left on the previous revision."
+        run: echo "dry_run=true - candidate is healthy, traffic left on the previous revision."
 ```
 
 The health check derives the candidate hostname from the service URL rather than hardcoding the project number, and asserts the reported commit matches — proving the promoted revision is the one just built rather than a stale revision answering.
@@ -935,7 +935,7 @@ Append to the `jobs:` block of `.github/workflows/deploy.yml`:
         run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
       - name: Dry run — build only
         if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: echo "dry_run=true: built successfully, deploy skipped."
+        run: echo "dry_run=true - built successfully, deploy skipped."
 ```
 
 `always()` is required because `backend` is skipped on frontend-only releases, and a skipped dependency would otherwise skip this job too. The explicit `needs.tests.result == 'success'` re-asserts the test gate, which `always()` would otherwise waive.
