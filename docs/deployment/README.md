@@ -5,6 +5,14 @@ This is the "how to operate it" reference — for the "why we ended up here"
 history (Oracle → Neon, buildpacks → Dockerfile, etc.), see
 `docs/db-migration/` and `docs/develop-history/`.
 
+Companion documents:
+- [`pipeline.md`](pipeline.md) — how the CI/CD pipeline works and why it is
+  shaped that way, plus the gotchas that cost real time (Cloud Run's two
+  hostname formats, Cloud Build log permissions, Vercel token scopes).
+- [`gcp-setup.md`](gcp-setup.md) — the one-time cloud infrastructure behind the
+  pipeline: Workload Identity Federation, the deployer service account, Secret
+  Manager, and the migration gate job.
+
 ## Current architecture
 
 ```
