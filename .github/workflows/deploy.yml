@@ -72,12 +72,18 @@ jobs:
 
       - name: Build the image
         working-directory: backend
-        # --suppress-logs is required, not cosmetic. Without it gcloud tries to
-        # stream the build log from the default logs bucket, which needs project
-        # Viewer/Owner. The deployer service account deliberately does not have
-        # that, so gcloud exits 1 and fails this step even when the build itself
-        # SUCCEEDED — which is exactly what happened on run 34709502374.
-        run: gcloud builds submit --suppress-logs --tag "${{ steps.vars.outputs.image }}"
+        # --gcs-log-dir is required, not cosmetic. Cloud Build's DEFAULT logs
+        # bucket is readable only with project Viewer/Owner, which the deployer
+        # service account deliberately lacks — so gcloud exits 1 after a build
+        # that actually SUCCEEDED (runs 34709502374 and 34709743621 both pushed
+        # their image and still failed this step). --suppress-logs does not help;
+        # gcloud performs the check regardless. Writing logs to the project's own
+        # _cloudbuild bucket, which the deployer already has storage.admin on,
+        # both fixes the exit code and keeps build output visible in this log.
+        run: |
+          gcloud builds submit \
+            --gcs-log-dir="gs://${GCP_PROJECT_ID}_cloudbuild/logs" \
+            --tag "${{ steps.vars.outputs.image }}"
 
       - name: Migration gate
         run: |
