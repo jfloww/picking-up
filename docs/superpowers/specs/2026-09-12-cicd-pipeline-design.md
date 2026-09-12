@@ -266,8 +266,10 @@ Workflows cannot be unit-tested, so the plan verifies behavior directly:
 1. **`dry_run` input** on `workflow_dispatch` that runs everything up to and including
    the candidate health check, then stops before `update-traffic`. First execution of the
    pipeline uses it.
-2. **Gate proof:** on a scratch branch, add a throwaway migration without applying it and
-   confirm the release fails at the gate with the intended message. Then delete the branch.
+2. **Gate proof:** no throwaway migration is needed — `0016_focussettings` is already
+   unapplied in production, so the gate is first exercised against a genuine failing
+   state, then re-run after `manage.py migrate` to confirm it passes. Observing both
+   states is the only way to know the gate discriminates rather than always succeeding.
 3. **Health-check proof:** confirm the candidate hostname answers `200` rather than `400`
    after the `ALLOWED_HOSTS` change — the single most likely thing to be wrong.
 4. **Path filter proof:** a docs-only commit to `main` deploys nothing.
