@@ -130,4 +130,4 @@ jobs:
 
       - name: Dry run — traffic deliberately not moved
         if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: echo "dry_run=true: candidate is healthy but traffic was left on the previous revision."
+        run: echo "dry_run=true - candidate is healthy, traffic left on the previous revision."
