@@ -72,7 +72,12 @@ jobs:
 
       - name: Build the image
         working-directory: backend
-        run: gcloud builds submit --tag "${{ steps.vars.outputs.image }}"
+        # --suppress-logs is required, not cosmetic. Without it gcloud tries to
+        # stream the build log from the default logs bucket, which needs project
+        # Viewer/Owner. The deployer service account deliberately does not have
+        # that, so gcloud exits 1 and fails this step even when the build itself
+        # SUCCEEDED — which is exactly what happened on run 34709502374.
+        run: gcloud builds submit --suppress-logs --tag "${{ steps.vars.outputs.image }}"
 
       - name: Migration gate
         run: |
