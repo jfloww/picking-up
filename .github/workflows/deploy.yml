@@ -30,8 +30,8 @@ jobs:
     name: Detect changes
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' }}
+      frontend: ${{ steps.filter.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
@@ -108,7 +108,11 @@ jobs:
           echo "Checking $url"
           body=""
           for attempt in 1 2 3 4 5; do
-            if body=$(curl -fsS --max-time 15 "$url"); then break; fi
+            if body=$(curl -fsS --max-time 15 "$url"); then
+              if echo "$body" | grep -q '"status": "ok"' && echo "$body" | grep -q "\"commit\": \"${{ steps.vars.outputs.short_sha }}\""; then
+                break
+              fi
+            fi
             echo "attempt ${attempt} failed, retrying in 5s"
             sleep 5
           done
@@ -123,11 +127,11 @@ jobs:
           fi
 
       - name: Promote the candidate to 100% traffic
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' }}
         run: |
           gcloud run services update-traffic "$SERVICE" \
             --region "$GCP_REGION" --to-tags candidate=100
 
-      - name: Dry run — traffic deliberately not moved
-        if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: echo "dry_run=true - candidate is healthy, traffic left on the previous revision."
+      - name: Traffic deliberately not moved
+        if: ${{ github.ref != 'refs/heads/main' || github.event.inputs.dry_run == 'true' }}
+        run: echo "Candidate is healthy. Traffic was not moved - dry run, or not on main."
