@@ -8,7 +8,7 @@ history (Oracle → Neon, buildpacks → Dockerfile, etc.), see
 ## Current architecture
 
 ```
-Vercel (Next.js, jflowws-projects/frontend)
+Vercel (Next.js, project pickingup)
     │ HTTPS, server-side only (DJANGO_API_BASE_URL)
     ▼
 Google Cloud Run (Django + gunicorn, project jfloww-picking-up, us-east4)
@@ -19,13 +19,41 @@ Neon (production branch, AWS us-east-1)
 
 | Piece | Where | Current URL / identifier |
 |---|---|---|
-| Frontend | Vercel | `https://frontend-liard-seven-91.vercel.app` |
+| Frontend | Vercel, project `pickingup` | `https://pickingup.vercel.app` (`https://frontend-liard-seven-91.vercel.app` 307-redirects here) |
 | Backend | Cloud Run, project `jfloww-picking-up`, region `us-east4` | `https://picking-up-api-723438086234.us-east4.run.app` |
 | Backend image | Artifact Registry | `us-east4-docker.pkg.dev/jfloww-picking-up/picking-up/backend` |
 | Database | Neon, project region AWS `us-east-1` | branch `production` |
 
 The old OCI VM + Oracle Autonomous DB stack (`docs/planning/7. deployment-runbook.md`)
 is still running, untouched, not yet decommissioned.
+
+---
+
+## 0. Deploying (the normal path)
+
+Merge to `main`. `.github/workflows/deploy.yml` runs the tests, builds a
+SHA-tagged image, refuses to continue if migrations are unapplied, ships a
+no-traffic `candidate` revision, health-checks it, and promotes it. The
+frontend deploys from the same run. Only the halves you actually changed
+deploy.
+
+**Schema changes still need you first.** Run `cd backend && python
+manage.py migrate` (section 3) *before* merging code that depends on the
+new schema — otherwise the gate stops the release, which is the intended
+behavior, not a bug.
+
+Watch a release: `gh run watch`. Dry-run without shipping:
+`gh workflow run deploy.yml -f dry_run=true` — note that a manual dispatch
+always runs both the backend and frontend jobs regardless of what changed
+(the path filter only applies to a push), and that promotion/deploy to
+production only happens on `main`, so a dry run on any branch, and any
+run at all on a non-`main` branch, builds and health-checks but never
+ships traffic.
+
+The manual commands in sections 1–2 remain correct and are the break-glass
+procedure when the pipeline is unavailable. Rollback is unchanged and
+still manual (section 4). Infrastructure behind the pipeline is recorded
+in `gcp-setup.md`.
 
 ---
 
@@ -167,6 +195,12 @@ Console UI — either keeps secrets out of shell history.
 Postgres, no Docker DB container — both local dev and Cloud Run point at
 the same Neon project (different connection strings, see below).
 
+**Because of that, running `manage.py migrate` locally writes to the
+production schema immediately** — there is no separate local database to
+absorb it first. A migration is effectively released the moment a
+developer applies it on their own machine, well before the code that
+depends on it is merged or deployed.
+
 **Two connection strings, used in different places:**
 - **Direct** (no `-pooler` in the hostname) — used for local dev
   (`backend/.env.development`). Fine for a single long-lived local
@@ -265,12 +299,18 @@ sections 1 and 2 above.
 
 ## Not yet set up (intentionally deferred)
 
-- Auto-deploy on git push, for either Vercel or Cloud Run — everything
-  above is a manual CLI step by design, until the manual flow is well
-  understood (see `docs/db-migration/cloud-run-deployment.md`'s reasoning).
-- CI/CD via GitHub Actions / OIDC / Workload Identity Federation.
+- Schema migrations are still manual — see section 3's warning above.
+  Nothing in the pipeline applies a migration for you; it only refuses to
+  ship code against an unapplied one.
+- PR previews (Vercel preview deployments, or an equivalent for the
+  backend).
 - Custom domains — using `*.run.app` and `*.vercel.app` directly.
 - A shared cache for Cloud Run's auth throttles if `max-instances` is ever
   raised past what a single instance's local file cache can correctly
   rate-limit (see `docs/db-migration/cloud-run-deployment.md`).
 - OCI VM decommission — still running the old stack as a fallback.
+- `VERCEL_TOKEN` expiry: the token is a long-lived Vercel API token with
+  no automatic rotation. Required for the frontend job in `deploy.yml`,
+  and — as of this writing — **not yet set** as a GitHub secret, so the
+  frontend half of the pipeline cannot run until it is. Once set, note it
+  as a maintenance item to rotate before it expires or is revoked.
