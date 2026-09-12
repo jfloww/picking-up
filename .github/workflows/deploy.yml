@@ -135,3 +135,37 @@ jobs:
       - name: Traffic deliberately not moved
         if: ${{ github.ref != 'refs/heads/main' || github.event.inputs.dry_run == 'true' }}
         run: echo "Candidate is healthy. Traffic was not moved - dry run, or not on main."
+
+  frontend:
+    name: Frontend
+    needs: [changes, tests, backend]
+    if: |
+      always()
+      && needs.changes.outputs.frontend == 'true'
+      && needs.tests.result == 'success'
+      && needs.backend.result != 'failure'
+      && needs.backend.result != 'cancelled'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+      - run: npm install -g vercel@58
+      - name: Pull the production environment
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - name: Build
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+      - name: Deploy the prebuilt output
+        if: ${{ github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' }}
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+      - name: Built, not deployed
+        if: ${{ github.ref != 'refs/heads/main' || github.event.inputs.dry_run == 'true' }}
+        run: echo "Built successfully. Not deployed - dry run, or not on main."
