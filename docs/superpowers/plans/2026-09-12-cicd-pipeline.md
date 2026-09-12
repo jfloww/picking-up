@@ -499,13 +499,26 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 
 Expected: `400`. That is Django's `DisallowedHost` rejection, and it is exactly what would break the pipeline.
 
-- [ ] **Step 2: Add both hostnames to ALLOWED_HOSTS and CSRF trusted origins**
+- [ ] **Step 2: Add all four hostnames to ALLOWED_HOSTS and CSRF trusted origins**
 
-The values contain commas, so gcloud's alternate-delimiter syntax (`^;^`) is required — without it gcloud splits each list into separate variables.
+**Cloud Run answers on two hostname formats and they are not interchangeable.** The
+service has both a project-number host
+(`picking-up-api-723438086234.us-east4.run.app`) and a legacy hash host
+(`picking-up-api-63ks3zx4gq-uk.a.run.app`). `gcloud run services describe
+--format='value(status.url)'` returns the **hash** form — which is what Task 6's health
+check derives the candidate URL from. Listing only the project-number form makes every
+deploy fail at the health check with `400`.
+
+Verified on 2026-09-12: the project-number host returns `200`, the hash host returns
+`400`, against the same live revision.
+
+All four entries are therefore required — both formats, service and candidate. The values
+contain commas, so gcloud's alternate-delimiter syntax (`^;^`) is required; without it
+gcloud splits each list into separate variables.
 
 ```bash
 gcloud run services update picking-up-api --region us-east4 \
-  --update-env-vars "^;^DJANGO_ALLOWED_HOSTS=picking-up-api-723438086234.us-east4.run.app,candidate---picking-up-api-723438086234.us-east4.run.app;DJANGO_CSRF_TRUSTED_ORIGINS=https://picking-up-api-723438086234.us-east4.run.app,https://candidate---picking-up-api-723438086234.us-east4.run.app"
+  --update-env-vars "^;^DJANGO_ALLOWED_HOSTS=picking-up-api-723438086234.us-east4.run.app,candidate---picking-up-api-723438086234.us-east4.run.app,picking-up-api-63ks3zx4gq-uk.a.run.app,candidate---picking-up-api-63ks3zx4gq-uk.a.run.app;DJANGO_CSRF_TRUSTED_ORIGINS=https://picking-up-api-723438086234.us-east4.run.app,https://candidate---picking-up-api-723438086234.us-east4.run.app,https://picking-up-api-63ks3zx4gq-uk.a.run.app,https://candidate---picking-up-api-63ks3zx4gq-uk.a.run.app"
 ```
 
 - [ ] **Step 3: Re-tag the candidate onto the new revision and verify**
@@ -517,10 +530,17 @@ gcloud run deploy picking-up-api --region us-east4 \
   --image us-east4-docker.pkg.dev/jfloww-picking-up/picking-up/backend:2810b39 \
   --no-traffic --tag candidate
 
-curl -s https://candidate---picking-up-api-723438086234.us-east4.run.app/api/health/
+for h in \
+  candidate---picking-up-api-723438086234.us-east4.run.app \
+  candidate---picking-up-api-63ks3zx4gq-uk.a.run.app
+do
+  printf '%-55s ' "$h"
+  curl -s -o /dev/null -w '%{http_code}\n' --max-time 15 "https://$h/api/health/"
+done
 ```
 
-Expected: `200` with the health JSON. Compare against the live URL to confirm production traffic never moved:
+Expected: `200` from **both**. The hash-format host is the one Task 6 will actually
+request, so a `200` on the project-number host alone does not prove the pipeline works. Compare against the live URL to confirm production traffic never moved:
 
 ```bash
 gcloud run services describe picking-up-api --region us-east4 \
@@ -536,8 +556,13 @@ Append to `docs/deployment/gcp-setup.md`:
 ```markdown
 ## Candidate revision hostname
 
-`DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS` both list the
-service hostname **and** `candidate---picking-up-api-723438086234.us-east4.run.app`.
+`DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS` list **four** hosts:
+the service and its `candidate---` tag, each in both of Cloud Run's hostname
+formats — the project-number form
+(`picking-up-api-723438086234.us-east4.run.app`) and the legacy hash form
+(`picking-up-api-63ks3zx4gq-uk.a.run.app`). `gcloud run services describe
+--format='value(status.url)'` returns the hash form, which is what the
+pipeline's health check uses.
 
 `deploy.yml` ships each release as a no-traffic revision tagged
 `candidate` and health-checks it on that hostname before promoting.
