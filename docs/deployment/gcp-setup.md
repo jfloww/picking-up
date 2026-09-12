@@ -31,3 +31,17 @@ identity, and `iam.workloadIdentityUser` for the repository principalSet.
 ## GitHub repository variables
 
 `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`.
+
+## Secret Manager
+
+| Secret | Holds |
+|---|---|
+| `picking-up-database-url` | Neon **pooled** connection string for Cloud Run |
+| `picking-up-django-secret-key` | Production `DJANGO_SECRET_KEY` |
+
+Read by `723438086234-compute@developer.gserviceaccount.com` (the Cloud Run
+runtime identity) via `roles/secretmanager.secretAccessor`. Both the
+`picking-up-api` service and the `picking-up-api-migrate` job reference
+them with `--set-secrets NAME=<secret>:latest`, so there is exactly one
+copy of each credential. Rotate by adding a new secret version; revisions
+pinned to `:latest` pick it up on their next deploy.
