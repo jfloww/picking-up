@@ -1,0 +1,24 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  auth-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: google-github-actions/auth@v2
+        with:
+          project_id: jfloww-picking-up
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Prove the deployer can read the service
+        run: |
+          gcloud run services describe picking-up-api \
+            --region us-east4 --format='value(status.url)'
