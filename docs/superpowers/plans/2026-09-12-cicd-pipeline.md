@@ -931,11 +931,11 @@ Append to the `jobs:` block of `.github/workflows/deploy.yml`:
       - name: Build
         run: vercel build --prod --token="$VERCEL_TOKEN"
       - name: Deploy the prebuilt output
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' }}
         run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
-      - name: Dry run — build only
-        if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: echo "dry_run=true - built successfully, deploy skipped."
+      - name: Built, not deployed
+        if: ${{ github.ref != 'refs/heads/main' || github.event.inputs.dry_run == 'true' }}
+        run: echo "Built successfully. Not deployed - dry run, or not on main."
 ```
 
 `always()` is required because `backend` is skipped on frontend-only releases, and a skipped dependency would otherwise skip this job too. The explicit `needs.tests.result == 'success'` re-asserts the test gate, which `always()` would otherwise waive.
