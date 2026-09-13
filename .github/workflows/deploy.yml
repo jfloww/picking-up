@@ -170,13 +170,19 @@ jobs:
         with:
           node-version: "20"
       - run: npm install -g vercel@58
-      - name: Pull the production environment
+      # Vercel builds this, we do not. `vercel build` here plus `deploy
+      # --prebuilt` looks tidier and would ship the exact artifact CI validated,
+      # but it silently breaks the app: Vercel's "Sensitive" environment
+      # variables cannot be read back by `vercel pull`, so a runner-side build
+      # inlines NEXT_PUBLIC_* as undefined. That is how OAuth broke — the Google
+      # client ID was missing from every JS chunk of the deployed bundle.
+      # Building on Vercel's own infrastructure is the only place those values
+      # exist. The tests job already validated this commit.
+      - name: Verify project access
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-      - name: Build
-        run: vercel build --prod --token="$VERCEL_TOKEN"
-      - name: Deploy the prebuilt output
+      - name: Deploy
         if: ${{ github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' }}
-        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
-      - name: Built, not deployed
+        run: vercel deploy --prod --token="$VERCEL_TOKEN"
+      - name: Not deployed
         if: ${{ github.ref != 'refs/heads/main' || github.event.inputs.dry_run == 'true' }}
-        run: echo "Built successfully. Not deployed - dry run, or not on main."
+        run: echo "Project access verified. Not deployed - dry run, or not on main."
