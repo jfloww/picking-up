@@ -50,7 +50,7 @@ copy of them. `ci.yml` deliberately has no `push` trigger — `deploy.yml` cover
 | **Cloud Run Jobs** | Runs the migration gate | Lets the gate read `DATABASE_URL` from Secret Manager *inside* GCP. GitHub is granted permission to launch the job, never to read the credential |
 | **Secret Manager** | Holds DB URL + Django key | One copy, referenced by both the service and the gate job |
 | **Cloud Run** | Serves the backend | Immutable revisions make rollback a traffic change, not a rebuild |
-| **Vercel CLI** | Deploys the frontend | Building in CI and uploading a prebuilt artifact means the deployed bundle is the one the pipeline validated, not a second independent build |
+| **Vercel CLI** | Deploys the frontend | Uploads source and lets **Vercel** build it. Building on the runner and deploying `--prebuilt` is tempting but breaks the app — see the Sensitive-variable gotcha below |
 | **Neon** | PostgreSQL | Pooled connection for Cloud Run, direct for local dev |
 
 ---
@@ -179,6 +179,40 @@ The fix is `--gcs-log-dir` pointing at the project's own `_cloudbuild` bucket,
 which the deployer can already read. This is invisible when you run the command
 locally as an Owner.
 
+### Never build the frontend on the runner — Vercel must build it
+
+This one shipped a broken app to production, and it failed silently: the build
+succeeded, the deploy succeeded, every check was green, and OAuth was simply
+gone.
+
+Vercel environment variables marked **Sensitive** cannot be read back.
+`vercel pull` does not receive their values — they exist only inside Vercel's
+own build and runtime infrastructure. All three of this project's production
+variables are Sensitive.
+
+So a runner-side `vercel build` sees `NEXT_PUBLIC_GOOGLE_CLIENT_ID` as
+undefined and inlines *that* into the client bundle. `vercel deploy --prebuilt`
+then ships it. The deployed JS chunks contained no Google client ID at all, so
+the sign-in flow had nothing to authenticate against.
+
+Use `vercel deploy --prod` and let Vercel build. The `tests` job has already
+validated the commit, so nothing is lost by not building twice.
+
+To confirm a bundle is healthy after a frontend deploy:
+
+```bash
+curl -s -L https://pickingup.vercel.app/login \
+  | grep -oE '/_next/static/chunks/[^"]+\.js' | sort -u \
+  | while read -r c; do
+      curl -s "https://pickingup.vercel.app$c" | grep -q '<client-id>' \
+        && echo "found in $c"
+    done
+```
+
+Worth remembering the general shape: **`NEXT_PUBLIC_*` marked Sensitive is a
+contradiction.** Those values are compiled into JavaScript served to every
+visitor, so the marking buys no secrecy and costs you build-time access.
+
 ### Vercel tokens must be team-scoped, not project-scoped
 
 A token scoped to the `pickingup` *project* fails with `Could not retrieve
@@ -219,6 +253,7 @@ test it until it is merged — so land a minimal, safe version first.
 | Build step fails but the image exists | Log-bucket permissions — see the `--gcs-log-dir` gotcha |
 | `Could not retrieve Project Settings` | Vercel token is project-scoped; reissue with team scope |
 | Backend deployed, frontend job failed | `VERCEL_TOKEN` missing or expired. The backend is already promoted; fix the token and re-dispatch |
+| Frontend deploys green but a feature silently breaks | Check whether a `NEXT_PUBLIC_*` value is missing from the bundle — see the Sensitive-variable gotcha |
 | Nothing deployed after a merge | The path filter saw no `backend/**` or `frontend/**` changes. Use `gh workflow run deploy.yml` to force both halves |
 
 Useful commands:
