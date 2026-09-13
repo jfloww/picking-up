@@ -93,6 +93,27 @@ def _next_untimed_order_for_day(user, scope_value: str) -> float:
     return (max_order or 0.0) + 1.0
 
 
+def _clear_anchor_repeat(user, occurrence: Task) -> Task | None:
+    # Ends the whole series, so the owner never has to hunt down the anchor to
+    # stop a routine. Clearing the schedule is enough: generation reads
+    # repeat_weekdays, so future dates simply stop appearing. Occurrences that
+    # already exist are ordinary tasks and are deliberately left alone — this
+    # is "stop repeating", not a bulk delete.
+    anchor_id = occurrence.repeat_source_id
+    if not anchor_id:
+        return None
+    anchors = _locked_owned_tasks(user, [anchor_id])
+    anchor = anchors.get(str(anchor_id))
+    if anchor is None:
+        return None
+    if anchor.repeat_weekdays is None:
+        return anchor
+    anchor.repeat_weekdays = None
+    anchor.version += 1
+    anchor.save(update_fields=["repeat_weekdays", "version", "updated_at"])
+    return anchor
+
+
 def _append_anchor_exclusion(user, occurrence: Task) -> Task | None:
     # Additive set-union onto the anchor's excluded_dates — never a whole-
     # array replace — so a concurrent exclusion from another writer always
@@ -247,11 +268,12 @@ def detach_task(
 
     # Must run before repeat_source is cleared below — it reads
     # occurrence.repeat_source_id to find the anchor.
-    anchor = _append_anchor_exclusion(user, occurrence)
+    anchor = _clear_anchor_repeat(user, occurrence)
 
     occurrence.repeat_source = None
-    # Detach always creates a one-off task. Starting a different routine is
-    # a separate, explicit edit after leaving the original series.
+    # Covers the case where the caller acted on the anchor itself: it has no
+    # repeat_source to follow, so its own schedule is the one to clear. Also
+    # stops this task from being mistaken for a series member afterwards.
     occurrence.repeat_weekdays = None
     occurrence.version += 1
     occurrence.save(

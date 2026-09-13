@@ -109,7 +109,7 @@ describe("TaskDetailFields repeat", () => {
     expect(screen.getByLabelText("Part of a routine")).toBeTruthy();
   });
 
-  it("shows a Detach control for a generated occurrence and calls onDetachFromRoutine when clicked", () => {
+  it("shows an End routine control for a generated occurrence and calls onDetachFromRoutine when clicked", () => {
     const onDetachFromRoutine = vi.fn();
     render(
       <TaskDetailFields
@@ -121,7 +121,7 @@ describe("TaskDetailFields repeat", () => {
         onDetachFromRoutine={onDetachFromRoutine}
       />,
     );
-    fireEvent.click(screen.getByText("Detach"));
+    fireEvent.click(screen.getByText("End routine"));
     expect(onDetachFromRoutine).toHaveBeenCalledTimes(1);
   });
 

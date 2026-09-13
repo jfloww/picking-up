@@ -459,15 +459,17 @@ describe("TaskDetailDrawer", () => {
       repeatSourceId: "anchor-1",
     });
 
-    it("replaces the routine controls with a non-repeating status immediately after Detach", () => {
+    it("replaces the routine controls with an ended status immediately after End routine", () => {
       render(<TaskDetailDrawer task={routineTask} {...noopHandlers} />);
       expect(screen.getByLabelText("Part of a routine")).toBeTruthy();
 
-      fireEvent.click(screen.getByText("Detach"));
+      fireEvent.click(screen.getByText("End routine"));
 
       expect(screen.queryByLabelText("Part of a routine")).toBeNull();
       expect(screen.queryByLabelText("Repeat on Monday")).toBeNull();
-      expect(screen.getByText("Detached · This task will not repeat")).toBeTruthy();
+      expect(
+        screen.getByText("Routine ended · No future dates will be created"),
+      ).toBeTruthy();
     });
 
     it("Done commits detach without creating a new repeat schedule", () => {
@@ -482,7 +484,7 @@ describe("TaskDetailDrawer", () => {
         />,
       );
 
-      fireEvent.click(screen.getByText("Detach"));
+      fireEvent.click(screen.getByText("End routine"));
       fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
       expect(onDetachFromRoutine).toHaveBeenCalledWith();
@@ -501,7 +503,7 @@ describe("TaskDetailDrawer", () => {
         />,
       );
 
-      fireEvent.click(screen.getByText("Detach"));
+      fireEvent.click(screen.getByText("End routine"));
       fireEvent.click(screen.getByText("Cancel"));
 
       expect(onDetachFromRoutine).not.toHaveBeenCalled();

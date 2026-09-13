@@ -1646,7 +1646,9 @@ class TaskCommandApiTests(TestCase):
         collision_parent.refresh_from_db()
         self.assertEqual(len(collision_parent.subtasks), 1)
 
-    def test_detach_clears_repeat_source_and_excludes_the_date_on_the_anchor(self):
+    def test_ending_a_routine_from_an_occurrence_stops_the_whole_series(self):
+        # The point of the command: you should not have to hunt down the anchor.
+        # Acting on any occurrence ends the series for every future date.
         anchor = self.create_task(
             title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
         )
@@ -1657,20 +1659,49 @@ class TaskCommandApiTests(TestCase):
         response = self.detach(occurrence)
 
         self.assertEqual(response.status_code, 200, response.data)
+        anchor.refresh_from_db()
+        self.assertIsNone(anchor.repeat_weekdays)
+        self.assertEqual(anchor.version, 2)
         occurrence.refresh_from_db()
         self.assertIsNone(occurrence.repeat_source_id)
-        self.assertIsNone(occurrence.repeat_weekdays)
         self.assertEqual(occurrence.version, 2)
-        anchor.refresh_from_db()
-        self.assertEqual(anchor.excluded_dates, ["2026-07-16"])
-        self.assertEqual(anchor.version, 2)
-        self.assertEqual(response.data["occurrence"]["version"], 2)
         self.assertEqual(response.data["anchor"]["version"], 2)
 
-    def test_detach_appends_to_existing_excluded_dates_rather_than_replacing_them(self):
+    def test_ending_a_routine_from_the_anchor_itself_stops_the_series(self):
         anchor = self.create_task(
             title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
-            excluded_dates=["2026-07-09"],
+        )
+
+        response = self.detach(anchor)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        anchor.refresh_from_db()
+        self.assertIsNone(anchor.repeat_weekdays)
+
+    def test_ending_a_routine_leaves_already_created_occurrences_in_place(self):
+        # Ending a routine stops FUTURE generation. It is not a bulk delete —
+        # what already exists stays, including the one acted on.
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+        )
+        past = self.create_task(
+            title="gym", scope_value="2026-07-09", repeat_source=str(anchor.id),
+        )
+        acted_on = self.create_task(
+            title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
+        )
+
+        self.detach(acted_on)
+
+        self.assertTrue(Task.objects.filter(id=past.id).exists())
+        self.assertTrue(Task.objects.filter(id=acted_on.id).exists())
+        self.assertTrue(Task.objects.filter(id=anchor.id).exists())
+
+    def test_ending_a_routine_does_not_bother_excluding_the_date(self):
+        # Exclusions only matter while a series still generates. Once the
+        # schedule is gone there is nothing left to exclude the date from.
+        anchor = self.create_task(
+            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
         )
         occurrence = self.create_task(
             title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
@@ -1679,7 +1710,7 @@ class TaskCommandApiTests(TestCase):
         self.detach(occurrence)
 
         anchor.refresh_from_db()
-        self.assertEqual(anchor.excluded_dates, ["2026-07-09", "2026-07-16"])
+        self.assertEqual(anchor.excluded_dates or [], [])
 
     def test_detach_never_establishes_a_new_repeat_schedule(self):
         occurrence = self.create_task(title="solo", repeat_weekdays=[2, 4])
