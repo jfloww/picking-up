@@ -214,15 +214,16 @@ export function TaskDetailFields({
               <button
                 type="button"
                 onClick={() => onDetachFromRoutine()}
+                title="Stops this routine everywhere. Items already created stay."
                 className="text-subtle underline decoration-dotted underline-offset-2 hover:text-foreground"
               >
-                Detach
+                End routine
               </button>
             </span>
           ) : repeatDisabled ? (
             <span className="flex items-center gap-1.5 text-xs text-subtle">
               <RotateCw aria-hidden className="size-3" />
-              Detached · This task will not repeat
+              Routine ended · No future dates will be created
             </span>
           ) : (
             <TaskRepeatPicker

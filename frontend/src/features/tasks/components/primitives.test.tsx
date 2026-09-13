@@ -357,7 +357,7 @@ describe("TaskItem v2", () => {
     expect(onRepeatWeekdaysChange).toHaveBeenCalledWith([3]);
   });
 
-  it("detaches from routine via the expansion", () => {
+  it("ends the routine via the expansion", () => {
     const onDetachFromRoutine = vi.fn();
     render(
       <TaskItem
@@ -367,7 +367,7 @@ describe("TaskItem v2", () => {
       />,
     );
     fireEvent.click(screen.getByText("dentist"));
-    fireEvent.click(screen.getByText("Detach"));
+    fireEvent.click(screen.getByText("End routine"));
     expect(onDetachFromRoutine).toHaveBeenCalledTimes(1);
   });
 
@@ -381,7 +381,7 @@ describe("TaskItem v2", () => {
       />,
     );
     fireEvent.click(screen.getByText("dentist"));
-    fireEvent.click(screen.getByText("Detach"));
+    fireEvent.click(screen.getByText("End routine"));
     expect(onDetachFromRoutine).toHaveBeenCalledWith();
   });
 
