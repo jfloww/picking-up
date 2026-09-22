@@ -1650,7 +1650,10 @@ class TaskCommandApiTests(TestCase):
         # The point of the command: you should not have to hunt down the anchor.
         # Acting on any occurrence ends the series for every future date.
         anchor = self.create_task(
-            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+            title="gym",
+            scope_value="2026-07-01",
+            repeat_weekdays=[4],
+            excluded_dates=["2026-07-09"],
         )
         occurrence = self.create_task(
             title="gym", scope_value="2026-07-16", repeat_source=str(anchor.id),
@@ -1661,15 +1664,20 @@ class TaskCommandApiTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         anchor.refresh_from_db()
         self.assertIsNone(anchor.repeat_weekdays)
+        self.assertIsNone(anchor.excluded_dates)
         self.assertEqual(anchor.version, 2)
         occurrence.refresh_from_db()
         self.assertIsNone(occurrence.repeat_source_id)
         self.assertEqual(occurrence.version, 2)
         self.assertEqual(response.data["anchor"]["version"], 2)
+        self.assertIsNone(response.data["anchor"]["excluded_dates"])
 
     def test_ending_a_routine_from_the_anchor_itself_stops_the_series(self):
         anchor = self.create_task(
-            title="gym", scope_value="2026-07-01", repeat_weekdays=[4],
+            title="gym",
+            scope_value="2026-07-01",
+            repeat_weekdays=[4],
+            excluded_dates=["2026-07-09"],
         )
 
         response = self.detach(anchor)
@@ -1677,6 +1685,7 @@ class TaskCommandApiTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         anchor.refresh_from_db()
         self.assertIsNone(anchor.repeat_weekdays)
+        self.assertIsNone(anchor.excluded_dates)
 
     def test_ending_a_routine_leaves_already_created_occurrences_in_place(self):
         # Ending a routine stops FUTURE generation. It is not a bulk delete —
@@ -2714,6 +2723,71 @@ class TruncateOverlengthSubtaskFieldsMigrationTests(TransactionTestCase):
         self.assertEqual(subtasks[1]["title"], "b" * 500)
         self.assertEqual(subtasks[2], {"id": "valid-3", "title": "unaffected", "done": True})
         self.assertEqual(subtasks[3], "not-a-dict-entry")
+
+
+class ClearOrphanedExcludedDatesMigrationTests(TransactionTestCase):
+    def test_clears_only_orphaned_exclusions_and_bumps_their_versions(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0016_focussettings")])
+
+        old_state = executor.loader.project_state([("tasks", "0016_focussettings")])
+        OldUser = old_state.apps.get_model("auth", "User")
+        OldTask = old_state.apps.get_model("tasks", "Task")
+        user = OldUser.objects.create(
+            username="ended-routine@example.com",
+            email="ended-routine@example.com",
+        )
+
+        orphaned = OldTask.objects.create(
+            id=uuid_module.uuid4(),
+            user_id=user.id,
+            title="ended routine",
+            scope_kind="day",
+            scope_value="2026-09-01",
+            repeat_weekdays=None,
+            excluded_dates=["2026-09-08"],
+            version=7,
+        )
+        active_anchor = OldTask.objects.create(
+            id=uuid_module.uuid4(),
+            user_id=user.id,
+            title="active routine",
+            scope_kind="day",
+            scope_value="2026-09-01",
+            repeat_weekdays=[1],
+            excluded_dates=["2026-09-08"],
+            version=3,
+        )
+        ordinary = OldTask.objects.create(
+            id=uuid_module.uuid4(),
+            user_id=user.id,
+            title="ordinary task",
+            scope_kind="day",
+            scope_value="2026-09-01",
+            repeat_weekdays=None,
+            excluded_dates=None,
+            version=5,
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([("tasks", "0017_clear_orphaned_excluded_dates")])
+
+        new_state = executor.loader.project_state(
+            [("tasks", "0017_clear_orphaned_excluded_dates")]
+        )
+        NewTask = new_state.apps.get_model("tasks", "Task")
+
+        repaired = NewTask.objects.get(id=orphaned.id)
+        self.assertIsNone(repaired.excluded_dates)
+        self.assertEqual(repaired.version, 8)
+
+        preserved_anchor = NewTask.objects.get(id=active_anchor.id)
+        self.assertEqual(preserved_anchor.excluded_dates, ["2026-09-08"])
+        self.assertEqual(preserved_anchor.version, 3)
+
+        preserved_ordinary = NewTask.objects.get(id=ordinary.id)
+        self.assertIsNone(preserved_ordinary.excluded_dates)
+        self.assertEqual(preserved_ordinary.version, 5)
 
 
 class CategoryApiTests(TestCase):

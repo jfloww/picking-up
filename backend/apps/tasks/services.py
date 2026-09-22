@@ -106,11 +106,21 @@ def _clear_anchor_repeat(user, occurrence: Task) -> Task | None:
     anchor = anchors.get(str(anchor_id))
     if anchor is None:
         return None
-    if anchor.repeat_weekdays is None:
+    update_fields = []
+    if anchor.repeat_weekdays is not None:
+        anchor.repeat_weekdays = None
+        update_fields.append("repeat_weekdays")
+    # Exclusions only have meaning while the anchor still has a schedule.
+    # Leaving them behind creates a state TaskSerializer deliberately rejects
+    # (`excluded_dates` requires `repeat_weekdays`) the next time rollover or
+    # any ordinary edit PUTs the full Task back to the API.
+    if anchor.excluded_dates is not None:
+        anchor.excluded_dates = None
+        update_fields.append("excluded_dates")
+    if not update_fields:
         return anchor
-    anchor.repeat_weekdays = None
     anchor.version += 1
-    anchor.save(update_fields=["repeat_weekdays", "version", "updated_at"])
+    anchor.save(update_fields=[*update_fields, "version", "updated_at"])
     return anchor
 
 
@@ -275,9 +285,16 @@ def detach_task(
     # repeat_source to follow, so its own schedule is the one to clear. Also
     # stops this task from being mistaken for a series member afterwards.
     occurrence.repeat_weekdays = None
+    occurrence.excluded_dates = None
     occurrence.version += 1
     occurrence.save(
-        update_fields=["repeat_source", "repeat_weekdays", "version", "updated_at"]
+        update_fields=[
+            "repeat_source",
+            "repeat_weekdays",
+            "excluded_dates",
+            "version",
+            "updated_at",
+        ]
     )
 
     return DetachTaskResult(occurrence=occurrence, anchor=anchor)
